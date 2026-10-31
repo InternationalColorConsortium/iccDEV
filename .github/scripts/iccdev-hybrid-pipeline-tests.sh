@@ -53,7 +53,7 @@ timeout_sec="${HYBRID_TIMEOUT:-840}"
 exit_code=0
 (
   cd "$HYBRID_DIR"
-  PATH="$TOOL_DIRS:$PATH" timeout "$timeout_sec" bash BuildAndTest.sh
+  PATH="$TOOL_DIRS:$PATH" timeout "$timeout_sec" bash BuildAndTest.sh --ctest-smoke
 ) > "$LOGFILE" 2>&1 || exit_code=$?
 
 has_asan=0

@@ -16,6 +16,28 @@ build/runtime behavior, platform or toolchain boundary, CI trigger, dependency
 owner, and local evidence. Re-review the complete matrix after a repair; any
 new blocker returns the branch to branch-only grooming before another review.
 
+## Screening Sequence
+
+1. In the local development environment, complete the applicable pre-commit,
+   preflight, focused build/test, and security checks. The maintainer image
+   supplies zizmor, Trivy, CodeQL, fuzzers, Valgrind, and other tools for the
+   affected surface.
+2. On the pre-PR branch, run `ci-qa-pr` with `ctest-mode=full` and
+   `ctest-recent-limit=0` for the comprehensive build and CTest matrix. Run
+   `ci-codeql-security` against the same head. Investigate failures and repeat
+   the affected checks after any changes.
+3. Once screening succeeds and the user authorizes publication, open the PR.
+4. Run `ci-pr-action` on the PR head as the final cross-platform build, profile
+   generation, and representative CTest sounding board for merge readiness.
+   Its `pr-extended` exclusion and path-scoped lanes mean it does not replace
+   the local checks, preflight, or the pre-PR `ci-qa-pr` matrix. Record exact
+   head SHAs and run IDs in the readiness evidence.
+
+The comprehensive matrix still follows each workflow's declared scope: for
+example, `ci-infrastructure` CTests require their own explicit selection. Keep
+the appropriate specialized security, sanitizer, and packaging gates in the
+screening record when their contracts apply.
+
 ## Canonical Locations
 
 | Item | Location | Purpose |
@@ -74,6 +96,15 @@ protected `PR Summary` result. Its `mcp-server-` concurrency group is distinct
 from the caller's `ci-pr-` group, so a called job cannot cancel its caller.
 The reusable tool suite passes `instrumentation=core` and excludes
 `ci-infrastructure` CTests.
+Its fast mode runs a fixed core smoke selection plus the requested recent
+registrations; the recent limit is registration order, not change impact.
+Full mode checks the image's spectral-preview Python package pins and decoder
+capabilities before reusing its environment, and rebuilds that environment
+from the checkout when the image contract differs. Fast mode excludes the sole
+spectral-preview CTest and skips that dependency setup.
+Windows PR jobs report CTest helper compilation and CTest execution as separate
+steps. The MinGW helper build uses bounded two-way parallelism; MSVC and
+ClangCL keep serial staging for vcpkg runtime DLLs.
 The standalone sanitizer caller runs the reusable tool workflow independently
 for native source, build, testing, or regression-fixture changes; the reusable
 workflow also remains manually dispatchable. Pre-flight is a standalone

@@ -31,6 +31,14 @@ shares one source of truth. Update rules here, not in the mirrors.
   `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`,
   `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, and
   `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh`.
+- For maintainer pre-PR validation, use the current maintainer image and local
+  tools for applicable builds, preflight, scanners, and dynamic checks. On the
+  pushed pre-PR branch, run `ci-qa-pr` with `ctest-mode=full` and
+  `ctest-recent-limit=0` plus `ci-codeql-security` on the same head. Record
+  terminal results before opening an explicitly authorized PR. Run
+  `ci-pr-action` on the PR head for final cross-platform builds, profile
+  checks, and representative CTest coverage; it does not replace the local
+  or pre-PR screening.
 - Before the first automated review, record a `base...HEAD` contract matrix for
   every changed cross-cutting surface: producer, consumer, build/runtime
   behavior, platform or toolchain boundary, CI trigger, dependency owner, and

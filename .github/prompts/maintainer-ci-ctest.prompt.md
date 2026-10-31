@@ -38,10 +38,18 @@ maintainers unless an iccDEV maintainer explicitly approves the change.
 
 Choose the smallest gate that proves the behavior:
 
-- `ci-pr-action` full: deterministic Unix GCC/Clang Release and Debug, exact
+- Pre-PR screening: complete applicable local pre-commit and preflight checks,
+  using the maintainer image for zizmor, Trivy, CodeQL, fuzzers, Valgrind, and
+  other focused tools. Run `ci-qa-pr` with full CTest and no recent limit, plus
+  `ci-codeql-security`, on the same pre-PR branch head. Open a PR only after
+  those checks pass and PR creation is authorized.
+- `ci-pr-action` full: final PR-head sounding board for merge readiness. It
+  builds profiles and a representative CTest corpus across deterministic Unix
+  GCC/Clang Release and Debug, exact
   GCC 15.2 strict Release LTO, non-sanitized GCC core tool tests, and Windows
   validation. Its tool-test caller excludes `pr-extended` and
-  `ci-infrastructure` CTests.
+  `ci-infrastructure` CTests. It does not substitute for the exhaustive pre-PR
+  matrix or local preflight.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus
   non-sanitized GCC core tool validation and the latest CTest by default, with
   Windows opt-in. It does not run Docker verification for a container-surface
@@ -199,8 +207,9 @@ gh workflow run "<workflow>" --repo InternationalColorConsortium/iccDEV --ref <b
 gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
-Trigger workflows with shared concurrency sequentially. Use `ci-pr-action` for
-normal maintainer validation; it defaults to `ci_scope=auto`. Use
+Trigger workflows with shared concurrency sequentially. Use `ci-qa-pr` and
+`ci-codeql-security` to screen the pre-PR head, then `ci-pr-action` as final
+validation on the PR head; it defaults to `ci_scope=auto`. Use
 `ci_scope=fast-lane` with an open same-repository PR number for the shortest
 exact GCC 15.2 core lane. Use the standalone `ci-regression-checks` workflow
 for ASAN/UBSAN CTest coverage.

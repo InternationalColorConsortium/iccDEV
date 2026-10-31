@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPO_ROOT / ".github" / "scripts" / "run-recent-ctests.py"
 TOOL_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci-iccdev-tool-tests.yml"
+SMOKE_TESTS = [
+    "iccdev.parser-restore-calls",
+    "iccdev.profile-write-failure",
+    "iccdev.json-reader-strictness",
+    "iccdev.xml-json-roundtrip-qa",
+    "iccdev.clut-eight-output-regression",
+    "iccdev.applyprofiles-headless-receipts",
+]
 
 
 def make_ctest_shim(directory: Path) -> tuple[Path, Path]:
@@ -30,8 +39,13 @@ with calls.open("a", encoding="ascii") as handle:
 
 if "-N" in sys.argv:
     print("Test project /tmp/fake")
-    for idx in range(1, 13):
-        print(f"  Test #{idx}: iccdev.test.{idx:02d}")
+    names = os.environ.get("CTEST_TESTS")
+    if names is None:
+        names = [f"iccdev.test.{idx:02d}" for idx in range(1, 13)]
+    else:
+        names = names.split("|") if names else []
+    for idx, name in enumerate(names, 1):
+        print(f"  Test #{idx}: {name}")
     sys.exit(0)
 
 sys.exit(0)
@@ -42,11 +56,14 @@ sys.exit(0)
     return shim, calls
 
 
-def run_runner(args: list[str], workdir: Path) -> subprocess.CompletedProcess[str]:
+def run_runner(args: list[str], workdir: Path,
+               test_names: list[str] | None = None) -> subprocess.CompletedProcess[str]:
     _shim, calls = make_ctest_shim(workdir)
     env = os.environ.copy()
     env["PATH"] = f"{workdir}{os.pathsep}{env['PATH']}"
     env["CTEST_CALLS"] = str(calls)
+    if test_names is not None:
+        env["CTEST_TESTS"] = "|".join(test_names)
     return subprocess.run(
         [sys.executable, str(RUNNER), "--test-dir", "build", *args],
         cwd=REPO_ROOT,
@@ -103,6 +120,72 @@ def test_limit_ten_selects_last_ten_tests() -> None:
         assert_true(len(selected) == 10, f"wrong selection length: {selected}")
 
 
+def test_smoke_plus_recent_selects_core_coverage() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        tests = ["iccdev.test.01", *SMOKE_TESTS, "iccdev.describe-sink-api"]
+        result = run_runner(
+            ["--smoke", "--limit", "1", "--selection-output", str(workdir / "selected.txt")],
+            workdir, tests,
+        )
+        assert_true(result.returncode == 0, result.stderr)
+        selected = (workdir / "selected.txt").read_text(encoding="ascii").splitlines()
+        assert_true(selected == [*SMOKE_TESTS, "iccdev.describe-sink-api"],
+                    f"wrong smoke selection: {selected}")
+        calls = read_calls(workdir)
+        assert_true("-R" in calls[1], f"missing -R in smoke run: {calls[1]}")
+        regex = calls[1][calls[1].index("-R") + 1]
+        for name in selected:
+            assert_true(re.escape(name) in regex, f"missing selected test {name}: {regex}")
+
+
+def test_smoke_deduplicates_recent_test() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        result = run_runner(
+            ["--smoke", "--limit", "1", "--selection-output", str(workdir / "selected.txt")],
+            workdir, [*SMOKE_TESTS],
+        )
+        assert_true(result.returncode == 0, result.stderr)
+        selected = (workdir / "selected.txt").read_text(encoding="ascii").splitlines()
+        assert_true(selected == SMOKE_TESTS, f"smoke test duplicated: {selected}")
+
+
+def test_smoke_without_limit_keeps_full_suite() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        tests = ["iccdev.test.01", *SMOKE_TESTS, "iccdev.describe-sink-api"]
+        result = run_runner(
+            ["--smoke", "--selection-output", str(workdir / "selected.txt")],
+            workdir, tests,
+        )
+        assert_true(result.returncode == 0, result.stderr)
+        selected = (workdir / "selected.txt").read_text(encoding="ascii").splitlines()
+        assert_true(selected == tests, f"full suite order changed: {selected}")
+        assert_true("-R" not in read_calls(workdir)[1], "full suite must not be filtered")
+
+
+def test_missing_smoke_fails_before_execution() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        result = run_runner(["--smoke", "--limit", "1"],
+                            workdir, SMOKE_TESTS[:-1])
+        assert_true(result.returncode == 1, f"missing smoke returned {result.returncode}")
+        assert_true("core smoke CTests not registered: iccdev.applyprofiles-headless-receipts"
+                    in result.stderr, result.stderr)
+        assert_true(len(read_calls(workdir)) == 1, "CTest execution should not run")
+
+
+def test_empty_listing_fails_before_execution() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        workdir = Path(tmp)
+        result = run_runner(["--limit", "1"], workdir, [])
+        assert_true(result.returncode == 1, f"empty listing returned {result.returncode}")
+        assert_true("ctest listing did not include any test names" in result.stderr,
+                    result.stderr)
+        assert_true(len(read_calls(workdir)) == 1, "CTest execution should not run")
+
+
 def test_invalid_limits_fail_before_ctest() -> None:
     for limit in ("0", "-1"):
         with tempfile.TemporaryDirectory() as tmp:
@@ -144,13 +227,16 @@ def test_label_excludes_are_combined() -> None:
             assert_true(label == "(slow)|(calculator)", f"wrong label exclude regex: {label}")
 
 
-def test_workflow_omits_zero_limit() -> None:
+def test_workflow_wires_limit_and_smoke() -> None:
     workflow = TOOL_WORKFLOW.read_text(encoding="utf-8")
     assert_true('case "$CTEST_RECENT_LIMIT" in' in workflow, "missing ctest limit validation")
     assert_true('--parallel "$(nproc)"' in workflow, "Linux workflow must use detected CTest concurrency")
     assert_true('ctest_args+=(--limit "$CTEST_RECENT_LIMIT")' in workflow, "missing limit plumbing")
     assert_true('"0")' in workflow, "workflow must treat 0 as omit-limit")
     assert_true('--limit "$CTEST_RECENT_LIMIT"' not in workflow.replace('ctest_args+=(--limit "$CTEST_RECENT_LIMIT")', ''), "limit must be passed only through guarded ctest_args")
+    assert_true(re.search(r'case "\$CTEST_MODE" in\s+fast\)\s+ctest_args\+=\(--smoke\b',
+                          workflow) is not None,
+                "fast mode must add the core smoke set")
 
 
 def main() -> int:
@@ -158,10 +244,15 @@ def main() -> int:
         test_no_limit_selects_all,
         test_limit_one_selects_last_test,
         test_limit_ten_selects_last_ten_tests,
+        test_smoke_plus_recent_selects_core_coverage,
+        test_smoke_deduplicates_recent_test,
+        test_smoke_without_limit_keeps_full_suite,
+        test_missing_smoke_fails_before_execution,
+        test_empty_listing_fails_before_execution,
         test_invalid_limits_fail_before_ctest,
         test_parallel_level_is_validated_and_forwarded,
         test_label_excludes_are_combined,
-        test_workflow_omits_zero_limit,
+        test_workflow_wires_limit_and_smoke,
     ]
     for test in tests:
         test()

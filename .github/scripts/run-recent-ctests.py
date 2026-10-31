@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run registered CTest tests, optionally limited to the most recent entries."""
+"""Run registered CTests, optionally adding core smoke tests to a recent slice."""
 
 from __future__ import annotations
 
@@ -11,6 +11,17 @@ from pathlib import Path
 
 
 TEST_LINE_RE = re.compile(r"^\s*Test\s+#\d+:\s+(.+?)\s*$")
+
+# Keep the fast lane useful when the last registered test is a narrow regression.
+# These cover profile parsing/writing, JSON and XML, CLUTs, and CMM application.
+SMOKE_TESTS = (
+    "iccdev.parser-restore-calls",
+    "iccdev.profile-write-failure",
+    "iccdev.json-reader-strictness",
+    "iccdev.xml-json-roundtrip-qa",
+    "iccdev.clut-eight-output-regression",
+    "iccdev.applyprofiles-headless-receipts",
+)
 
 
 def combine_label_excludes(label_excludes: list[str]) -> str:
@@ -62,14 +73,19 @@ def build_regex(test_names: list[str]) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run all CTest tests, or only the last N tests when --limit is set."
+        description="Run all CTests, or a recent slice with optional core smoke tests."
     )
     parser.add_argument("--test-dir", required=True, help="CTest build directory")
     parser.add_argument(
         "--limit",
         type=int,
         default=None,
-        help="Number of most recently registered tests to run; omit to run all tests",
+        help="Number of most recently registered tests to run alongside --smoke; omit to run all",
+    )
+    parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help="Also run the fixed core smoke set when --limit selects recent tests",
     )
     parser.add_argument("--config", default="", help="CTest configuration for multi-config generators")
     parser.add_argument(
@@ -113,11 +129,25 @@ def main(argv: list[str]) -> int:
               file=sys.stderr)
         return 1
 
-    selected_tests = tests[-args.limit :] if args.limit is not None else tests
+    if args.smoke:
+        missing_smoke = sorted(set(SMOKE_TESTS) - set(tests))
+        if missing_smoke:
+            print("[FAIL] core smoke CTests not registered: " + ", ".join(missing_smoke),
+                  file=sys.stderr)
+            return 1
+
+    if args.limit is None:
+        selected_tests = tests
+    else:
+        selected_tests = list(dict.fromkeys(
+            [*(SMOKE_TESTS if args.smoke else ()), *tests[-args.limit :]]
+        ))
     write_selection(args.selection_output or None, selected_tests)
 
     if args.limit is None:
         print(f"Selected all CTests ({len(selected_tests)}):")
+    elif args.smoke:
+        print(f"Selected core smoke and recent CTests ({len(selected_tests)}):")
     else:
         print(f"Selected recent CTests ({len(selected_tests)}):")
     for test_name in selected_tests:

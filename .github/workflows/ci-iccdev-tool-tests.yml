@@ -408,9 +408,11 @@ jobs:
             echo "[WARN] clang++ not present in pinned regression image; GCC strict canary passed"
           fi
 
-      # preflight: allow-package-install reason=spectral-preview-codec-bootstrap
+      # preflight: allow-package-install reason=spectral-preview-codec-bootstrap-fallback
       - name: Install spectral preview Python dependencies
-        if: ${{ inputs.ctest_mode != 'skip' }}
+        # The sole consumer, iccdev.spectral-tiff-preview, carries the slow label.
+        # Fast CTest selection excludes it, so no codec bootstrap is needed.
+        if: ${{ inputs.ctest_mode == 'full' }}
         env:
           BASH_ENV: /dev/null
           PIP_NO_CACHE_DIR: "1"
@@ -419,34 +421,83 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          apt-get -o Acquire::Retries=3 update -qq
-          apt-get install -y -qq --no-install-recommends \
-            libbrotli1=1.2.0-3ubuntu0.1 \
-            libbrotli-dev=1.2.0-3ubuntu0.1 \
-            libfreetype-dev=2.14.2+dfsg-1ubuntu0.2
+          checkout_requirements=.github/ci/requirements/docker-spectral-preview.txt
+          image_requirements=/workspace/iccDEV/.github/ci/requirements/docker-spectral-preview.txt
+          image_python=/opt/iccdev-spectral-preview/bin/python
 
-          python3 -m venv "$SPECTRAL_PREVIEW_VENV"
-          "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install --upgrade pip --quiet
-          IMAGECODECS_ONLY=imcd "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install \
-            --no-binary=pillow,imagecodecs \
-            -r .github/ci/requirements/docker-spectral-preview.txt \
-            --quiet
-          "$SPECTRAL_PREVIEW_VENV/bin/python" - <<'PY'
+          verify_preview_runtime() {
+            local python_bin="$1"
+            local requirements="$2"
+            local venv_root private_brotli
+            venv_root="$(dirname "$(dirname "$python_bin")")"
+            test -x "$python_bin" || return 1
+            test -d "$venv_root/lib" || return 1
+            test "$(dpkg-query -W -f='${Version}' libbrotli1)" = '1.2.0-3ubuntu0.1' || return 1
+            test "$(dpkg-query -W -f='${Version}' libbrotli-dev)" = '1.2.0-3ubuntu0.1' || return 1
+            test "$(dpkg-query -W -f='${Version}' libfreetype-dev)" = '2.14.2+dfsg-1ubuntu0.2' || return 1
+            "$python_bin" - "$requirements" <<'PY' || return 1
           import importlib.util
+          import importlib.metadata
+          import re
+          import sys
+          from pathlib import Path
           import imagecodecs
           import numpy
           import PIL
           import tifffile
 
+          requirements = Path(sys.argv[1]).read_text(encoding="ascii")
+          for raw_line in requirements.splitlines():
+              line = raw_line.strip()
+              if not line or line.startswith("#"):
+                  continue
+              match = re.fullmatch(r"([A-Za-z0-9_.-]+)==([A-Za-z0-9_.!+-]+)", line)
+              if match is None:
+                  raise SystemExit(f"Unsupported spectral preview requirement: {line}")
+              package, expected = match.groups()
+              actual = importlib.metadata.version(package)
+              if actual != expected:
+                  raise SystemExit(f"{package}: expected {expected}, found {actual}")
+
           data = b"iccdev-lzw-check"
-          assert imagecodecs.lzw_decode(imagecodecs.lzw_encode(data)) == data
-          assert importlib.util.find_spec("imagecodecs._brotli") is None
+          if imagecodecs.lzw_decode(imagecodecs.lzw_encode(data)) != data:
+              raise SystemExit("imagecodecs LZW round trip failed")
+          if importlib.util.find_spec("imagecodecs._brotli") is not None:
+              raise SystemExit("imagecodecs includes a private Brotli decoder")
           print(f"imagecodecs {imagecodecs.__version__}")
           print(f"numpy {numpy.__version__}")
           print(f"pillow {PIL.__version__}")
           print(f"tifffile {tifffile.__version__}")
           PY
-          test -z "$(find "$SPECTRAL_PREVIEW_VENV/lib" -name 'libbrotlidec*' -print -quit)"
+            private_brotli="$(find "$venv_root/lib" -name 'libbrotlidec*' -print -quit)" || return 1
+            test -z "$private_brotli" || return 1
+          }
+
+          image_revision="${ICCDEV_SOURCE_REVISION:-}"
+          if [[ "$image_revision" =~ ^[0-9a-f]{40}$ ]] \
+            && [ "$(git -c safe.directory=/workspace/iccDEV -C /workspace/iccDEV rev-parse HEAD)" = "$image_revision" ] \
+            && cmp -s "$checkout_requirements" "$image_requirements" \
+            && verify_preview_runtime "$image_python" "$checkout_requirements"; then
+            selected_python="$image_python"
+            echo "[OK] Reusing spectral preview Python from image revision $image_revision"
+          else
+            echo "[INFO] Image spectral preview provenance differs; installing checkout requirements"
+            apt-get -o Acquire::Retries=3 update -qq
+            apt-get install -y -qq --no-install-recommends \
+              libbrotli1=1.2.0-3ubuntu0.1 \
+              libbrotli-dev=1.2.0-3ubuntu0.1 \
+              libfreetype-dev=2.14.2+dfsg-1ubuntu0.2
+
+            python3 -m venv "$SPECTRAL_PREVIEW_VENV"
+            "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install --upgrade pip --quiet
+            IMAGECODECS_ONLY=imcd "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install \
+              --no-binary=pillow,imagecodecs \
+              -r "$checkout_requirements" \
+              --quiet
+            selected_python="$SPECTRAL_PREVIEW_VENV/bin/python"
+            verify_preview_runtime "$selected_python" "$checkout_requirements"
+          fi
+          printf 'ICCDEV_SPECTRAL_PREVIEW_PYTHON=%s\n' "$selected_python" >> "$GITHUB_ENV"
 
       - name: Configure iccDEV CTest build
         env:
@@ -547,7 +598,6 @@ jobs:
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
-          ICCDEV_SPECTRAL_PREVIEW_PYTHON: /tmp/iccdev-spectral-preview-venv/bin/python
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -600,7 +650,7 @@ jobs:
           esac
           case "$CTEST_MODE" in
             fast)
-              ctest_args+=(--label-exclude slow --label-exclude calculator)
+              ctest_args+=(--smoke --label-exclude slow --label-exclude calculator)
               ;;
             full)
               ;;

@@ -41,15 +41,23 @@ security automation.
    surface.
 5. Fix confirmed findings.
 6. Repeat only the checks affected by the fix.
-7. Freeze the head and record the evidence and `base...HEAD` contract matrix in
+7. On the pushed pre-PR branch, run `ci-qa-pr` with `ctest-mode=full` and
+   `ctest-recent-limit=0`, plus `ci-codeql-security` on the same head. Wait
+   for terminal results; repair failures and repeat affected checks on the
+   new head.
+8. Freeze the head and record the evidence and `base...HEAD` contract matrix in
    `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. Map
    each changed cross-cutting surface to its producer, consumer, build/runtime
    behavior, platform or toolchain boundary, CI trigger, dependency owner, and
    local evidence.
-8. If a re-review finds any new blocker, including one in the repair, stop
+9. If a re-review finds any new blocker, including one in the repair, stop
    serial review and return to branch-only grooming until a maintainer directs
    the next step.
-9. Prepare a concise handoff.
+10. Open the PR only after explicit user authorization and a passing readiness
+    gate. Run `ci-pr-action` with `ci_scope=full` on the PR head for final
+    cross-platform builds, profile checks, and representative CTest coverage;
+    it does not replace local or pre-PR screening.
+11. Prepare a concise handoff.
 
 For focused local iteration, run
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` for MATLAB-only
@@ -57,6 +65,10 @@ work, or plain `--fast-lane` for other changed workflow/script surfaces. These
 skip local CodeQL database/query work. Do not add unrelated CTest coverage:
 MATLAB-only changes use the focused MATLAB build and QA, while the full local
 or hosted preflight remains the final workflow security signal.
+
+Use the current maintainer image and its installed local tooling where
+applicable; record the image digest and revision. Keep local, pre-PR hosted,
+and PR-head results distinct in the handoff.
 
 ## SAST Selection
 
@@ -108,7 +120,8 @@ Report only merge-relevant evidence:
 
 - branch and commit SHA;
 - changed surface;
-- commands or workflow run IDs;
+- local commands, pre-PR `ci-qa-pr` and `ci-codeql-security` run IDs, and
+  final PR-head `ci-pr-action` run ID;
 - pass/fail conclusion and key sentinel counts;
 - known skips, suppressions, warnings, or deferred follow-ups;
 - reviewed cache/artifact/token/script exceptions and trust-boundary notes;
