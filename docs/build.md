@@ -1093,6 +1093,16 @@ baseline and a release tag for a released image.
 
 ## Python Wheel Validation
 
+The comprehensive `_build-matrix.yml` caller uses Python 3.14 for its standard
+Ubuntu/macOS builds and full Windows CTest build. This extends routine build
+and test coverage to the newest supported CPython, alongside the reflectance
+CLUT ownership and CI-analysis work tracked in issue #2941. Both reusable
+build workflows pass that explicit input to `actions/setup-python`; their
+standalone input defaults and explicit caller overrides remain unchanged.
+This is the interpreter used for build/test orchestration, not a change to the
+CPython 3.11-3.14 wheel support range or the separate Python 3.13 cibuildwheel
+driver described below.
+
 The `python/` package supports local editable installs, source distributions,
 platform wheels, and cibuildwheel matrix validation:
 

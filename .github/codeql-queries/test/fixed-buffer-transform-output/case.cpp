@@ -182,4 +182,18 @@ private:
   {
     pixel[0] = 0.0f;
   }
+
+public:
+  void forwardedCapacityControl()
+  {
+    float pixel[16] = {};
+    forwardedSizedPixelXfm(pixel, 16); // $ Alert: forwarded capacity requires manual review
+  }
+
+private:
+  bool forwardedSizedPixelXfm(float *dst, unsigned int capacity)
+  {
+    float pcs[3] = {};
+    return sizedPixelXfm(dst, capacity, pcs);
+  }
 };

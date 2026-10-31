@@ -1,13 +1,14 @@
 /**
  * @name Fixed buffer used as transform output
  * @description A fixed-size local buffer is forwarded through one or more
- *              wrappers to CIccCmm::Apply() without an effective matching
- *              destination-width guard. This is the stack-buffer-overflow
+ *              wrappers to CIccCmm::Apply() without a recognized literal
+ *              destination-capacity guard. Forwarded capacity parameters
+ *              require manual review. This is the stack-buffer-overflow
  *              shape from issues #2868 and #2886.
  * @kind problem
  * @problem.severity error
  * @security-severity 9.1
- * @precision high
+ * @precision medium
  * @id iccdev/fixed-buffer-transform-output
  * @tags security
  *       correctness
@@ -99,5 +100,6 @@ where
 select bufferUse,
   "Fixed buffer '" + buffer.getName() + "' has " + size.toString() +
     " elements but is forwarded to a CIccCmm transform whose channel count is profile-defined. " +
-    "Forward the buffer capacity and reject oversized transform output before Apply() " +
+    "No matching literal capacity guard was recognized. Pass the capacity directly to the guarded " +
+    "Apply() wrapper, or manually verify capacity parameters forwarded through other helpers " +
     "(CWE-121/CWE-787; see #2868 and #2886)."
