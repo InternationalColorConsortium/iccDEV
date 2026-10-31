@@ -2,6 +2,7 @@
 ###############################################################
 # Copyright (c) 2026 International Color Consortium.
 # All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
 # https://color.org
 #
 # Intent: Guard CTest spectral-preview setup and fast smoke selection.
@@ -27,6 +28,30 @@ def tool_step(name):
         step for step in workflow["jobs"]["tool-tests"]["steps"]
         if step.get("name") == name
     )
+
+
+def test_windows_sanitizers_use_trusted_checkout():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-pr-win.yml").read_text(encoding="ascii")
+    )
+    for job in workflow["jobs"].values():
+        steps = job.get("steps", [])
+        sanitizer_steps = [
+            step for step in steps
+            if "sanitize.ps1" in step.get("run", "")
+        ]
+        if not sanitizer_steps:
+            continue
+        trusted_checkout = next(
+            step for step in steps
+            if step.get("with", {}).get("path") == ".trusted-workflow"
+        )
+        assert trusted_checkout["with"]["ref"] == (
+            "${{ github.event.pull_request.base.sha || 'master' }}"
+        )
+        for step in sanitizer_steps:
+            assert ". .trusted-workflow\\.github\\scripts\\sanitize.ps1" in step["run"]
+            assert steps.index(trusted_checkout) < steps.index(step)
 
 
 def test_fast_mode_omits_slow_spectral_setup_and_adds_smoke_tests():

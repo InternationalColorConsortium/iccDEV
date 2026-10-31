@@ -1165,6 +1165,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Setup MSYS2 UCRT64 MinGW
         id: setup-msys2
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e  # v2.33.0
@@ -1204,7 +1213,7 @@ jobs:
           if (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
             Remove-Item env:ACTIONS_ID_TOKEN_REQUEST_TOKEN
           }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
           $ucrtRoot = Join-Path $msysRoot 'ucrt64'
@@ -1338,7 +1347,7 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
           $ucrtRoot = Join-Path $msysRoot 'ucrt64'
@@ -1413,7 +1422,7 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          . .github/scripts/sanitize.ps1
+          . .trusted-workflow\.github\scripts\sanitize.ps1
 
           $sourceDir = Join-Path $env:GITHUB_WORKSPACE 'Build\Cmake'
           $sharedBuildDir = Join-Path $sourceDir 'build-mingw-pr-shared'

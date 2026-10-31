@@ -1,3 +1,9 @@
+#################################################################################
+# Copyright (c) 2026 The International Color Consortium.
+# All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+#################################################################################
+
 # Run the bounded iccBenchApply case table as a correctness check. A successful
 # process exit alone permits individual cases to skip when profiles are missing.
 
