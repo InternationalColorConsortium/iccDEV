@@ -92,6 +92,44 @@ def test_image_reuse_keeps_pinned_requirements_and_brotli_checks():
 
 
 @pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,
+                    reason="Bash summary probe requires Unix execution")
+@pytest.mark.parametrize("mode", ["fast", "full"])
+@pytest.mark.parametrize("recent_limit", ["0", "10"])
+def test_summary_commands_preserve_smoke_selection(mode, recent_limit):
+    run = tool_step("Generate summary")["run"]
+    selections = list(re.finditer(
+        r'case "\$CTEST_MODE" in.*?^\s*esac', run, re.MULTILINE | re.DOTALL
+    ))
+    assert len(selections) == 2
+    setup = run[selections[0].start():run.index('timing_report=')]
+    script = setup + '\nprintf "%s\\n" "$test_cmd"\n' + selections[1].group()
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc"],
+        input=script,
+        env=dict(
+            os.environ,
+            BASH_ENV="/dev/null",
+            CTEST_MODE=mode,
+            CTEST_RECENT_LIMIT=recent_limit,
+            EXCLUDE_EXTENDED_PR_TESTS="false",
+            INCLUDE_INFRASTRUCTURE_TESTS="true",
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    commands = [
+        line for line in result.stdout.splitlines()
+        if "run-recent-ctests.py" in line
+    ]
+    assert len(commands) == 2
+    for command in commands:
+        assert ("--smoke" in command.split()) == (mode == "fast")
+        assert ("--limit" in command.split()) == (recent_limit != "0")
+
+
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,
                     reason="Bash fixture probe requires Unix execution")
 @pytest.mark.parametrize(
     ("case", "same_requirements", "brotli_version", "image_head", "reuse"),
