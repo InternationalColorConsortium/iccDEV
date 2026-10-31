@@ -52,6 +52,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <memory>
 #include <new>
 #include "IccMpeBasic.h"
 #include "IccMpeSpectral.h"
@@ -1676,8 +1677,9 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
   //concatenate reflectance range mapping to observer+illuminant
   bool mapFailed = false;
-  CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed);
-  CIccMatrixMath *pApplyMtx;
+  std::unique_ptr<CIccMatrixMath> rangeRef(CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed));
+  std::unique_ptr<CIccMatrixMath> mappedApplyMtx;
+  const CIccMatrixMath *pApplyMtx = &observer;
 
   // Falling through to the unmapped observer treats a 3 x illumRange.steps
   // matrix as though it were m_Range.steps wide, and the VectorMult() calls
@@ -1687,51 +1689,39 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (mapFailed)
     return false;
 
-  if (!rangeRef)
-    pApplyMtx = &observer;
-  else {
+  if (rangeRef) {
     // Mult() allocates a new product and leaves both operands untouched, so
-    // rangeRef is this function's to release either way -- it was previously
-    // dropped here, leaking a matrix and its coefficient array on every profile
-    // whose reflectance range differed from the illuminant range. Mult() also
-    // returns NULL when the operand shapes disagree, which the old code passed
-    // straight to VectorMult() below.
-    pApplyMtx = rangeRef->Mult(&observer);
-    delete rangeRef;
+    // scoped owners release both matrices on every return. Mult() also returns
+    // NULL when the operand shapes disagree, which the old code passed straight
+    // to VectorMult() below.
+    mappedApplyMtx.reset(rangeRef->Mult(&observer));
+    rangeRef.reset();
 
-    if (!pApplyMtx)
+    if (!mappedApplyMtx)
       return false;
+
+    pApplyMtx = mappedApplyMtx.get();
   }
 
   delete m_pApplyCLUT;
 
   m_pApplyCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
 
-  if (!m_pApplyCLUT) {
-    if (pApplyMtx!=&observer)
-      delete pApplyMtx;
+  if (!m_pApplyCLUT)
     return false;
-  }
 
   m_pApplyCLUT->SetClipFunc(NoClip);
 
   // As in CIccMpeEmissionCLUT::Begin above: pDst is written through without a
-  // NULL test, so Init()'s refusal has to stop us here. pApplyMtx is this
-  // function's to release on every exit once it is not the stack observer.
-  if (!m_pApplyCLUT->Init(m_pCLUT->GridPointArray())) {
-    if (pApplyMtx!=&observer)
-      delete pApplyMtx;
+  // NULL test, so Init()'s refusal has to stop us here.
+  if (!m_pApplyCLUT->Init(m_pCLUT->GridPointArray()))
     return false;
-  }
 
   icFloatNumber *pSrc = m_pCLUT->GetData(0);
   icFloatNumber *pDst = m_pApplyCLUT->GetData(0);
 
-  if (!pSrc || !pDst) {
-    if (pApplyMtx!=&observer)
-      delete pApplyMtx;
+  if (!pSrc || !pDst)
     return false;
-  }
 
   icFloatNumber xyzW[3];
 
@@ -1779,9 +1769,6 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
     pSrc += m_Range.steps;
     pDst += m_nOutputChannels;
   }
-
-  if (pApplyMtx!=&observer)
-    delete pApplyMtx;
 
   if (!m_pApplyCLUT->Begin())
     return false;

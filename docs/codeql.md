@@ -100,14 +100,22 @@ specific, and its classic-loop model requires a literal bound. Keep the query
 test's 16-entry/16-iteration negative control so broad integer type ranges do
 not turn a safe fixed loop into an alert.
 
-`fixed-buffer-transform-output` covers the #2868 cross-function variant: a
-fixed local buffer is passed as output to a helper that calls `CIccCmm::Apply()`
-without a matching `GetDestSamples()` capacity guard. Keep the test's guarded
-fixed-buffer, mismatched-capacity, different-transform, non-transform, and
+`fixed-buffer-transform-output` covers the shared #2868 and #2886
+cross-function variant: a fixed local buffer is forwarded through one or more
+helpers to `CIccCmm::Apply()` without a recognized `GetDestSamples()` capacity
+guard. The nested query fixture mirrors the vulnerable
+`CalcFactors()`/`calcBlackPoint()`/`calcSrcBlackPoint()` path to the
+three-element black-point buffer. Keep its literal and parameterized guarded
+buffers, mismatched capacities, different transform, non-transform, and
 dynamically sized controls so the rule stays scoped to unsafe fixed-output
-wrappers. Only a direct `GetDestSamples() > capacity` check counts as a guard;
-arithmetic expressions involving the destination count do not establish this
-capacity contract.
+wrappers. Only a direct `GetDestSamples() > capacity` check for the applied CMM
+counts as a guard, and a capacity parameter must receive the fixed buffer's
+actual size as a literal argument directly at the guarded wrapper call.
+Capacity parameters forwarded through additional helpers are not resolved;
+their medium-precision alerts require manual verification, not removal of a
+valid guard. The forwarded-capacity fixture pins this conservative limitation.
+Arithmetic expressions involving the destination count are also outside the
+recognized capacity contract.
 
 `counted-buffer-off-by-one` covers the nearby counted-buffer family. Review the allocation count, loop count, and
 serialization count as one contract. In particular, `index > count` does not

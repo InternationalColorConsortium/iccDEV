@@ -63,7 +63,7 @@ jobs:
     uses: ./.github/workflows/_build-test-unix.yml
     with:
       os: ${{ matrix.os }}
-      python-version: "3.12"
+      python-version: "3.14"
       run-full-tests: ${{ matrix.os == 'ubuntu-latest' }}
 
   sanitizer-builds:
@@ -185,7 +185,7 @@ jobs:
     if: inputs['include-windows']
     uses: ./.github/workflows/_build-test-windows.yml
     with:
-      python-version: "3.12"
+      python-version: "3.14"
       strict-warnings: true
 
   ctest-tool-gate:

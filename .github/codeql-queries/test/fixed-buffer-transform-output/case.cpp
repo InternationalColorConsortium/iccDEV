@@ -82,6 +82,32 @@ public:
     pixelXfm(pixel, pcs);
   }
 
+  void nestedBpcBad()
+  {
+    float xyzbp[3] = {};
+    calcBlackPoint(xyzbp); // $ Alert
+  }
+
+  void nestedBpcGuardedControl()
+  {
+    float xyzbp[3] = {};
+    calcGuardedBlackPoint(xyzbp);
+  }
+
+  void sizedGuardControl()
+  {
+    float pixel[16] = {};
+    float pcs[3] = {};
+    sizedPixelXfm(pixel, 16, pcs);
+  }
+
+  void mismatchedSizedGuardControl()
+  {
+    float pixel[16] = {};
+    float pcs[3] = {};
+    sizedPixelXfm(pixel, 17, pcs); // $ Alert
+  }
+
 private:
   bool pixelXfm(float *dst, const float *src)
   {
@@ -122,8 +148,52 @@ private:
     return appliedCmm.Apply(dst, src) == 0;
   }
 
+  bool calcBlackPoint(float *xyzb)
+  {
+    return calcSrcBlackPoint(xyzb);
+  }
+
+  bool calcSrcBlackPoint(float *xyzb)
+  {
+    float pixel[16] = {};
+    return pixelXfm(xyzb, pixel);
+  }
+
+  bool calcGuardedBlackPoint(float *xyzb)
+  {
+    return calcGuardedSrcBlackPoint(xyzb);
+  }
+
+  bool calcGuardedSrcBlackPoint(float *xyzb)
+  {
+    float pixel[16] = {};
+    return sizedPixelXfm(xyzb, 3, pixel);
+  }
+
+  bool sizedPixelXfm(float *dst, unsigned int dstSize, const float *src)
+  {
+    CIccCmm cmm;
+    if (cmm.GetDestSamples() > dstSize)
+      return false;
+    return cmm.Apply(dst, src) == 0;
+  }
+
   void clear(float *pixel)
   {
     pixel[0] = 0.0f;
+  }
+
+public:
+  void forwardedCapacityControl()
+  {
+    float pixel[16] = {};
+    forwardedSizedPixelXfm(pixel, 16); // $ Alert: forwarded capacity requires manual review
+  }
+
+private:
+  bool forwardedSizedPixelXfm(float *dst, unsigned int capacity)
+  {
+    float pcs[3] = {};
+    return sizedPixelXfm(dst, capacity, pcs);
   }
 };
