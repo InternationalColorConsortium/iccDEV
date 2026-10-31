@@ -1,9 +1,9 @@
 /**
  * @name Fixed buffer used as transform output
- * @description A fixed-size local buffer is passed as the output of a wrapper
- *              around CIccCmm::Apply() without a matching destination-width
- *              guard. This is the stack-buffer-overflow shape from issue
- *              #2868.
+ * @description A fixed-size local buffer is forwarded through one or more
+ *              wrappers to CIccCmm::Apply() without an effective matching
+ *              destination-width guard. This is the stack-buffer-overflow
+ *              shape from issues #2868 and #2886.
  * @kind problem
  * @problem.severity error
  * @security-severity 9.1
@@ -19,10 +19,8 @@ import cpp
 import semmle.code.cpp.controlflow.Guards
 
 private predicate isProductSource(File f) {
-  (
-    f.getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON|IccConnect|Tools|examples)/.*") and
-    not f.getRelativePath().regexpMatch("(?i).*(^|/)(test|tests|Testing)(/|$).*")
-  )
+  f.getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON|IccConnect|Tools|examples)/.*") and
+  not f.getRelativePath().regexpMatch("(?i).*(^|/)(test|tests|Testing)(/|$).*")
   or
   f.getBaseName() = "case.cpp"
 }
@@ -32,44 +30,74 @@ private predicate isCmmApplyCall(FunctionCall call) {
   call.getTarget().getDeclaringType().getName() = "CIccCmm"
 }
 
-private predicate hasPriorCapacityGuard(FunctionCall apply, ArrayType array) {
+private predicate isMatchingDestSamplesCall(FunctionCall destSamples, FunctionCall apply) {
+  destSamples.getTarget().getName() = "GetDestSamples" and
+  destSamples.getTarget().getDeclaringType().getName() = "CIccCmm" and
+  destSamples.getQualifier().(VariableAccess).getTarget() =
+    apply.getQualifier().(VariableAccess).getTarget()
+}
+
+private predicate hasPriorCapacityGuard(FunctionCall apply, FunctionCall incoming, ArrayType array) {
   exists(ComparisonOperation guard, FunctionCall destSamples |
     guard.getEnclosingFunction() = apply.getEnclosingFunction() and
     guard instanceof GuardCondition and
     guard.getOperator() = ">" and
-    destSamples.getTarget().getName() = "GetDestSamples" and
-    destSamples.getTarget().getDeclaringType().getName() = "CIccCmm" and
-    destSamples.getQualifier().(VariableAccess).getTarget() =
-      apply.getQualifier().(VariableAccess).getTarget() and
+    isMatchingDestSamplesCall(destSamples, apply) and
     guard.getLeftOperand() = destSamples and
-    guard.getRightOperand().getValue() = array.getArraySize().toString() and
+    (
+      guard.getRightOperand().getValue() = array.getArraySize().toString()
+      or
+      exists(Parameter sizeParameter |
+        sizeParameter.getFunction() = apply.getEnclosingFunction() and
+        guard.getRightOperand() = sizeParameter.getAnAccess() and
+        incoming.getTarget() = sizeParameter.getFunction() and
+        incoming.getArgument(sizeParameter.getIndex()).getValue() = array.getArraySize().toString()
+      )
+    ) and
     guard.(GuardCondition).controls(apply.getBasicBlock(), false)
   )
 }
 
-private predicate isTransformOutputWrapper(Function wrapper, Parameter output,
-    ArrayType array) {
-  output = wrapper.getParameter(0) and
-  exists(FunctionCall apply |
-    apply.getEnclosingFunction() = wrapper and
-    isCmmApplyCall(apply) and
-    apply.getArgument(0).getAChild*() = output.getAnAccess() and
-    not hasPriorCapacityGuard(apply, array)
+private predicate reachesUnguardedCmmApply(FunctionCall incoming, Parameter output, ArrayType array) {
+  incoming.getTarget() = output.getFunction() and
+  (
+    exists(FunctionCall apply |
+      apply.getEnclosingFunction() = output.getFunction() and
+      isCmmApplyCall(apply) and
+      apply.getArgument(0).getAChild*() = output.getAnAccess() and
+      not hasPriorCapacityGuard(apply, incoming, array)
+    )
+    or
+    exists(FunctionCall forwardedCall, Parameter forwardedOutput |
+      forwardedCall.getEnclosingFunction() = output.getFunction() and
+      forwardedCall.getTarget() = forwardedOutput.getFunction() and
+      forwardedCall.getArgument(forwardedOutput.getIndex()).getAChild*() = output.getAnAccess() and
+      reachesUnguardedCmmApply(forwardedCall, forwardedOutput, array)
+    )
   )
 }
 
-from LocalVariable buffer, ArrayType array, FunctionCall wrapperCall,
-     Function wrapper, Parameter output, int size
+private predicate fixedBufferFlowsToUnguardedApply(
+  FunctionCall firstCall, LocalVariable buffer, ArrayType array, VariableAccess bufferUse
+) {
+  exists(Parameter firstOutput |
+    firstCall.getTarget() = firstOutput.getFunction() and
+    bufferUse.getTarget() = buffer and
+    firstCall.getArgument(firstOutput.getIndex()).getAChild*() = bufferUse and
+    reachesUnguardedCmmApply(firstCall, firstOutput, array)
+  )
+}
+
+from
+  LocalVariable buffer, ArrayType array, FunctionCall firstCall, VariableAccess bufferUse, int size
 where
   array = buffer.getType() and
   size = array.getArraySize() and
   size > 0 and
-  wrapperCall.getTarget() = wrapper and
-  isTransformOutputWrapper(wrapper, output, array) and
-  wrapperCall.getArgument(0).getAChild*() = buffer.getAnAccess() and
-  isProductSource(wrapperCall.getFile())
-select wrapperCall.getArgument(0),
+  fixedBufferFlowsToUnguardedApply(firstCall, buffer, array, bufferUse) and
+  isProductSource(firstCall.getFile())
+select bufferUse,
   "Fixed buffer '" + buffer.getName() + "' has " + size.toString() +
-  " elements but receives output from a CIccCmm transform whose channel count is profile-defined. " +
-  "Allocate the output buffer from the transform's destination channel count or reject oversized output " +
-  "(CWE-121/CWE-787; see #2868)."
+    " elements but is forwarded to a CIccCmm transform whose channel count is profile-defined. " +
+    "Forward the buffer capacity and reject oversized transform output before Apply() " +
+    "(CWE-121/CWE-787; see #2868 and #2886)."
