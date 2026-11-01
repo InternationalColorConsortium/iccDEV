@@ -694,13 +694,71 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     return true;
 }
 
-static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated)
+struct PngReadContext
+{
+    FILE* input;
+    FILE* replay;
+};
+
+static void ClosePngReplay(FILE*& replay)
+{
+    if (replay) {
+        fclose(replay);
+        replay = NULL;
+    }
+}
+
+static void ClosePngReadContext(PngReadContext* context)
+{
+    if (!context)
+        return;
+    ClosePngReplay(context->replay);
+    free(context);
+}
+
+static bool ReadPngPrefix(FILE* input, FILE* replay, void* buffer, size_t size)
+{
+    if (fread(buffer, 1, size, input) != size)
+        return false;
+    return !replay || fwrite(buffer, 1, size, replay) == size;
+}
+
+static void ReadPngStream(png_structp png_ptr, png_bytep data,
+                          png_size_t length)
+{
+    PngReadContext* context =
+        static_cast<PngReadContext*>(png_get_io_ptr(png_ptr));
+    size_t read = 0;
+    if (context->replay) {
+        read = fread(data, 1, length, context->replay);
+        if (ferror(context->replay))
+            png_error(png_ptr, "Failed to read replayed PNG header.");
+        if (feof(context->replay))
+            ClosePngReplay(context->replay);
+    }
+    if (read < length &&
+        fread(data + read, 1, length - read, context->input) != length - read)
+        png_error(png_ptr, "Failed to read PNG input stream.");
+}
+
+static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated,
+                                         FILE*& replay)
 {
     animated = false;
+    replay = NULL;
+    const bool seekable = fseek(input, 0, SEEK_CUR) == 0;
+    if (!seekable) {
+        replay = tmpfile();
+        if (!replay)
+            return false;
+    }
+
     unsigned char signature[8];
-    if (fread(signature, 1, sizeof(signature), input) != sizeof(signature) ||
-        png_sig_cmp(signature, 0, sizeof(signature)))
+    if (!ReadPngPrefix(input, replay, signature, sizeof(signature)) ||
+        png_sig_cmp(signature, 0, sizeof(signature))) {
+        ClosePngReplay(replay);
         return false;
+    }
 
     // A valid APNG places acTL before the first IDAT. Inspect only the PNG
     // chunk headers preceding image data so rejection never decodes the raster
@@ -708,17 +766,22 @@ static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated)
     unsigned char discard[4096];
     for (;;) {
         unsigned char header[8];
-        if (fread(header, 1, sizeof(header), input) != sizeof(header))
+        if (!ReadPngPrefix(input, replay, header, sizeof(header))) {
+            ClosePngReplay(replay);
             return false;
+        }
         const png_uint_32 length =
             (static_cast<png_uint_32>(header[0]) << 24) |
             (static_cast<png_uint_32>(header[1]) << 16) |
             (static_cast<png_uint_32>(header[2]) << 8) | header[3];
-        if (length > 0x7fffffffU)
+        if (length > 0x7fffffffU) {
+            ClosePngReplay(replay);
             return false;
+        }
         if (memcmp(header + 4, "acTL", 4) == 0 ||
             memcmp(header + 4, "fcTL", 4) == 0) {
             animated = true;
+            ClosePngReplay(replay);
             break;
         }
         if (memcmp(header + 4, "IDAT", 4) == 0 ||
@@ -728,12 +791,22 @@ static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated)
         size_t remaining = static_cast<size_t>(length) + 4; // payload and CRC
         while (remaining) {
             const size_t part = remaining < sizeof(discard) ? remaining : sizeof(discard);
-            if (fread(discard, 1, part, input) != part)
+            if (!ReadPngPrefix(input, replay, discard, part)) {
+                ClosePngReplay(replay);
                 return false;
+            }
             remaining -= part;
         }
     }
-    return fseek(input, 0, SEEK_SET) == 0;
+    if (animated)
+        return true;
+    if (seekable)
+        return fseek(input, 0, SEEK_SET) == 0;
+    if (fseek(replay, 0, SEEK_SET) != 0) {
+        ClosePngReplay(replay);
+        return false;
+    }
+    return true;
 }
 
 static bool InjectIccProfileData(const char* inputPng,
@@ -748,7 +821,8 @@ static bool InjectIccProfileData(const char* inputPng,
     }
 
     bool animated = false;
-    if (!CheckPngAnimationBeforeImage(fpIn, animated)) {
+    FILE* replay = NULL;
+    if (!CheckPngAnimationBeforeImage(fpIn, animated, replay)) {
         fclose(fpIn);
         LOG_ERROR("Failed to inspect PNG chunk structure before injection.");
         return false;
@@ -761,6 +835,7 @@ static bool InjectIccProfileData(const char* inputPng,
 
     png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png_ptr) {
+        ClosePngReplay(replay);
         fclose(fpIn);
         LOG_ERROR("Failed to create PNG read struct.");
         return false;
@@ -769,9 +844,25 @@ static bool InjectIccProfileData(const char* inputPng,
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
         png_destroy_read_struct(&png_ptr, NULL, NULL);
+        ClosePngReplay(replay);
         fclose(fpIn);
         LOG_ERROR("Failed to create PNG info struct.");
         return false;
+    }
+
+    PngReadContext* readContext = NULL;
+    if (replay) {
+        readContext = static_cast<PngReadContext*>(malloc(sizeof(*readContext)));
+        if (!readContext) {
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            ClosePngReplay(replay);
+            fclose(fpIn);
+            LOG_ERROR("Failed to allocate PNG stream context.");
+            return false;
+        }
+        readContext->input = fpIn;
+        readContext->replay = replay;
+        replay = NULL;
     }
 
     // Finish modifying the C++ temporary name before libpng can longjmp.
@@ -779,6 +870,7 @@ static bool InjectIccProfileData(const char* inputPng,
     FILE* volatile fpOut = OpenPngTempOutputFile(outputPng, tempOutputPng);
     if (!fpOut) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        ClosePngReadContext(readContext);
         fclose(fpIn);
         LOG_ERROR("Failed to open temporary output PNG file.");
         return false;
@@ -786,6 +878,7 @@ static bool InjectIccProfileData(const char* inputPng,
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        ClosePngReadContext(readContext);
         fclose(fpIn); fclose(fpOut);
         remove(tempOutputPng.c_str());
         LOG_ERROR("LibPNG header read error.");
@@ -796,12 +889,16 @@ static bool InjectIccProfileData(const char* inputPng,
     png_set_chunk_malloc_max(png_ptr, kMaxPngChunkBytes);
     png_set_chunk_cache_max(png_ptr, 1000);
     png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_IF_SAFE, NULL, 0);
-    png_init_io(png_ptr, fpIn);
+    if (readContext)
+        png_set_read_fn(png_ptr, readContext, ReadPngStream);
+    else
+        png_init_io(png_ptr, fpIn);
     png_read_info(png_ptr, info_ptr);
 
     png_structp write_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!write_ptr) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        ClosePngReadContext(readContext);
         fclose(fpIn); fclose(fpOut);
         remove(tempOutputPng.c_str());
         LOG_ERROR("Failed to create PNG write struct.");
@@ -811,6 +908,7 @@ static bool InjectIccProfileData(const char* inputPng,
     png_infop write_info_ptr = png_create_info_struct(write_ptr);
     if (!write_info_ptr) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        ClosePngReadContext(readContext);
         png_destroy_write_struct(&write_ptr, NULL);
         fclose(fpIn); fclose(fpOut);
         remove(tempOutputPng.c_str());
@@ -823,6 +921,7 @@ static bool InjectIccProfileData(const char* inputPng,
     if (!read_end_info_ptr || !write_end_info_ptr) {
         png_destroy_read_struct(&png_ptr, &info_ptr,
                                 read_end_info_ptr ? &read_end_info_ptr : NULL);
+        ClosePngReadContext(readContext);
         if (write_end_info_ptr)
             png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
@@ -843,6 +942,7 @@ static bool InjectIccProfileData(const char* inputPng,
         free(row_pointers);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
+        ClosePngReadContext(readContext);
         fclose(fpIn); fclose(fpOut);
         remove(tempOutputPng.c_str());
         LOG_ERROR("LibPNG write error.");
@@ -865,6 +965,7 @@ static bool InjectIccProfileData(const char* inputPng,
 
     if (!CopyPngAncillaryChunks(png_ptr, info_ptr, write_ptr, write_info_ptr)) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        ClosePngReadContext(readContext);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
         fclose(fpIn); fclose(fpOut);
@@ -885,6 +986,7 @@ static bool InjectIccProfileData(const char* inputPng,
     if (height == 0 || rowBytes == 0 ||
         static_cast<size_t>(rowBytes) > kMaxPngRasterBytes / height) {
         png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
+        ClosePngReadContext(readContext);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
         fclose(fpIn); fclose(fpOut);
@@ -895,6 +997,7 @@ static bool InjectIccProfileData(const char* inputPng,
     row_pointers = static_cast<png_bytepp>(calloc(height, sizeof(png_bytep)));
     if (!row_pointers) {
         png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
+        ClosePngReadContext(readContext);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
         fclose(fpIn); fclose(fpOut);
@@ -911,6 +1014,7 @@ static bool InjectIccProfileData(const char* inputPng,
             }
             free(row_pointers);
             png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
+            ClosePngReadContext(readContext);
             png_destroy_info_struct(write_ptr, &write_end_info_ptr);
             png_destroy_write_struct(&write_ptr, &write_info_ptr);
             fclose(fpIn); fclose(fpOut);
@@ -927,6 +1031,7 @@ static bool InjectIccProfileData(const char* inputPng,
         }
         free(row_pointers);
         png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
+        ClosePngReadContext(readContext);
         png_destroy_info_struct(write_ptr, &write_end_info_ptr);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
         fclose(fpIn); fclose(fpOut);
@@ -975,6 +1080,7 @@ static bool InjectIccProfileData(const char* inputPng,
     free(row_pointers);
 
     png_destroy_read_struct(&png_ptr, &info_ptr, &read_end_info_ptr);
+    ClosePngReadContext(readContext);
     png_destroy_info_struct(write_ptr, &write_end_info_ptr);
     png_destroy_write_struct(&write_ptr, &write_info_ptr);
     fclose(fpIn);

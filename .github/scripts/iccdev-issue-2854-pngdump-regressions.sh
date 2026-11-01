@@ -268,6 +268,65 @@ for output in "$OUTDIR/apng-existing.png" "$OUTDIR/apng-new.png"; do
 done
 
 python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'
+import os
+import pathlib
+import subprocess
+import sys
+
+tool, image, profile, outdir = sys.argv[1:]
+tool = pathlib.Path(tool).resolve()
+source = pathlib.Path(image).read_bytes()
+profile_bytes = pathlib.Path(profile).read_bytes()
+root = pathlib.Path(outdir)
+
+def verify_injection(result, output):
+    diagnostics = result.stdout + result.stderr
+    if result.returncode != 0:
+        raise SystemExit(f"stream injection failed: {diagnostics!r}")
+    if any(marker in diagnostics for marker in (
+            b"AddressSanitizer", b"runtime error:", b"LeakSanitizer",
+            b"UndefinedBehaviorSanitizer", b"DEADLYSIGNAL")):
+        raise SystemExit(f"sanitizer diagnostic: {diagnostics!r}")
+    extracted = output.with_suffix(".icc")
+    extraction = subprocess.run(
+        [str(tool), str(output), str(extracted)],
+        capture_output=True, timeout=30)
+    if extraction.returncode != 0 or extracted.read_bytes() != profile_bytes:
+        raise SystemExit(
+            f"stream injection ICC round-trip failed: "
+            f"{(extraction.stdout + extraction.stderr)!r}")
+
+stdin_output = root / "stdin-stream.png"
+stdin_result = subprocess.run(
+    [str(tool), "/dev/stdin", "--write-icc", profile,
+     "--output", str(stdin_output)],
+    input=source, capture_output=True, timeout=30)
+verify_injection(stdin_result, stdin_output)
+
+if os.name == "posix":
+    fifo = root / "fifo-input.png"
+    fifo_output = root / "fifo-stream.png"
+    fifo.unlink(missing_ok=True)
+    os.mkfifo(fifo)
+    child = subprocess.Popen(
+        [str(tool), str(fifo), "--write-icc", profile,
+         "--output", str(fifo_output)],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        with fifo.open("wb") as stream:
+            stream.write(source)
+        output, _ = child.communicate(timeout=30)
+        verify_injection(
+            subprocess.CompletedProcess(child.args, child.returncode, output, b""),
+            fifo_output)
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()
+        fifo.unlink(missing_ok=True)
+PY
+
+python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'
 import binascii
 import os
 import pathlib
