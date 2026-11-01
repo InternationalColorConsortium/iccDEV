@@ -617,10 +617,11 @@ jobs:
             --test-dir build `
             --config Debug `
             --parallel ([Environment]::ProcessorCount) `
+            --label-exclude clusterfuzzlite `
             --require-test iccdev.applyprofiles-headless-receipts `
             --require-test iccdev.applyprofiles-matrix-contracts `
             --require-test iccdev.applyprofiles-evidence-matrix `
-            --output-junit build\ctest-results.xml `
+            --output-junit ctest-results.xml `
             --selection-output build\recent-ctests.txt
           if ($LASTEXITCODE -ne 0) {
             throw "CTest failed with exit code $LASTEXITCODE"
@@ -898,10 +899,11 @@ jobs:
             '--test-dir', $buildDir,
             '--config', 'Debug',
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--label-exclude', 'clusterfuzzlite',
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
-            '--output-junit', (Join-Path $buildDir 'ctest-results.xml'),
+            '--output-junit', 'ctest-results.xml',
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           ) 2>&1 | Tee-Object -FilePath $checkLog -Append
           if ($LASTEXITCODE -ne 0) {
@@ -1325,6 +1327,7 @@ jobs:
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--label-exclude', 'clusterfuzzlite',
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',

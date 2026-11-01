@@ -28,7 +28,7 @@ on:
 jobs:
   gcc15-release-lto:
     name: GCC 15.2 Strict Release LTO
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression-image-tag }}

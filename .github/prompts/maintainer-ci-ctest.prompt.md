@@ -47,9 +47,10 @@ Choose the smallest gate that proves the behavior:
   builds profiles and a representative CTest corpus across deterministic Unix
   GCC/Clang Release and Debug, exact
   GCC 15.2 strict Release LTO, non-sanitized GCC core tool tests, and Windows
-  validation. Its tool-test caller excludes `pr-extended` and
-  `ci-infrastructure` CTests. It does not substitute for the exhaustive pre-PR
-  matrix or local preflight.
+  validation. Its tool-test caller excludes `pr-extended` CTests; the reusable
+  tool workflow always excludes `ci-infrastructure` and `clusterfuzzlite`
+  CTests. It does not substitute for the exhaustive pre-PR matrix or local
+  preflight.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus
   non-sanitized GCC core tool validation and the latest CTest by default, with
   Windows opt-in. It does not run Docker verification for a container-surface

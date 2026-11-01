@@ -298,17 +298,19 @@ jobs:
             --parallel "$NPROC" 2>&1 | tee "$LOGDIR/build-test-binaries.log"
 
           echo "=== CTest discovery ==="
-          ctest --test-dir "${WORKSPACE_DIR}/Build" -N --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list.txt"
-
-          echo "=== Routine CTest discovery (excluding slow) ==="
           ctest --test-dir "${WORKSPACE_DIR}/Build" -N \
-            --label-exclude slow \
+            --label-exclude clusterfuzzlite \
+            --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list.txt"
+
+          echo "=== Routine CTest discovery (excluding slow and ClusterFuzzLite) ==="
+          ctest --test-dir "${WORKSPACE_DIR}/Build" -N \
+            --label-exclude 'slow|clusterfuzzlite' \
             --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list-routine.txt"
 
           echo "=== CTest execution ==="
           ctest --test-dir "${WORKSPACE_DIR}/Build" \
             --parallel "$NPROC" \
-            --label-exclude slow \
+            --label-exclude 'slow|clusterfuzzlite' \
             --output-on-failure \
             --no-tests=error \
             --output-junit "$LOGDIR/ctest-results.xml" 2>&1 | tee "$LOGDIR/ctest-run.log"

@@ -71,7 +71,54 @@ def test_fast_mode_omits_slow_spectral_setup_and_adds_smoke_tests():
         r"--label-exclude calculator\)",
         ctest["run"],
     )
+    assert "ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)" in ctest["run"]
     assert "ICCDEV_SPECTRAL_PREVIEW_PYTHON" not in ctest.get("env", {})
+
+
+def test_developer_report_copies_junit_from_ctest_build_dir():
+    ctest_run = tool_step("Run CTest tool suites")["run"]
+    report_run = tool_step("Package developer report")["run"]
+
+    assert '--test-dir "${BUILD_DIR}"' in ctest_run
+    assert '--output-junit "ctest-results.xml"' in ctest_run
+    assert 'copy_file_if_present "${BUILD_DIR}/ctest-results.xml"' in report_run
+
+
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,
+                    reason="Bash summary probe requires Unix execution")
+def test_hybrid_timing_summary_matches_produced_tsv(tmp_path):
+    report = tmp_path / "hybrid-applyprofiles-timing.tsv"
+    report.write_text(
+        "case\tthreads\tcommand\tstatus\telapsed_s\tuser_s\tsystem_s\t"
+        "max_rss_kb\tminor_faults\tvoluntary_ctx\tinvoluntary_ctx\tsha256\tlog\n"
+        "cmykw\t4\tdebug-export\t0\t10.5\t3.4\t1.2\t123456\t789\t9\t10\t"
+        "abc123\tcase.log\n",
+        encoding="ascii",
+    )
+    run = tool_step("Generate summary")["run"]
+    start = run.index('if [ -f "$timing_report" ]; then')
+    end = re.search(r"(?m)^\s*fi\s*$", run[start:])
+    assert end is not None
+    snippet = run[start:start + end.end()]
+    script = (
+        'set -euo pipefail\ntiming_report="$TEST_TIMING_REPORT"\n'
+        'sanitize_line() { printf "%s" "$1"; }\n' + snippet + "\n"
+    )
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc"],
+        input=script,
+        env=dict(os.environ, BASH_ENV="/dev/null", TEST_TIMING_REPORT=str(report)),
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    table = [line.strip("|").split("|") for line in result.stdout.splitlines()
+             if line.startswith("|")]
+    assert [[cell.strip() for cell in row] for row in (table[0], table[2])] == [
+        ["Case", "Threads", "Command", "Status", "Elapsed s", "User s",
+         "System s", "RSS KB", "Minor faults", "Vol ctx", "Invol ctx"],
+        ["cmykw", "4", "debug-export", "0", "10.5", "3.4", "1.2",
+         "123456", "789", "9", "10"],
+    ]
 
 
 def test_image_reuse_keeps_pinned_requirements_and_brotli_checks():
@@ -112,7 +159,6 @@ def test_summary_commands_preserve_smoke_selection(mode, recent_limit):
             CTEST_MODE=mode,
             CTEST_RECENT_LIMIT=recent_limit,
             EXCLUDE_EXTENDED_PR_TESTS="false",
-            INCLUDE_INFRASTRUCTURE_TESTS="true",
         ),
         capture_output=True,
         text=True,
@@ -127,6 +173,8 @@ def test_summary_commands_preserve_smoke_selection(mode, recent_limit):
     for command in commands:
         assert ("--smoke" in command.split()) == (mode == "fast")
         assert ("--limit" in command.split()) == (recent_limit != "0")
+        assert "--label-exclude clusterfuzzlite" in command
+        assert "--label-exclude ci-infrastructure" in command
 
 
 @pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,

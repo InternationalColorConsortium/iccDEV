@@ -120,7 +120,7 @@ concurrency:
 jobs:
   afl-smoke:
     name: "AFL++ smoke (${{ inputs.afl_targets || 'dump' }}, ${{ inputs.duration_seconds || '300' }}s)"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 240
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}

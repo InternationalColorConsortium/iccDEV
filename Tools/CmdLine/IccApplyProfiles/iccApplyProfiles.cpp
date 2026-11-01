@@ -500,9 +500,8 @@ int main(int argc, const char** argv)
       fprintf(stderr, "Telemetry is not built; configure ICCDEV_ENABLE_TELEMETRY=ON\n");
       return EXIT_FAILURE;
     }
-    else
 #endif
-    if (!strcmp(argv[1], "--quiet")) {
+    else if (!strcmp(argv[1], "--quiet")) {
       bQuiet = true;
     }
     else if (!stricmp(argv[1], "--threads") || !stricmp(argv[1], "-threads")) {

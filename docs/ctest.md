@@ -9,9 +9,10 @@ CTest registers tests only for tools enabled by the selected CMake options.
 With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
 runtime-configuration tool regressions are omitted; the legacy script test runs
 with JSON round-trip enforcement disabled.
-The `iccdev.applytolink-nan-sixchan-debug` sanitizer diagnostic registers only
+The `iccdev.applytolink-nan-sixchan-debug` NaN range regression registers only
 for Debug, including when CTest selects a configuration from a multi-config
-generator. Release discovery omits it.
+generator. It reports a skip when the tool or AddressSanitizer is unavailable;
+Release discovery omits it.
 
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.
@@ -273,6 +274,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args-exhaustive` | Same script with `--exhaustive-thread-matrix`; comprehensive pre-PR thread matrix |
+| `iccdev.applyprofiles-cli-args` | `.github/scripts/iccdev-applyprofiles-cli-args-regression.sh`; checks telemetry-enabled `--debug` with `-threads`/`-exportcfg`, `--verbose` with `-cfg`, and disabled-build rejection |
 | `iccdev.iccApply*-build-toggle` | Four apply-tool checks run with telemetry both enabled and disabled; help exposes telemetry only when built, and disabled builds reject telemetry options. Configure separate build trees with `ICCDEV_ENABLE_TELEMETRY=ON` and `OFF` to cover both cases. |
 | `iccdev.applyprofiles-headless-receipts` | Unix quick check and Windows Python smoke; verify JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
 | `iccdev.apply-telemetry-failure-paths` | `.github/ci/quality-assurance/scripts/test_apply_telemetry_failures.py`; `iccdev;cmm;image;qa;evidence;regression`; checks failed writes, terminal JSONL events, and equivalent output paths for all four Apply tools |
@@ -347,9 +349,10 @@ assertions, individual open-issue MSan patch inventory, non-blocking patch
 continuation behavior, and shell syntax for the adapter and shared CFL builder.
 Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
-documented in `.github/ci/cfl/README.md`. Core PR and path-scoped sanitizer
-lanes exclude `ci-infrastructure`; run these two CTests directly when their
-workflow, adapter, target, patch, or corpus contract changes.
+documented in `.github/ci/cfl/README.md`. Normal Unix, Windows, tool, PR,
+and sanitizer CTest lanes exclude `clusterfuzzlite`; the tool workflow also excludes
+`ci-infrastructure` and has no option to include it. Run these two CTests
+directly when their workflow, adapter, target, patch, or corpus contract changes.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the
@@ -384,12 +387,11 @@ full CTest or the hybrid gate explicitly when the slow and calculator suites
 are in scope. The hybrid aggregate reserves up to four CTest processor slots:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
-The normal `ci-pr-action` full lane excludes the `pr-extended` and
-`ci-infrastructure` labels to keep core PR results deterministic. Label
-membership defines the deferred tests; all other slow tests remain in the PR
-lane. The separate sanitizer workflow also excludes infrastructure by default.
-Manual `ci-regression-checks` dispatch can include infrastructure tests
-explicitly. Run any deferred test directly when the change affects it.
+The `ci-pr-action` tool gate excludes `pr-extended` and `ci-infrastructure`
+CTests. All broad normal CI and PR CTest sweeps exclude `clusterfuzzlite`;
+other slow tests remain in the full mode. The manual `ci-regression-checks`
+workflow uses the same tool gate and has no infrastructure opt-in. Run any
+deferred test directly when the change affects it.
 
 ### Elapsed-time review (2026-10-30)
 

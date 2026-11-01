@@ -115,7 +115,7 @@ jobs:
   ###########################################################################
   workflow-security-audit:
     name: "Workflow Security Audit"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}

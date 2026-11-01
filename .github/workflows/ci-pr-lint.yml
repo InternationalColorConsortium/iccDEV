@@ -21,15 +21,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      ubuntu-version:
-        description: "Ubuntu runner image"
-        required: false
-        default: "ubuntu-24.04"
-        type: choice
-        options:
-          - ubuntu-24.04
-          - ubuntu-22.04
-          - ubuntu-latest
       lint-scope:
         description: "Files to lint"
         required: false
@@ -51,11 +42,6 @@ on:
 
   workflow_call:
     inputs:
-      ubuntu-version:
-        description: "Ubuntu runner image"
-        required: false
-        default: "ubuntu-24.04"
-        type: string
       lint-scope:
         description: "auto for PR-changed C++ files, full for source tree"
         required: false
@@ -79,7 +65,7 @@ concurrency:
 jobs:
   lint:
     name: "cppcheck / clang-tidy report"
-    runs-on: ${{ inputs['ubuntu-version'] || 'ubuntu-24.04' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: read
@@ -405,7 +391,7 @@ jobs:
             #   {file}:{line}:{column}: {severity}: {message} [{id}]
             # followed by the offending source line and a caret. The patterns these
             # replace anchored on cppcheck 1.x's "[{file}:{line}]: ({severity})" bracket
-            # template, which the installed cppcheck (2.x on ubuntu-24.04) never produces,
+            # template, which the installed cppcheck 2.x never produces,
             # so BOTH cppcheck counters reported 0 on every run. Measured on the reports
             # of runs 34432960602 / 34483706504 / 34515122355: 47451 lines, 6854
             # diagnostics, 1 error -- the error being the IccMpeSpectral.cpp:1693

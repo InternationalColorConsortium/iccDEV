@@ -93,7 +93,7 @@ concurrency:
 jobs:
   cfl-smoke:
     name: "CFL smoke (${{ inputs.cfl_targets || 'core' }}, ${{ inputs.duration_seconds || '30' }}s)"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}

@@ -75,7 +75,7 @@ on:
         default: Debug
         type: string
       ctest_mode:
-        description: 'CTest mode: fast excludes slow/calculator labels; full runs all; skip omits CTest'
+        description: 'CTest mode: fast excludes slow/calculator labels; full runs tool tests; skip omits CTest'
         required: false
         default: fast
         type: string
@@ -104,11 +104,6 @@ on:
         required: false
         default: sanitizers
         type: string
-      include_infrastructure_tests:
-        description: 'Include infrastructure-only CTests'
-        required: false
-        default: false
-        type: boolean
       regression_image_tag:
         description: 'Trusted unified image tag'
         required: false
@@ -207,11 +202,6 @@ on:
         options:
           - sanitizers
           - core
-      include_infrastructure_tests:
-        description: 'Include infrastructure-only CTests'
-        required: true
-        default: false
-        type: boolean
       ctest_mode:
         description: 'CTest mode to run'
         required: false
@@ -292,7 +282,7 @@ concurrency:
 jobs:
   tool-tests:
     name: "iccDEV Tools - GCC Strict ${{ inputs.instrumentation == 'core' && 'Core' || 'ASAN+UBSAN' }} (${{ inputs.tool_build_type || 'Debug' }})"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
@@ -311,7 +301,6 @@ jobs:
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
       EXCLUDE_EXTENDED_PR_TESTS: ${{ inputs.exclude_extended_pr_tests && 'true' || 'false' }}
-      INCLUDE_INFRASTRUCTURE_TESTS: ${{ inputs.include_infrastructure_tests && 'true' || 'false' }}
       INSTRUMENTATION: ${{ inputs.instrumentation || 'sanitizers' }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
       BUILD_DIR: build
@@ -589,7 +578,9 @@ jobs:
           unset GITHUB_TOKEN || true
 
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
-          ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
+          ctest --test-dir "${BUILD_DIR}" -N \
+            --label-exclude 'ci-infrastructure|clusterfuzzlite' \
+            --no-tests=error | tee "${CTEST_LIST}"
 
       - name: Run CTest tool suites
         if: ${{ inputs.ctest_mode != 'skip' }}
@@ -606,7 +597,7 @@ jobs:
           ctest_args=(
             --test-dir "${BUILD_DIR}" \
             --parallel "$(nproc)" \
-            --output-junit "${BUILD_DIR}/ctest-results.xml" \
+            --output-junit "ctest-results.xml" \
             --selection-output "${BUILD_DIR}/recent-ctests.txt"
           )
           case "$CTEST_RECENT_LIMIT" in
@@ -626,6 +617,9 @@ jobs:
           # here. Kept so a future quarantine needs no workflow edit -- but a
           # test added to it stops being covered, so label sparingly.
           ctest_args+=(--label-exclude known-red)
+          # Keep infrastructure contracts and ClusterFuzzLite harness checks
+          # out of tool and PR test lanes; run those checks explicitly.
+          ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)
           case "$EXCLUDE_EXTENDED_PR_TESTS" in
             true)
               ctest_args+=(--label-exclude pr-extended)
@@ -634,17 +628,6 @@ jobs:
               ;;
             *)
               echo "::error title=Invalid extended PR test exclusion::${EXCLUDE_EXTENDED_PR_TESTS}"
-              exit 1
-              ;;
-          esac
-          case "$INCLUDE_INFRASTRUCTURE_TESTS" in
-            true)
-              ;;
-            false)
-              ctest_args+=(--label-exclude ci-infrastructure)
-              ;;
-            *)
-              echo "::error title=Invalid infrastructure test selection::${INCLUDE_INFRASTRUCTURE_TESTS}"
               exit 1
               ;;
           esac
@@ -852,10 +835,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -867,9 +850,6 @@ jobs:
           if [ "$EXCLUDE_EXTENDED_PR_TESTS" = "true" ]; then
             test_cmd="${test_cmd} --label-exclude pr-extended"
           fi
-          if [ "$INCLUDE_INFRASTRUCTURE_TESTS" = "false" ]; then
-            test_cmd="${test_cmd} --label-exclude ci-infrastructure"
-          fi
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
           fi
@@ -879,8 +859,6 @@ jobs:
           qa_summary="${qa_dir}/summary.tsv"
           registry_qa_dir="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
           registry_qa_summary="${registry_qa_dir}/summary.md"
-          applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
-          applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev:${REGRESSION_IMAGE_TAG}"
           case "$INSTRUMENTATION" in
             core)
@@ -902,7 +880,7 @@ jobs:
             echo ""
             echo "| Component | Value |"
             echo "|-----------|-------|"
-            echo "| Runner | ubuntu-24.04 |"
+            echo "| Runner | ubuntu-latest |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
             echo "| Build type | $(sanitize_line "$TOOL_BUILD_TYPE") |"
             echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with $(sanitize_line "$instrumentation_label"), zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
@@ -913,7 +891,7 @@ jobs:
             echo "| CTest mode | \`${CTEST_MODE}\` |"
             echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
             echo "| Extended PR tests | \`${EXCLUDE_EXTENDED_PR_TESTS}\` |"
-            echo "| Infrastructure tests | \`${INCLUDE_INFRASTRUCTURE_TESTS}\` |"
+            echo "| Infrastructure and ClusterFuzzLite CTests | excluded |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
@@ -932,16 +910,16 @@ jobs:
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 fi
                 ;;
               full)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 fi
                 echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;
@@ -975,17 +953,6 @@ jobs:
               done <"$qa_evidence"
               echo '```'
             fi
-            if [ -f "$applytolink_stack_report" ]; then
-              echo ""
-              echo "## iccApplyToLink NaN/SixChanInputRef Diagnostic Replay"
-              echo ""
-              echo '```text'
-              sed -n '1,90p' "$applytolink_stack_report" | while IFS= read -r line; do
-                sanitize_code_line "$line"
-                echo ""
-              done
-              echo '```'
-            fi
             if [ -f "$registry_qa_summary" ]; then
               echo ""
               echo "## ICC Registry Profile QA"
@@ -1002,29 +969,21 @@ jobs:
               date -u '+%Y-%m-%d %H:%M:%S UTC'
               echo ""
               timing_header='| Case | Threads | Command | Status | Elapsed s |'
-              timing_header+=' Loop ms | Apply ms | Apply % | Apply calls |'
-              timing_header+=' Async launches | User s | System s | RSS KB |'
+              timing_header+=' User s | System s | RSS KB |'
               timing_header+=' Minor faults | Vol ctx | Invol ctx |'
               timing_rule='|------|---------|---------|--------|-----------|'
-              timing_rule+='---------|----------|---------|-------------|'
-              timing_rule+='----------------|--------|----------|--------|'
+              timing_rule+='--------|----------|--------|'
               timing_rule+='---------------|---------|-----------|'
               echo "$timing_header"
               echo "$timing_rule"
               tail -n +2 "$timing_report" | while IFS=$'\t' read -r \
-                case_name threads command_name status elapsed_s loop_ms apply_ms \
-                apply_pct apply_calls async_launches user_s system_s rss faults \
-                vol_ctx invol_ctx _log_path; do
+                case_name threads command_name status elapsed_s user_s system_s \
+                rss faults vol_ctx invol_ctx _sha256 _log_path; do
                 timing_row="| $(sanitize_line "$case_name")"
                 timing_row+=" | $(sanitize_line "$threads")"
                 timing_row+=" | $(sanitize_line "$command_name")"
                 timing_row+=" | $(sanitize_line "$status")"
                 timing_row+=" | $(sanitize_line "$elapsed_s")"
-                timing_row+=" | $(sanitize_line "$loop_ms")"
-                timing_row+=" | $(sanitize_line "$apply_ms")"
-                timing_row+=" | $(sanitize_line "$apply_pct")"
-                timing_row+=" | $(sanitize_line "$apply_calls")"
-                timing_row+=" | $(sanitize_line "$async_launches")"
                 timing_row+=" | $(sanitize_line "$user_s")"
                 timing_row+=" | $(sanitize_line "$system_s")"
                 timing_row+=" | $(sanitize_line "$rss")"
@@ -1094,9 +1053,6 @@ jobs:
             "${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags" \
             "${data_dir}/iccdev-qa-target-flags"
           copy_dir_if_present \
-            "${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug" \
-            "${data_dir}/iccdev-applytolink-nan-sixchan-debug"
-          copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
             "${data_dir}/tool-flamegraphs"
           copy_dir_if_present \
@@ -1121,7 +1077,7 @@ jobs:
             printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
             printf '%s\n' '<title>iccDEV Developer Report</title>'
             printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
-            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%;'
             printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
             printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
             printf '%s' 'padding:.1rem .25rem}.pass{color:#116329}.warn{color:#9a6700}'
@@ -1161,16 +1117,6 @@ jobs:
               printf '</table>\n'
             fi
 
-            applytolink_stack="${data_dir}/iccdev-applytolink-nan-sixchan-debug/stack-analysis.txt"
-            if [ -f "$applytolink_stack" ]; then
-              printf '<h2>iccApplyToLink NaN/SixChanInputRef Diagnostic Replay</h2>\n'
-              printf '<pre><code>'
-              sed -n '1,90p' "$applytolink_stack" | while IFS= read -r line; do
-                printf '%s\n' "$(escape_html "$line")"
-              done
-              printf '</code></pre>\n'
-            fi
-
             printf '<h2>Included Data</h2><ul>\n'
             find "$data_dir" -type f | sort | while IFS= read -r file; do
               rel="${file#"$report_dir"/}"
@@ -1194,7 +1140,7 @@ jobs:
   thread-linkage:
     name: "RefIccMAX thread linkage - manual"
     if: ${{ inputs.thread_linkage_build_type != '' && inputs.thread_linkage_ipo != '' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
       run:
@@ -1223,26 +1169,11 @@ jobs:
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source .github/scripts/sanitize-sed.sh
-          llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
-          llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
-          curl --fail --location --silent --show-error \
-            https://apt.llvm.org/llvm-snapshot.gpg.key \
-            --output "$llvm_key"
-          gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
-          llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
-          if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
-            echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
-            exit 1
-          fi
-          gpg --dearmor --output "$llvm_keyring" "$llvm_key"
-          sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
-          printf '%s\n' \
-            'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
-            sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
           bash .github/scripts/ci-safe-apt-update.sh
+          bash .github/scripts/ci-ensure-llvm-22.sh clang-22 llvm-22
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
-            clang-22 clang++-22 llvm-22 \
+            clang-22 llvm-22 \
             libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
             zlib1g-dev liblzma-dev nlohmann-json3-dev
 

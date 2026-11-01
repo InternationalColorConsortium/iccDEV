@@ -1236,7 +1236,7 @@ jobs:
   wasm:
     name: "WASM Release (Emscripten)"
     needs: cache-policy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       EMSDK_VERSION: 4.0.21
@@ -1788,7 +1788,7 @@ jobs:
   cpack-linux:
     name: "Linux CPack runtime packages"
     needs: cache-policy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
       run:
@@ -1941,7 +1941,7 @@ jobs:
   doxygen:
     name: "Doxygen HTML Docs"
     needs: cache-policy
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
       run:
@@ -2082,7 +2082,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-latest, windows-2022]
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -2282,7 +2282,7 @@ jobs:
 
           bash .github/scripts/ci-safe-apt-update.sh
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            patchelf
+            patchelf zip
 
           expected=(
             iccdev-linux-gcc

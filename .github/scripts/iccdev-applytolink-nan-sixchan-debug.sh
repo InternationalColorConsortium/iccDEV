@@ -6,9 +6,8 @@
 # Replays the CI debugging PoC:
 #   iccApplyToLink bar.foo 0 2 1 foo.bar nan 1 1 0 SpecRef/SixChanInputRef.icc 13
 #
-# This helper replays the original master-equivalent iccApplyToLink crash path
-# with added signature logging.  The NaN range must now be rejected before CMM
-# setup or LUT/vector construction, with no sanitizer output.
+# The NaN range must be rejected before profile loading, CMM setup, or
+# LUT/vector construction, with no sanitizer output.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR              -- path to Build/Tools or build/Tools
@@ -19,8 +18,9 @@
 #   ICCDEV_APPLYTOLINK_PROFILE_PROBE -- set to 1 to run a second finite-range probe
 #
 # Exit codes:
-#   0 - expected graceful rejection captured or skipped on non-sanitizer build
+#   0 - expected graceful rejection captured
 #   2 - timeout, sanitizer finding, unexpected success, or wrong failure mode
+#  77 - required tool or sanitizer build is unavailable
 ###############################################################################
 
 set -uo pipefail
@@ -32,20 +32,6 @@ TESTING_DIR="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-$REPO_ROOT/Build/Testing/iccdev-applytolink-nan-sixchan-debug}"
 RUN_FLAMEGRAPH="${ICCDEV_APPLYTOLINK_FLAMEGRAPH:-0}"
 QA_MARKER_FILE="${ICCDEV_QA_TARGET_MARKER:-$REPO_ROOT/.github/ci/qa-flags/qa-target-marker.txt}"
-
-if [ -f "$SCRIPT_DIR/sanitize-sed.sh" ]; then
-  # shellcheck disable=SC1091
-  source "$SCRIPT_DIR/sanitize-sed.sh"
-fi
-
-sanitize_for_summary()
-{
-  if declare -F sanitize_line >/dev/null 2>&1; then
-    sanitize_line "$1"
-  else
-    printf "%s" "$1" | tr -d "\000-\011\013\014\016-\037\177"
-  fi
-}
 
 git_value()
 {
@@ -162,7 +148,7 @@ echo "=== iccApplyToLink NaN/SixChanInputRef sanitizer debug ==="
 
 if [ -z "$APPLY" ] || [ ! -x "$APPLY" ]; then
   echo "  [SKIP] iccApplyToLink not built under $TOOLS_DIR"
-  exit 0
+  exit 77
 fi
 
 cache=""
@@ -186,17 +172,21 @@ fi
 
 if [ "$sanitized" -ne 1 ]; then
   echo "  [SKIP] iccApplyToLink not built with AddressSanitizer (CMakeCache: ${cache:-none})"
-  exit 0
+  exit 77
 fi
 
-if [ ! -f "$PROFILE" ] && [ -n "$FROMXML" ] && [ -x "$FROMXML" ] && [ -f "$PROFILE_XML" ]; then
-  PROFILE="$OUTDIR/SixChanInputRef.icc"
-  ( cd "$TESTING_DIR/SpecRef" && "$FROMXML" "SixChanInputRef.xml" "$PROFILE" ) > "$OUTDIR/fromxml.log" 2>&1
-fi
-
-if [ ! -f "$PROFILE" ]; then
-  echo "  [SKIP] PoC profile missing: $PROFILE"
-  exit 0
+# The NaN parser guard runs before opening the profile, so the main check does
+# not require ICCXML or a generated SixChan profile. Only the optional finite
+# range probe needs one.
+if [ "$RUN_PROFILE_PROBE" = "1" ]; then
+  if [ ! -f "$PROFILE" ] && [ -n "$FROMXML" ] && [ -x "$FROMXML" ] && [ -f "$PROFILE_XML" ]; then
+    PROFILE="$OUTDIR/SixChanInputRef.icc"
+    ( cd "$TESTING_DIR/SpecRef" && "$FROMXML" "SixChanInputRef.xml" "$PROFILE" ) > "$OUTDIR/fromxml.log" 2>&1
+  fi
+  if [ ! -f "$PROFILE" ]; then
+    echo "  [FAIL] finite-range profile probe requested but profile is unavailable: $PROFILE"
+    exit 2
+  fi
 fi
 
 export ICC_APPLYTOLINK_DIAGNOSTICS="${ICC_APPLYTOLINK_DIAGNOSTICS:-1}"
@@ -217,8 +207,9 @@ write_replay_context > "$CONTEXT_LOG"
 cat "$CONTEXT_LOG" > "$LOGFILE"
 timeout 30 "${cmd[@]}" >> "$LOGFILE" 2>&1 || status=$?
 
-profile_status=0
+profile_status="skipped"
 if [ "$RUN_PROFILE_PROBE" = "1" ]; then
+  profile_status=0
   ICC_APPLYTOLINK_DIAGNOSTICS=1 \
     timeout 30 "$APPLY" "$OUTDIR/profile-probe.foo" 0 2 1 foo.bar 0 1 1 0 "$PROFILE" 13 > "$PROFILE_LOG" 2>&1 || profile_status=$?
 else
@@ -243,7 +234,7 @@ if [ "$has_asan" -eq 1 ] || [ "$has_ubsan" -eq 1 ]; then
 elif [ "$status" -eq 124 ]; then
   classification="TIMEOUT"
   detail="timeout after 30s"
-elif [ "$status" -eq 134 ] || [ "$status" -eq 136 ] || [ "$status" -eq 137 ] || [ "$status" -eq 139 ]; then
+elif [ "$status" -ge 128 ]; then
   classification="SIGNAL"
   detail="signal exit $((status - 128)) without sanitizer report"
 elif [ "$status" -eq 0 ]; then
@@ -303,20 +294,6 @@ fi
 echo "  $result iccApplyToLink-nan-sixchan -- $detail (exit $status)"
 echo "  [INFO] log: $LOGFILE"
 echo "  [INFO] report: $REPORT"
-
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  {
-    printf "### iccApplyToLink NaN/SixChanInputRef debug\n\n"
-    printf "* Result: %s\n" "$(sanitize_for_summary "$result $detail")"
-    printf "* Exit code: %s\n" "$(sanitize_for_summary "$status")"
-    printf "* Classification: %s\n" "$(sanitize_for_summary "$classification")"
-    printf "* UTC: %s\n" "$(sanitize_for_summary "$(sed -n 's/^ICC_DIAG: replay.utc=//p' "$CONTEXT_LOG")")"
-    printf "* Git: %s\n" "$(sanitize_for_summary "$(sed -n 's/^ICC_DIAG: git.//p' "$CONTEXT_LOG")")"
-    printf "* Run: %s\n" "$(sanitize_for_summary "$(sed -n 's/^ICC_DIAG: ci.github_actions=//p' "$CONTEXT_LOG")")"
-    printf "* Report: %s\n" "$(sanitize_for_summary "$REPORT")"
-    printf "* Log: %s\n" "$(sanitize_for_summary "$LOGFILE")"
-  } >> "$GITHUB_STEP_SUMMARY"
-fi
 
 if [ "$result" = "[FAIL]" ]; then
   exit 2

@@ -168,7 +168,7 @@ The official ClusterFuzzLite lane builds all eight in-process targets above.
 Keep its `address`, `undefined`, and `memory` builds separate, pass all compiler
 and linker instrumentation through the OSS-Fuzz environment, require matching
 Clang 21 or 22 compilers across AFL, CFL, and ClusterFuzzLite, and keep the
-workflow manual plus branch-push-only until maintainers broaden that policy.
+workflow limited to manual dispatch and the nightly schedule.
 The ClusterFuzzLite memory build must bootstrap the pinned instrumented libc++
 and libc++abi, reject libstdc++ or another libc++ at runtime, and replay the
 pinned #2687 artifact before fuzzing. A report crossing an uninstrumented C++

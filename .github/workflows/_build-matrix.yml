@@ -108,11 +108,14 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
+          bash .github/scripts/ci-ensure-llvm-22.sh clang-22 libclang-rt-22-dev
           sudo apt-get install -y --no-install-recommends \
-            cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+            cmake clang-22 libclang-rt-22-dev \
+            libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
           read -r -a cmake_options <<< "$MATRIX_OPTIONS"
           cmake -S Build/Cmake -B "out/${MATRIX_NAME}" \
+            -DCMAKE_C_COMPILER=clang-22 -DCMAKE_CXX_COMPILER=clang++-22 \
             -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON "${cmake_options[@]}"
           cmake --build "out/${MATRIX_NAME}" --parallel "$(nproc)"
           cmake --build "out/${MATRIX_NAME}" --target build-test-binaries --parallel "$(nproc)"
@@ -130,7 +133,7 @@ jobs:
           - name: coverage
             options: "-DENABLE_COVERAGE=ON"
           - name: profiling
-            options: "-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DENABLE_PROFILING=ON -DENABLE_TESTS=ON"
+            options: "-DENABLE_PROFILING=ON -DENABLE_TESTS=ON"
           - name: asserts
             options: "-DICC_ENABLE_ASSERTS=ON"
           - name: trace-nan
@@ -163,11 +166,20 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            binutils cmake clang libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
+          bash .github/scripts/ci-safe-apt-update.sh
+          llvm_packages=(clang-22)
+          if [ "$MATRIX_NAME" = coverage ]; then
+            llvm_packages+=(libclang-rt-22-dev)
+          fi
+          bash .github/scripts/ci-ensure-llvm-22.sh "${llvm_packages[@]}"
+          packages=(binutils cmake clang-22 libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev)
+          if [ "$MATRIX_NAME" = coverage ]; then
+            packages+=(libclang-rt-22-dev)
+          fi
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
           read -r -a cmake_options <<< "$MATRIX_OPTIONS"
           cmake -S Build/Cmake -B "out/option-${MATRIX_NAME}" \
+            -DCMAKE_C_COMPILER=clang-22 -DCMAKE_CXX_COMPILER=clang++-22 \
             -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON "${cmake_options[@]}"
           cmake --build "out/option-${MATRIX_NAME}" --parallel "$(nproc)"
           if [ "$MATRIX_NAME" = profiling ]; then
@@ -196,7 +208,6 @@ jobs:
       tool_build_type: ${{ inputs['tool-build-type'] }}
       run_hybrid_timing: ${{ inputs['run-hybrid-timing'] }}
       instrumentation: sanitizers
-      include_infrastructure_tests: false
 
   version-header-test:
     runs-on: ubuntu-latest

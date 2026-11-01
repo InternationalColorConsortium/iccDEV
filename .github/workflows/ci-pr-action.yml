@@ -1079,7 +1079,6 @@ jobs:
       ctest_mode: ${{ needs.validate-inputs.outputs.ctest-mode }}
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
       exclude_extended_pr_tests: true
-      include_infrastructure_tests: false
       instrumentation: core
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
