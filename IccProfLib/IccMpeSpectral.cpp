@@ -1569,11 +1569,8 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
     observer.VectorMult(pDst, pSrc);
     if (bLab) {
       icXYZtoLab(pDst, pDst, xyzW);
-//      icLabToPcs(pDst);
     }
-    else {
-//      icXyzToPcs(pDst);
-    }
+
     pSrc += m_Range.steps;
     pDst += m_nOutputChannels;
   }
@@ -1761,11 +1758,8 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
     if (bLab) {
       icXYZtoLab(pDst, pDst, xyzi);
-      //      icLabToPcs(pDst);
     }
-    else {
-      //      icXyzToPcs(pDst);
-    }
+
     pSrc += m_Range.steps;
     pDst += m_nOutputChannels;
   }
@@ -2128,11 +2122,9 @@ void CIccMpeSpectralObserver::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *
 
     if (bLab) {
       icXYZtoLab(dstPixel, xyz, m_xyzw);
-      //      icLabToPcs(dstPixel);
     }
     else {
       memcpy(dstPixel, xyz, 3*sizeof(icFloatNumber));
-      //      icXyzToPcs(dstPixel);
     }
   }
 }
