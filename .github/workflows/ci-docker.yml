@@ -65,9 +65,10 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
           - arch: arm64
             platform: linux/arm64
+            # GitHub has no ubuntu-latest arm64 label; keep a native arm64 runner.
             runner: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -461,7 +462,7 @@ jobs:
          github.ref == 'refs/heads/ci-publish-colourbill-ctrl' ||
          startsWith(github.ref, 'refs/tags/v'))
       }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write

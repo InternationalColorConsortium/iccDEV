@@ -273,6 +273,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args-exhaustive` | Same script with `--exhaustive-thread-matrix`; comprehensive pre-PR thread matrix |
+| `iccdev.applyprofiles-cli-args` | `.github/scripts/iccdev-applyprofiles-cli-args-regression.sh`; checks telemetry-enabled `--debug` with `-threads`/`-exportcfg`, `--verbose` with `-cfg`, and disabled-build rejection |
 | `iccdev.iccApply*-build-toggle` | Four apply-tool checks run with telemetry both enabled and disabled; help exposes telemetry only when built, and disabled builds reject telemetry options. Configure separate build trees with `ICCDEV_ENABLE_TELEMETRY=ON` and `OFF` to cover both cases. |
 | `iccdev.applyprofiles-headless-receipts` | Unix quick check and Windows Python smoke; verify JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
 | `iccdev.apply-telemetry-failure-paths` | `.github/ci/quality-assurance/scripts/test_apply_telemetry_failures.py`; `iccdev;cmm;image;qa;evidence;regression`; checks failed writes, terminal JSONL events, and equivalent output paths for all four Apply tools |
@@ -347,9 +348,10 @@ assertions, individual open-issue MSan patch inventory, non-blocking patch
 continuation behavior, and shell syntax for the adapter and shared CFL builder.
 Runtime sanitizer validation remains in
 `.github/workflows/ci-clusterfuzzlite.yml` and the local OSS-Fuzz helper flow
-documented in `.github/ci/cfl/README.md`. Core PR and path-scoped sanitizer
-lanes exclude `ci-infrastructure`; run these two CTests directly when their
-workflow, adapter, target, patch, or corpus contract changes.
+documented in `.github/ci/cfl/README.md`. Normal Unix, Windows, tool, PR,
+and sanitizer CTest lanes exclude `clusterfuzzlite`; the tool workflow also excludes
+`ci-infrastructure` and has no option to include it. Run these two CTests
+directly when their workflow, adapter, target, patch, or corpus contract changes.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 32-item PAWG report structure, verifies summary counts against the

@@ -71,6 +71,7 @@ def test_fast_mode_omits_slow_spectral_setup_and_adds_smoke_tests():
         r"--label-exclude calculator\)",
         ctest["run"],
     )
+    assert "ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)" in ctest["run"]
     assert "ICCDEV_SPECTRAL_PREVIEW_PYTHON" not in ctest.get("env", {})
 
 
@@ -112,7 +113,6 @@ def test_summary_commands_preserve_smoke_selection(mode, recent_limit):
             CTEST_MODE=mode,
             CTEST_RECENT_LIMIT=recent_limit,
             EXCLUDE_EXTENDED_PR_TESTS="false",
-            INCLUDE_INFRASTRUCTURE_TESTS="true",
         ),
         capture_output=True,
         text=True,
@@ -127,6 +127,8 @@ def test_summary_commands_preserve_smoke_selection(mode, recent_limit):
     for command in commands:
         assert ("--smoke" in command.split()) == (mode == "fast")
         assert ("--limit" in command.split()) == (recent_limit != "0")
+        assert "--label-exclude clusterfuzzlite" in command
+        assert "--label-exclude ci-infrastructure" in command
 
 
 @pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,

@@ -23,3 +23,7 @@ Dockerfile* text eol=lf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
 .githooks/* text eol=lf
+.clusterfuzzlite/known-bug-patch-mode text eol=lf
+.clusterfuzzlite/target-group text eol=lf
+.github/ci/cfl/*.options text eol=lf
+.github/ci/cfl/*.dict text eol=lf

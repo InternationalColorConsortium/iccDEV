@@ -26,10 +26,11 @@ empty_archive="$work_dir/empty-corpus.zip"
 printf '{"parameters":[0.5]}\n' > "$valid_seed"
 (
   cd "$work_dir"
-  zip -q "$valid_archive" "$(basename "$valid_seed")"
+  # CMake is already required by CTest; the regression image has no zip tool.
+  cmake -E tar cf "$valid_archive" --format=zip -- "$(basename "$valid_seed")"
+  mkdir "$(basename "$empty_dir")"
+  cmake -E tar cf "$empty_archive" --format=zip -- "$(basename "$empty_dir")"
 )
-mkdir "$empty_dir"
-zip -q "$empty_archive" "$empty_dir/"
 
 targets=(
   icc_profileparse_fuzzer

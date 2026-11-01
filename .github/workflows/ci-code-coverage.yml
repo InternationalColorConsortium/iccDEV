@@ -31,7 +31,7 @@ env:
 jobs:
   coverage:
     name: "Coverage Report"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
       run:
@@ -64,16 +64,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential \
-            clang-18 \
+            clang-22 \
             cloc \
             cmake \
             curl \
             jq \
+            libclang-rt-22-dev \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
             libxml2-dev \
-            llvm-18 \
+            llvm-22 \
             nlohmann-json3-dev \
             zlib1g-dev
 
@@ -85,9 +86,9 @@ jobs:
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
           echo "::group::Toolchain versions"
-          printf 'clang: %s\n' "$(clang-18 --version | head -1)"
-          printf 'llvm-cov: %s\n' "$(llvm-cov-18 --version | head -1)"
-          printf 'llvm-profdata: %s\n' "$(llvm-profdata-18 show --version 2>&1 | head -1 || printf unknown)"
+          printf 'clang: %s\n' "$(clang-22 --version | head -1)"
+          printf 'llvm-cov: %s\n' "$(llvm-cov-22 --version | head -1)"
+          printf 'llvm-profdata: %s\n' "$(llvm-profdata-22 show --version 2>&1 | head -1 || printf unknown)"
           printf 'cmake: %s\n' "$(cmake --version | head -1)"
           printf 'runner: %s\n' "$(uname -srm)"
           echo "::endgroup::"
@@ -166,8 +167,8 @@ jobs:
 
       - name: "Build with coverage instrumentation"
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -181,8 +182,8 @@ jobs:
           cmake "${WORKSPACE_DIR}/Build/Cmake" \
             -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
             -DENABLE_COVERAGE=ON \
             -DENABLE_STATIC_LIBS=ON \
             -DENABLE_TESTS=ON \
@@ -682,7 +683,7 @@ jobs:
 
           printf 'Merging %s profraw files...\n' "$profraw_count"
           find "${WORKSPACE_DIR}/profraw" -name '*.profraw' -print0 \
-            | xargs -0 --no-run-if-empty llvm-profdata-18 merge -sparse \
+            | xargs -0 --no-run-if-empty llvm-profdata-22 merge -sparse \
               -o coverage-report/merged.profdata
 
           profdata_kb="$(( $(stat -c%s coverage-report/merged.profdata) / 1024 ))"
@@ -693,23 +694,23 @@ jobs:
           object_args=()
           while IFS= read -r -d '' bin; do
             if [ "$bin" != "$main_bin" ]; then
-              object_args+=("-object=$bin")
+              object_args+=("--object=$bin")
             fi
           done < <(find "$build_dir" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui -print0 | sort -z)
           while IFS= read -r -d '' lib; do
-            object_args+=("-object=$lib")
+            object_args+=("--object=$lib")
           done < <(find "$build_dir" -name 'lib*.so' \( -type f -o -type l \) -print0 2>/dev/null | sort -z)
 
           echo "::group::llvm-cov object list"
           printf 'Primary binary: %s\n' "$main_bin"
-          printf '%s\n' "${object_args[@]}" | sed 's/^-object=/  /'
+          printf '%s\n' "${object_args[@]}" | sed 's/^--object=/  /'
           echo "::endgroup::"
 
           echo "::group::llvm-cov report"
-          llvm-cov-18 report \
+          llvm-cov-22 report \
             "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
+            --instr-profile=coverage-report/merged.profdata \
+            --ignore-filename-regex='(third_party|/usr/|test)' \
             2>coverage-report/llvm-cov-stderr.txt \
             | tee coverage-report/coverage-summary.txt
           echo "::endgroup::"
@@ -765,15 +766,15 @@ jobs:
 
           echo "Generating HTML report..."
           set +e
-          llvm-cov-18 show \
+          llvm-cov-22 show \
             "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -format=html \
-            -output-dir=coverage-report/html \
-            -show-line-counts-or-regions \
-            -show-expansions \
-            -show-branches=count \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
+            --instr-profile=coverage-report/merged.profdata \
+            --format=html \
+            --output-dir=coverage-report/html \
+            --show-line-counts-or-regions \
+            --show-expansions \
+            --show-branches=count \
+            --ignore-filename-regex='(third_party|/usr/|test)' \
             > coverage-report/html-stdout.txt \
             2> coverage-report/html-stderr.txt
           html_rc="$?"
@@ -796,11 +797,11 @@ jobs:
           echo "::notice title=HTML report::${html_count} pages generated"
 
           set +e
-          llvm-cov-18 export \
+          llvm-cov-22 export \
             "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -format=lcov \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
+            --instr-profile=coverage-report/merged.profdata \
+            --format=lcov \
+            --ignore-filename-regex='(third_party|/usr/|test)' \
             > coverage-report/lcov.info \
             2>coverage-report/lcov-stderr.txt
           lcov_rc="$?"
@@ -867,7 +868,7 @@ jobs:
           summary_line "### Build"
           summary_line "| Component | Value |"
           summary_line "|-----------|-------|"
-          summary_line "| Compiler | clang-18 source-based coverage |"
+          summary_line "| Compiler | clang-22 source-based coverage |"
           summary_line "| Tools built | ${tool_count:-n/a} |"
           summary_line "| Profraw files | ${profraw_count:-n/a} |"
           summary_line "| HTML pages | ${html_count:-n/a} |"

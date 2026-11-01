@@ -75,7 +75,7 @@ on:
         default: Debug
         type: string
       ctest_mode:
-        description: 'CTest mode: fast excludes slow/calculator labels; full runs all; skip omits CTest'
+        description: 'CTest mode: fast excludes slow/calculator labels; full runs tool tests; skip omits CTest'
         required: false
         default: fast
         type: string
@@ -104,11 +104,6 @@ on:
         required: false
         default: sanitizers
         type: string
-      include_infrastructure_tests:
-        description: 'Include infrastructure-only CTests'
-        required: false
-        default: false
-        type: boolean
       regression_image_tag:
         description: 'Trusted unified image tag'
         required: false
@@ -207,11 +202,6 @@ on:
         options:
           - sanitizers
           - core
-      include_infrastructure_tests:
-        description: 'Include infrastructure-only CTests'
-        required: true
-        default: false
-        type: boolean
       ctest_mode:
         description: 'CTest mode to run'
         required: false
@@ -292,7 +282,7 @@ concurrency:
 jobs:
   tool-tests:
     name: "iccDEV Tools - GCC Strict ${{ inputs.instrumentation == 'core' && 'Core' || 'ASAN+UBSAN' }} (${{ inputs.tool_build_type || 'Debug' }})"
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev:${{ inputs.regression_image_tag || 'latest' }}
       credentials:
@@ -311,7 +301,6 @@ jobs:
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
       EXCLUDE_EXTENDED_PR_TESTS: ${{ inputs.exclude_extended_pr_tests && 'true' || 'false' }}
-      INCLUDE_INFRASTRUCTURE_TESTS: ${{ inputs.include_infrastructure_tests && 'true' || 'false' }}
       INSTRUMENTATION: ${{ inputs.instrumentation || 'sanitizers' }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
       BUILD_DIR: build
@@ -589,7 +578,9 @@ jobs:
           unset GITHUB_TOKEN || true
 
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
-          ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
+          ctest --test-dir "${BUILD_DIR}" -N \
+            --label-exclude 'ci-infrastructure|clusterfuzzlite' \
+            --no-tests=error | tee "${CTEST_LIST}"
 
       - name: Run CTest tool suites
         if: ${{ inputs.ctest_mode != 'skip' }}
@@ -626,6 +617,9 @@ jobs:
           # here. Kept so a future quarantine needs no workflow edit -- but a
           # test added to it stops being covered, so label sparingly.
           ctest_args+=(--label-exclude known-red)
+          # Keep infrastructure contracts and ClusterFuzzLite harness checks
+          # out of tool and PR test lanes; run those checks explicitly.
+          ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)
           case "$EXCLUDE_EXTENDED_PR_TESTS" in
             true)
               ctest_args+=(--label-exclude pr-extended)
@@ -634,17 +628,6 @@ jobs:
               ;;
             *)
               echo "::error title=Invalid extended PR test exclusion::${EXCLUDE_EXTENDED_PR_TESTS}"
-              exit 1
-              ;;
-          esac
-          case "$INCLUDE_INFRASTRUCTURE_TESTS" in
-            true)
-              ;;
-            false)
-              ctest_args+=(--label-exclude ci-infrastructure)
-              ;;
-            *)
-              echo "::error title=Invalid infrastructure test selection::${INCLUDE_INFRASTRUCTURE_TESTS}"
               exit 1
               ;;
           esac
@@ -852,10 +835,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit build/ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit build/ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -866,9 +849,6 @@ jobs:
           esac
           if [ "$EXCLUDE_EXTENDED_PR_TESTS" = "true" ]; then
             test_cmd="${test_cmd} --label-exclude pr-extended"
-          fi
-          if [ "$INCLUDE_INFRASTRUCTURE_TESTS" = "false" ]; then
-            test_cmd="${test_cmd} --label-exclude ci-infrastructure"
           fi
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
@@ -902,7 +882,7 @@ jobs:
             echo ""
             echo "| Component | Value |"
             echo "|-----------|-------|"
-            echo "| Runner | ubuntu-24.04 |"
+            echo "| Runner | ubuntu-latest |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
             echo "| Build type | $(sanitize_line "$TOOL_BUILD_TYPE") |"
             echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with $(sanitize_line "$instrumentation_label"), zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
@@ -913,7 +893,7 @@ jobs:
             echo "| CTest mode | \`${CTEST_MODE}\` |"
             echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
             echo "| Extended PR tests | \`${EXCLUDE_EXTENDED_PR_TESTS}\` |"
-            echo "| Infrastructure tests | \`${INCLUDE_INFRASTRUCTURE_TESTS}\` |"
+            echo "| Infrastructure and ClusterFuzzLite CTests | excluded |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
@@ -932,16 +912,16 @@ jobs:
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 fi
                 ;;
               full)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
                 fi
                 echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;
@@ -1194,7 +1174,7 @@ jobs:
   thread-linkage:
     name: "RefIccMAX thread linkage - manual"
     if: ${{ inputs.thread_linkage_build_type != '' && inputs.thread_linkage_ipo != '' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 12
     defaults:
       run:
@@ -1223,26 +1203,39 @@ jobs:
           unset GITHUB_TOKEN || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source .github/scripts/sanitize-sed.sh
-          llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
-          llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
-          curl --fail --location --silent --show-error \
-            https://apt.llvm.org/llvm-snapshot.gpg.key \
-            --output "$llvm_key"
-          gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
-          llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
-          if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
-            echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
-            exit 1
-          fi
-          gpg --dearmor --output "$llvm_keyring" "$llvm_key"
-          sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
-          printf '%s\n' \
-            'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
-            sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
           bash .github/scripts/ci-safe-apt-update.sh
+          missing_llvm=0
+          for llvm_package in clang-22 llvm-22; do
+            apt-cache show "$llvm_package" 2>/dev/null |
+              grep -Fx "Package: $llvm_package" >/dev/null || missing_llvm=1
+          done
+          if [ "$missing_llvm" -eq 1 ]; then
+            . /etc/os-release
+            if [ "$ID" != ubuntu ] || [[ ! "${VERSION_CODENAME:-}" =~ ^[a-z]+$ ]]; then
+              echo "Unsupported Ubuntu runner release for LLVM 22" >&2
+              exit 1
+            fi
+            llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
+            llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
+            curl --fail --location --silent --show-error \
+              https://apt.llvm.org/llvm-snapshot.gpg.key \
+              --output "$llvm_key"
+            gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
+            llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
+            if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
+              echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
+              exit 1
+            fi
+            gpg --dearmor --output "$llvm_keyring" "$llvm_key"
+            sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
+            printf 'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/%s/ llvm-toolchain-%s-22 main\n' \
+              "$VERSION_CODENAME" "$VERSION_CODENAME" |
+              sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
+            bash .github/scripts/ci-safe-apt-update.sh
+          fi
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
-            clang-22 clang++-22 llvm-22 \
+            clang-22 llvm-22 \
             libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
             zlib1g-dev liblzma-dev nlohmann-json3-dev
 

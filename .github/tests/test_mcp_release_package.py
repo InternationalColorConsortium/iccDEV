@@ -107,7 +107,7 @@ def test_release_proves_both_installation_modes_and_collects_mcp_artifacts():
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="ascii"))["jobs"]
     producer = jobs["mcp-package"]
     assert producer["permissions"] == {"contents": "read"}
-    assert set(producer["strategy"]["matrix"]["os"]) == {"ubuntu-24.04", "windows-2022"}
+    assert set(producer["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "windows-2022"}
     build = next(step["run"] for step in producer["steps"] if step["name"] == "Build and test MCP distributions")
     assert "--source-tree" in build and "python -m venv" in build
     assert build.count("-o asyncio_default_fixture_loop_scope=function") == 2

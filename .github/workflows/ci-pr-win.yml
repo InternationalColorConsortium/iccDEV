@@ -617,6 +617,7 @@ jobs:
             --test-dir build `
             --config Debug `
             --parallel ([Environment]::ProcessorCount) `
+            --label-exclude clusterfuzzlite `
             --require-test iccdev.applyprofiles-headless-receipts `
             --require-test iccdev.applyprofiles-matrix-contracts `
             --require-test iccdev.applyprofiles-evidence-matrix `
@@ -898,6 +899,7 @@ jobs:
             '--test-dir', $buildDir,
             '--config', 'Debug',
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--label-exclude', 'clusterfuzzlite',
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
@@ -1325,6 +1327,7 @@ jobs:
             '.github\scripts\run-recent-ctests.py',
             '--test-dir', $buildDir,
             '--parallel', ([string][Environment]::ProcessorCount),
+            '--label-exclude', 'clusterfuzzlite',
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',

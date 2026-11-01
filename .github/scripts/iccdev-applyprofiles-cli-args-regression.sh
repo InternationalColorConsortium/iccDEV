@@ -185,6 +185,35 @@ run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy \
   "$APPLY" "$SRC" "$OUTDIR/legacy.tif" 0 0 0 0 1 "$SRGB" 1
 run_expect_success threads-cfg-valid "$APPLY" -threads 1 -cfg "$CFG"
+
+# The optional telemetry flags share the global-option parser with --threads.
+# Check both legacy forms used by the hybrid timing matrix when telemetry is
+# compiled in, and preserve the explicit rejection in a telemetry-off build.
+help_text="$("$APPLY" --help)"
+if [[ "$help_text" == *"--debug writes verbose receipt"* ]]; then
+  debug_cfg="$OUTDIR/debug-export-cfg.json"
+  debug_output="$OUTDIR/debug-export.tif"
+  rm -f "$debug_cfg" "$debug_output"
+  run_expect_success debug-export-cfg \
+    "$APPLY" -threads 1 --debug -exportcfg "$debug_cfg" \
+      "$SRC" "$debug_output" 0 0 0 0 1 "$SRGB" 1
+  require_file "$debug_cfg"
+  require_file "$debug_output"
+  grep -Fq 'iccApplyProfiles: progress' "$OUTDIR/debug-export-cfg.log" ||
+    fail "debug-export-cfg did not emit debug progress"
+
+  run_expect_success verbose-cfg "$APPLY" --verbose -cfg "$CFG"
+  grep -Fq 'iccApplyProfiles: started' "$OUTDIR/verbose-cfg.log" ||
+    fail "verbose-cfg did not emit a start receipt"
+else
+  run_expect_reject telemetry-disabled-debug "$APPLY" --debug -cfg "$CFG"
+  grep -Fq 'Telemetry is not built' "$OUTDIR/telemetry-disabled-debug.log" ||
+    fail "telemetry-disabled-debug did not explain the build toggle"
+  run_expect_reject telemetry-disabled-verbose "$APPLY" --verbose -cfg "$CFG"
+  grep -Fq 'Telemetry is not built' "$OUTDIR/telemetry-disabled-verbose.log" ||
+    fail "telemetry-disabled-verbose did not explain the build toggle"
+fi
+
 run_expect_reject threads-missing "$APPLY" -threads
 run_expect_reject threads-nonnumeric "$APPLY" -threads nope -cfg "$CFG"
 run_expect_reject threads-trailing "$APPLY" -threads 2junk -cfg "$CFG"

@@ -44,13 +44,15 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 pr_workflow="$repo_root/.github/workflows/ci-pr-action.yml"
 mcp_workflow="$repo_root/.github/workflows/ci-mcp-server.yml"
 tool_workflow="$repo_root/.github/workflows/ci-iccdev-tool-tests.yml"
+unix_workflow="$repo_root/.github/workflows/_build-test-unix.yml"
+windows_workflow="$repo_root/.github/workflows/_build-test-windows.yml"
+pr_windows_workflow="$repo_root/.github/workflows/ci-pr-win.yml"
 sanitizer_workflow="$repo_root/.github/workflows/ci-sanitizer-regression.yml"
 risk_workflow="$repo_root/.github/workflows/ci-risk-analysis-gate.yml"
 cfl_workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 ctest_file="$repo_root/Build/Cmake/Testing/CMakeLists.txt"
 
 grep -Fq 'instrumentation: core' "$pr_workflow"
-grep -Fq 'include_infrastructure_tests: false' "$pr_workflow"
 grep -Fq 'uses: ./.github/workflows/ci-mcp-server.yml' "$pr_workflow"
 grep -Fq 'needs.detect-src.outputs.mcp_changed' "$pr_workflow"
 grep -Fq 'MCP_RESULT:' "$pr_workflow"
@@ -69,13 +71,20 @@ if grep -Fq 'ci-pr-risk-security-analysis.yml' "$pr_workflow"; then
 fi
 
 grep -Fq 'default: sanitizers' "$tool_workflow"
-grep -Fq 'ctest_args+=(--label-exclude ci-infrastructure)' "$tool_workflow"
+grep -Fq 'ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)' "$tool_workflow"
+if grep -Fq 'include_infrastructure_tests:' "$tool_workflow"; then
+  echo "[FAIL] The tool lane must not expose infrastructure CTests" >&2
+  exit 1
+fi
+test "$(grep -Fc -- "--label-exclude 'slow|clusterfuzzlite'" "$unix_workflow")" -eq 2
+grep -Fq -- "--label-exclude 'known-red|clusterfuzzlite'" "$windows_workflow"
+test "$(grep -Fc -- '--label-exclude clusterfuzzlite' "$pr_windows_workflow")" -eq 1
+test "$(grep -Fc -- "'--label-exclude', 'clusterfuzzlite'" "$pr_windows_workflow")" -eq 2
 grep -q '^  pull_request:$' "$sanitizer_workflow"
 grep -Fq "      - '.github/ci/test-data/**'" "$sanitizer_workflow"
 grep -Fq "      - '.github/scripts/**'" "$sanitizer_workflow"
 grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' "$sanitizer_workflow"
 grep -Fq 'instrumentation: sanitizers' "$sanitizer_workflow"
-grep -Fq 'include_infrastructure_tests: false' "$sanitizer_workflow"
 grep -Fq 'uses: ./.github/workflows/ci-pr-risk-security-analysis.yml' "$risk_workflow"
 if grep -q '^    paths:$' "$risk_workflow"; then
   echo "[FAIL] required risk contexts must run for every PR" >&2

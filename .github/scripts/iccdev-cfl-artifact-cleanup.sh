@@ -37,13 +37,12 @@ archive_has_testcase()
     return 1
   fi
 
-  unzip -Z1 "$archive_path" | awk '
+  cmake -E tar tf "$archive_path" | awk '
     /\/$/ {
       next
     }
     {
       found = 1
-      exit
     }
     END {
       exit !found

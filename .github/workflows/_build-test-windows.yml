@@ -167,7 +167,8 @@ jobs:
           }
 
           Write-Host "Discovering CTest suites..."
-          $ctestList = ctest --test-dir out\vs2022-vcpkg -C Release -N --no-tests=error 2>&1
+          $ctestList = ctest --test-dir out\vs2022-vcpkg -C Release -N `
+            --label-exclude clusterfuzzlite --no-tests=error 2>&1
           $ctestList | Tee-Object -FilePath "out\vs2022-vcpkg\Testing\ci\ctest-list.txt"
           if ($LASTEXITCODE -ne 0) {
             throw "CTest discovery failed with exit code $LASTEXITCODE"
@@ -176,7 +177,7 @@ jobs:
           Write-Host "Running CTest suites..."
           ctest --test-dir out\vs2022-vcpkg -C Release `
             --parallel ([Environment]::ProcessorCount) `
-            --label-exclude known-red `
+            --label-exclude 'known-red|clusterfuzzlite' `
             --output-on-failure `
             --no-tests=error `
             --output-junit "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"

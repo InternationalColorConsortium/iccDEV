@@ -50,6 +50,5 @@ jobs:
       ctest_mode: full
       ctest_recent_limit: '0'
       exclude_extended_pr_tests: true
-      include_infrastructure_tests: false
       instrumentation: sanitizers
       warning_policy: fail

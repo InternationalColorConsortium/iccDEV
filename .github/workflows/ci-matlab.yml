@@ -235,7 +235,7 @@ jobs:
       matrix:
         include:
           - platform: Linux x86_64
-            runner: ubuntu-24.04
+            runner: ubuntu-latest
             architecture: x86_64
             mex-extension: mexa64
           - platform: macOS Apple Silicon
@@ -339,7 +339,7 @@ jobs:
 
   docker-interop:
     name: MATLAB Docker interoperability
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       ICCDEV_IMAGE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev
