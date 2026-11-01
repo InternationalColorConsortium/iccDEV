@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 ###############################################################################
+# Copyright (c) 2026 International Color Consortium.
+# All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause
+# https://color.org
+#
 # Ensure LLVM 22 packages are available on the rolling ubuntu-latest runner.
 # Call after ci-safe-apt-update.sh, before apt-get install.
 ###############################################################################
