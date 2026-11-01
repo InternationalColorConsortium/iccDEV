@@ -7,6 +7,7 @@
 import argparse
 import hashlib
 import pathlib
+import re
 import subprocess
 import tempfile
 
@@ -42,6 +43,12 @@ def main():
                 data += b"\xff\xe2" + (len(body) + 2).to_bytes(2, "big") + body
             return bytes(data) + b"\xff\xd9"
 
+        version = run("--version")
+        assert re.fullmatch(r"iccJpegDump IccProfLib_build=\S+\n", version), version
+        help_text = run("--help", text="Usage:")
+        assert version.strip() in help_text, help_text
+        assert "iccJpegDump <input.jpg>" in help_text, help_text
+
         for split in (False, True):
             image = root / ("split.jpg" if split else "single.jpg")
             image.write_bytes(carrier(profile, split))
@@ -72,6 +79,26 @@ def main():
             restored = root / "restored.icc"
             run(injected, restored)
             assert restored.read_bytes() == payload
+
+        replacement = root / "replacement.icc"
+        replacement.write_bytes(b"replacement ICC payload")
+        unrelated_app2 = b"\xff\xe2\x00\x08other!"
+        for split in (False, True):
+            tagged = root / ("tagged-split.jpg" if split else "tagged-single.jpg")
+            scan_tail = b"\xff\xda\x00\x02\x00\xff\x00\x11\xff\xd0\x22\xff\xd9"
+            tagged.write_bytes(b"\xff\xd8" + unrelated_app2 +
+                               carrier(profile, split)[2:-2] + scan_tail)
+            replaced = root / ("replaced-split.jpg" if split else "replaced-single.jpg")
+            output = run(tagged, "--write-icc", replacement, "--output", replaced,
+                         text=f"Replaced {2 if split else 1} existing ICC_PROFILE APP2 chunk(s)")
+            assert "successfully injected" in output
+            replaced_data = replaced.read_bytes()
+            assert replaced_data.count(b"ICC_PROFILE\0") == 1
+            assert unrelated_app2 in replaced_data
+            assert replaced_data.endswith(scan_tail)
+            extracted = root / ("replaced-split.icc" if split else "replaced-single.icc")
+            run(replaced, extracted)
+            assert extracted.read_bytes() == replacement.read_bytes()
 
         malformed = root / "malformed.jpg"
         malformed.write_bytes(carrier(b"not an ICC profile"))

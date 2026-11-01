@@ -102,6 +102,13 @@ static const png_alloc_size_t kMaxPngChunkBytes = 64U * 1024U * 1024U;
 static const size_t kMaxPngRasterBytes = 256U * 1024U * 1024U;
 static const size_t kMaxIccProfileBytes = 64U * 1024U * 1024U;
 
+static void PrintVersions()
+{
+    printf("iccPngDump IccProfLib_build=" ICCPROFLIBVER
+           " libpng_build=" PNG_LIBPNG_VER_STRING
+           " libpng_runtime=%s\n", png_get_libpng_ver(NULL));
+}
+
 
 // Function declarations
 
@@ -172,6 +179,16 @@ void PrintPngInfo(png_structp png_ptr, png_infop info_ptr);
  * @return 0 on success, non-zero on failure.
  */
 int main(int argc, char* argv[]) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        PrintVersions();
+        return 0;
+    }
+    if (argc == 2 && (strcmp(argv[1], "--help") == 0 ||
+                      strcmp(argv[1], "-h") == 0)) {
+        Usage();
+        return 0;
+    }
+
     printf("[INFO] Starting iccPngDump...\n");
 
     if (argc < 2) {
@@ -363,7 +380,9 @@ void safe_exit(const char *reason) {
  * This function provides details on the correct command-line syntax.
  */
 void Usage() {
+    PrintVersions();
     printf("Usage:\n");
+    printf("  iccPngDump --version | --help\n");
     printf("  iccPngDump <input.png> [output.icc]\n");
     printf("    - Extracts ICC profile from PNG.\n");
     printf("    - Saves profile to [output.icc] if specified.\n");
@@ -675,6 +694,48 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     return true;
 }
 
+static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated)
+{
+    animated = false;
+    unsigned char signature[8];
+    if (fread(signature, 1, sizeof(signature), input) != sizeof(signature) ||
+        png_sig_cmp(signature, 0, sizeof(signature)))
+        return false;
+
+    // A valid APNG places acTL before the first IDAT. Inspect only the PNG
+    // chunk headers preceding image data so rejection never decodes the raster
+    // or creates an output file. Skip payloads in bounded blocks.
+    unsigned char discard[4096];
+    for (;;) {
+        unsigned char header[8];
+        if (fread(header, 1, sizeof(header), input) != sizeof(header))
+            return false;
+        const png_uint_32 length =
+            (static_cast<png_uint_32>(header[0]) << 24) |
+            (static_cast<png_uint_32>(header[1]) << 16) |
+            (static_cast<png_uint_32>(header[2]) << 8) | header[3];
+        if (length > 0x7fffffffU)
+            return false;
+        if (memcmp(header + 4, "acTL", 4) == 0 ||
+            memcmp(header + 4, "fcTL", 4) == 0) {
+            animated = true;
+            break;
+        }
+        if (memcmp(header + 4, "IDAT", 4) == 0 ||
+            memcmp(header + 4, "IEND", 4) == 0)
+            break;
+
+        size_t remaining = static_cast<size_t>(length) + 4; // payload and CRC
+        while (remaining) {
+            const size_t part = remaining < sizeof(discard) ? remaining : sizeof(discard);
+            if (fread(discard, 1, part, input) != part)
+                return false;
+            remaining -= part;
+        }
+    }
+    return fseek(input, 0, SEEK_SET) == 0;
+}
+
 static bool InjectIccProfileData(const char* inputPng,
                                  const char* outputPng,
                                  const unsigned char* iccData,
@@ -683,6 +744,18 @@ static bool InjectIccProfileData(const char* inputPng,
     FILE* fpIn = fopen(inputPng, "rb");
     if (!fpIn) {
         LOG_ERROR("Failed to open input PNG file.");
+        return false;
+    }
+
+    bool animated = false;
+    if (!CheckPngAnimationBeforeImage(fpIn, animated)) {
+        fclose(fpIn);
+        LOG_ERROR("Failed to inspect PNG chunk structure before injection.");
+        return false;
+    }
+    if (animated) {
+        fclose(fpIn);
+        LOG_ERROR("Animated PNG (APNG) is not supported for ICC injection.");
         return false;
     }
 

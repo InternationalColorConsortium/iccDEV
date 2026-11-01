@@ -41,6 +41,16 @@ if ! command -v python3 >/dev/null 2>&1; then
   fail "python3 is required to generate deterministic PNG fixtures"
 fi
 
+version_output="$("$PNGDUMP" --version)" || fail "--version failed"
+printf '%s\n' "$version_output" | grep -Eq \
+  '^iccPngDump IccProfLib_build=[^[:space:]]+ libpng_build=[^[:space:]]+ libpng_runtime=[^[:space:]]+$' ||
+  fail "--version omitted build or runtime library version"
+help_output="$("$PNGDUMP" --help)" || fail "--help failed"
+printf '%s\n' "$help_output" | grep -Fq "$version_output" ||
+  fail "--help omitted library versions"
+printf '%s\n' "$help_output" | grep -Fq 'iccPngDump <input.png>' ||
+  fail "--help omitted usage"
+
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd -P)"
 if [ -n "$BUILD_ROOT" ]; then
   export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -49,7 +59,7 @@ export ASAN_OPTIONS="${ASAN_OPTIONS:-print_scariness=1:halt_on_error=0:detect_le
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0:print_stacktrace=1}"
 export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
-python3 - "$INPUT_PNG" "$OUTDIR/oversized-dimension.png" "$OUTDIR/oversized-raster.png" "$OUTDIR/unknown-critical.png" <<'PY'
+python3 - "$INPUT_PNG" "$OUTDIR/oversized-dimension.png" "$OUTDIR/oversized-raster.png" "$OUTDIR/unknown-critical.png" "$OUTDIR/two-frame.apng" <<'PY'
 import binascii
 import pathlib
 import struct
@@ -98,6 +108,18 @@ pathlib.Path(sys.argv[3]).write_bytes(
 pathlib.Path(sys.argv[4]).write_bytes(
     png(width, height, chunk(b"ABCD", b"required image information") +
         chunk(b"IDAT", zlib.compress(image_data))))
+
+def frame_control(sequence):
+    return struct.pack(">IIIIIHHBB", sequence, 1, 1, 0, 0, 1, 10, 0, 0)
+
+pathlib.Path(sys.argv[5]).write_bytes(
+    png(1, 1,
+        chunk(b"acTL", struct.pack(">II", 2, 0)) +
+        chunk(b"fcTL", frame_control(0)) +
+        chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00")) +
+        chunk(b"fcTL", frame_control(1)) +
+        chunk(b"fdAT", struct.pack(">I", 2) +
+              zlib.compress(b"\x00\x00\x00\xff"))))
 
 PY
 
@@ -220,6 +242,29 @@ if ! cmp -s "$OUTDIR/preserved-output.expected" "$OUTDIR/preserved-output.png"; 
 fi
 for staged in "$OUTDIR/preserved-output.png".tmp-*; do
   [ ! -e "$staged" ] || fail "invalid PNG injection left a temporary output"
+done
+
+printf 'preserve existing APNG destination\n' > "$OUTDIR/apng-existing.png"
+cp "$OUTDIR/apng-existing.png" "$OUTDIR/apng-existing.expected"
+rm -f "$OUTDIR/apng-new.png"
+for output in "$OUTDIR/apng-existing.png" "$OUTDIR/apng-new.png"; do
+  rm -f "$output".tmp-*
+  exit_code=0
+  timeout 30 "$PNGDUMP" "$OUTDIR/two-frame.apng" --write-icc "$INPUT_ICC" \
+    --output "$output" >"$LOGFILE" 2>&1 || exit_code=$?
+  [ "$exit_code" -eq 1 ] || fail "APNG injection did not fail gracefully (status $exit_code)"
+  check_sanitizers "$LOGFILE"
+  grep -Fq "Animated PNG (APNG) is not supported for ICC injection." "$LOGFILE" ||
+    fail "missing APNG rejection diagnostic"
+  if [ "$output" = "$OUTDIR/apng-existing.png" ]; then
+    cmp -s "$OUTDIR/apng-existing.expected" "$output" ||
+      fail "APNG injection modified the existing output"
+  else
+    [ ! -e "$output" ] || fail "APNG injection created a new output"
+  fi
+  for staged in "$output".tmp-*; do
+    [ ! -e "$staged" ] || fail "APNG injection created a temporary output"
+  done
 done
 
 python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'

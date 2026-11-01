@@ -65,6 +65,7 @@
 #include "IccUtil.h"
 #include "IccCmdLineUtil.h"
 #include "IccSameFile.h"
+#include "IccProfLibVer.h"
 #if defined(_WIN32)
   #include <winsock2.h>
 #else
@@ -93,17 +94,6 @@
 #endif
 
 // ============================================================================
-// JPEG ICC Profile Pointer Typedef
-// ----------------------------------------------------------------------------
-// Purpose : Abstract ICC pointer type with platform-const enforcement
-// ============================================================================
-#if defined(__APPLE__) && defined(__clang__)
-    typedef const unsigned char* jpeg_icc_profilep;
-#else
-    typedef unsigned char* jpeg_icc_profilep;
-#endif
-
-// ============================================================================
 // Logging & Exit Macros
 // ----------------------------------------------------------------------------
 // LOG_ERROR     : Print standardized error message to stderr
@@ -112,13 +102,20 @@
 #define LOG_ERROR(msg) fprintf(stderr, "[ERROR] %s\n", msg)
 #define safe_exit(reason) do { LOG_ERROR(reason); exit(EXIT_FAILURE); } while (0)
 
+static void PrintVersions()
+{
+    printf("iccJpegDump IccProfLib_build=" ICCPROFLIBVER "\n");
+}
+
 // ============================================================================
 // Function: Usage
 // ----------------------------------------------------------------------------
 // Description : Prints command-line usage summary for the tool.
 // ============================================================================
 void Usage() {
+    PrintVersions();
     printf("Usage:\n");
+    printf("  iccJpegDump --version | --help\n");
     printf("  iccJpegDump <input.jpg>\n");
     printf("    - Inspect JPEG size and embedded ICC_PROFILE APP2 information without writing files.\n");
     printf("  iccJpegDump <input.jpg> <output.icc>\n");
@@ -324,8 +321,8 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
 //   Embeds an ICC profile into a JPEG image by inserting an APP2 segment
 //   with the `ICC_PROFILE` signature immediately after the SOI marker.
 //
-//   This method does NOT strip or validate existing ICC markers - it simply
-//   prepends a new APP2 segment and appends the remainder of the original image.
+//   Existing ICC_PROFILE APP2 segments before the first scan are removed so
+//   the output has one unambiguous profile. Other markers and image data remain.
 //
 // Parameters:
 //   - inputPath   : Source JPEG file (no ICC required)
@@ -336,9 +333,81 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
 //   true on success, false on fatal I/O error
 //
 // Notes:
-//   - ICC profiles >64KB should be split into segments (not yet supported)
-//   - The image stream is blindly copied from input to output post-SOI
+//   - ICC profiles larger than one APP2 payload are split across segments.
 // ============================================================================
+static bool CopyJpegMarkersWithoutIcc(FILE* in, FILE* out, size_t& removedChunks)
+{
+    static const unsigned char kSig[12] = {
+        'I','C','C','_','P','R','O','F','I','L','E','\0' };
+    unsigned char payload[65533];
+
+    for (;;) {
+        int marker = fgetc(in);
+        if (marker != 0xFF) {
+            LOG_ERROR(ferror(in) ? "Failed to read JPEG input." :
+                      "Invalid or incomplete JPEG marker stream before image data.");
+            return false;
+        }
+        size_t markerPrefixBytes = 1;
+        do {
+            marker = fgetc(in);
+            if (marker == EOF) {
+                LOG_ERROR(ferror(in) ? "Failed to read JPEG input." :
+                          "Incomplete JPEG marker stream.");
+                return false;
+            }
+            if (marker == 0xFF)
+                ++markerPrefixBytes;
+        } while (marker == 0xFF);
+
+        if (marker == 0x00 || marker == 0xD8) {
+            LOG_ERROR("Invalid JPEG marker before image data.");
+            return false;
+        }
+
+        const bool standalone = marker == 0xD9 || marker == 0x01 ||
+                                (marker >= 0xD0 && marker <= 0xD7);
+        unsigned char lengthBytes[2] = {0, 0};
+        size_t payloadLen = 0;
+        if (!standalone) {
+            if (fread(lengthBytes, 1, 2, in) != 2) {
+                LOG_ERROR(ferror(in) ? "Failed to read JPEG input." :
+                          "Truncated JPEG marker length.");
+                return false;
+            }
+            const unsigned int segmentLength =
+                (static_cast<unsigned int>(lengthBytes[0]) << 8) | lengthBytes[1];
+            if (segmentLength < 2) {
+                LOG_ERROR("Invalid JPEG marker length.");
+                return false;
+            }
+            payloadLen = segmentLength - 2;
+            if (fread(payload, 1, payloadLen, in) != payloadLen) {
+                LOG_ERROR(ferror(in) ? "Failed to read JPEG input." :
+                          "Truncated JPEG marker payload.");
+                return false;
+            }
+        }
+
+        if (marker == 0xE2 && payloadLen >= 14 && memcmp(payload, kSig, 12) == 0) {
+            ++removedChunks;
+            continue;
+        }
+
+        for (size_t i = 0; i < markerPrefixBytes; ++i) {
+            if (fputc(0xFF, out) == EOF)
+                return false;
+        }
+        if (fputc(marker, out) == EOF ||
+            (!standalone && (fwrite(lengthBytes, 1, 2, out) != 2 ||
+                             fwrite(payload, 1, payloadLen, out) != payloadLen)))
+            return false;
+
+        if (marker == 0xDA || marker == 0xD9)
+            return true;
+    }
+}
+
 bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* outputPath) {
     FILE* in = fopen(inputPath, "rb");
     FILE* out = icOpenWriteBinaryFile(outputPath);
@@ -416,8 +485,16 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
     }
 
     // ------------------------------------------------------------------------
-    // Append remainder of JPEG file unmodified
+    // Replace old ICC APP2 markers while preserving all other metadata and
+    // the compressed image data. The marker payload is bounded by JPEG's
+    // 16-bit segment length, so the copy does not buffer the whole carrier.
     // ------------------------------------------------------------------------
+    size_t removedChunks = 0;
+    if (!CopyJpegMarkersWithoutIcc(in, out, removedChunks))
+        safe_exit("Failed to copy JPEG markers while replacing ICC profile.");
+    if (removedChunks)
+        printf("[INFO] Replaced %zu existing ICC_PROFILE APP2 chunk(s).\n", removedChunks);
+
     unsigned char buf[4096];
     size_t n;
     while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
@@ -459,6 +536,15 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
 //   0 on success; exits on failure with appropriate error messages.
 // ============================================================================
 int main(int argc, char* argv[]) {
+    if (argc == 2 && strcmp(argv[1], "--version") == 0) {
+        PrintVersions();
+        return 0;
+    }
+    if (argc == 2 && (strcmp(argv[1], "--help") == 0 ||
+                      strcmp(argv[1], "-h") == 0)) {
+        Usage();
+        return 0;
+    }
     if (argc < 2) {
         Usage();
         return 0;
