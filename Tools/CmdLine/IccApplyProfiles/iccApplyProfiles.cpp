@@ -1587,7 +1587,8 @@ int main(int argc, const char** argv)
 #ifdef ICCDEV_TELEMETRY
   if (bApplySuccess && !outputFinalizeFailed) {
     CTiffImg verifiedOutput;
-    if (!verifiedOutput.Open(cfgApply.m_dstImgFile.c_str()) ||
+    // Finalization checks geometry only; the output strip may exceed the decode budget.
+    if (!verifiedOutput.Open(cfgApply.m_dstImgFile.c_str(), true) ||
         verifiedOutput.GetWidth() != inputWidth ||
         verifiedOutput.GetHeight() != inputHeight)
       outputFinalizeFailed = true;
