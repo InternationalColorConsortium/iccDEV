@@ -40,9 +40,17 @@ errors. Integral JSON numbers such as `16.0` and `1.6e1` are accepted as 16,
 consistent with the JSON Schema. Compression retains the existing NONE/LZW
 boolean contract; tiled output
 does not copy the source codec or pyramid. Tile-band buffers are limited to
-256 MiB per image and oversized bands fail before the destination is opened,
-preserving an existing destination. Padding outside the image
-is zeroed. Failed conversions discard partial output.
+256 MiB by default and oversized bands fail before the destination is opened,
+preserving an existing destination. This is a limit on one decoded strip or
+tile band, not on TIFF file size, total pixels, total decoded image bytes, IFD
+metadata, or the embedded ICC profile. For a trusted image that deliberately
+uses a larger strip or tile band, set `ICCDEV_TIFF_MAX_DECODE_MIB` to an integer
+from 1 through 4095. The opt-in applies to input decoding and tiled output;
+allocation or platform-size failures can still reject a request. It is not a
+total-process RSS limit and does not resize the separately bounded row-batch
+working set or account for ICC/CMM worker allocations, so leave memory headroom
+when raising it. Padding outside the image is zeroed. Failed conversions
+discard partial output.
 
 Only the first main-chain IFD is transformed. ROI, SubIFD/pyramid rewriting,
 orientation normalization and SVS-specific decoding are not implemented.

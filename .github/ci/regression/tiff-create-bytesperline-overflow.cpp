@@ -73,9 +73,12 @@
 
 #include "TiffImg.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -99,16 +102,36 @@ void check(bool ok, const char *what)
 const char *kOutPath = "tiff-create-overflow-should-not-exist.tif";
 const char *kSymlinkPath = "tiff-create-symlink-output.tif";
 const char *kSymlinkTarget = "tiff-create-symlink-target.txt";
+const char *kOversizedStripPath = "tiff-open-oversized-strip.tif";
 
 void cleanup()
 {
   std::remove(kOutPath);
+  std::remove(kOversizedStripPath);
 }
 
 void cleanupSymlinkTest()
 {
   std::remove(kSymlinkPath);
   std::remove(kSymlinkTarget);
+}
+
+bool setDecodeBufferEnv(const char *value)
+{
+#if defined(_WIN32)
+  return _putenv_s("ICCDEV_TIFF_MAX_DECODE_MIB", value) == 0;
+#else
+  return setenv("ICCDEV_TIFF_MAX_DECODE_MIB", value, 1) == 0;
+#endif
+}
+
+bool clearDecodeBufferEnv()
+{
+#if defined(_WIN32)
+  return _putenv_s("ICCDEV_TIFF_MAX_DECODE_MIB", "") == 0;
+#else
+  return unsetenv("ICCDEV_TIFF_MAX_DECODE_MIB") == 0;
+#endif
 }
 
 bool createOutputSymlink()
@@ -155,6 +178,33 @@ bool writeOriginalTarget()
   bool ok = std::fwrite(content, 1, std::strlen(content), file) ==
             std::strlen(content);
   std::fclose(file);
+  return ok;
+}
+
+bool writeDeclaredStripInput(uint32_t height)
+{
+  TIFF *tif = TIFFOpen(kOversizedStripPath, "w");
+  if (!tif)
+    return false;
+
+  bool ok = TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, 1u) == 1 &&
+            TIFFSetField(tif, TIFFTAG_IMAGELENGTH, height) == 1 &&
+            TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 8u) == 1 &&
+            TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 3u) == 1 &&
+            TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB) == 1 &&
+            TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG) == 1 &&
+            TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_ADOBE_DEFLATE) == 1 &&
+            TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, height) == 1 &&
+            TIFFSetField(tif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT) == 1;
+
+  // Keep the on-disk fixture small while asking libtiff to record a genuine
+  // 2.1 MiB decoded strip. This exercises the decoded allocation boundary,
+  // independent of compressed file size or libtiff's malformed-tag recovery.
+  const size_t decodedSize = static_cast<size_t>(height) * 3u;
+  std::vector<unsigned char> decoded(decodedSize, 0);
+  if (ok)
+    ok = TIFFWriteEncodedStrip(tif, 0, decoded.data(), decoded.size()) >= 0;
+  TIFFClose(tif);
   return ok;
 }
 
@@ -442,6 +492,131 @@ int main()
             "nothing repairs a directory we author, so effective == stored");
     }
     img.Close();
+    cleanup();
+  }
+
+  // --- 12. Open() applies its caller memory budget to strip-backed input too.
+  //
+  // A TIFF can declare a full-image strip whose decoded size is unrelated to
+  // the bytes present in the file. Before the strip guard, the fourth Open()
+  // argument bounded tile bands only: this 2.1 MiB strip was accepted despite
+  // a 1 MiB caller limit and malloc() was reached. Keep the regression small so
+  // the pre-fix side fails by contract, not because an enormous allocation
+  // happened to fail on a constrained runner. Metadata-only reporting remains
+  // available because it does not allocate the decode buffer.
+  {
+    cleanup();
+    const uint32_t height = 700000u; // width 1 * RGB * 8-bit = 2,100,000 bytes
+    check(writeDeclaredStripInput(height),
+          "created a TIFF with a decoded strip larger than its file payload");
+
+    CTiffImg metadata;
+    const bool metadataOk = metadata.Open(kOversizedStripPath,
+                                           /*bMetadataOnly=*/true,
+                                           /*nDirectory=*/0,
+                                           /*nMaxDecodeBufferBytes=*/1024u * 1024u);
+    check(metadataOk, "metadata-only Open() does not allocate the strip buffer");
+    if (metadataOk)
+      check(metadata.GetHeight() == height,
+            "metadata-only Open() preserves the declared geometry");
+    metadata.Close();
+
+    CTiffImg defaultBudgetPixels;
+    const bool defaultBudgetOk = defaultBudgetPixels.Open(
+      kOversizedStripPath, false, 0, 256u * 1024u * 1024u);
+    check(defaultBudgetOk,
+          "pixel Open() accepts the strip under the default decode limit");
+    if (defaultBudgetOk) {
+      unsigned char row[3] = {};
+      check(defaultBudgetPixels.ReadLine(row),
+            "an accepted strip still decodes its first row");
+    }
+    defaultBudgetPixels.Close();
+
+    CTiffImg pixels;
+    const bool pixelsOk = pixels.Open(kOversizedStripPath,
+                                       /*bMetadataOnly=*/false,
+                                       /*nDirectory=*/0,
+                                       /*nMaxDecodeBufferBytes=*/1024u * 1024u);
+    check(!pixelsOk, "pixel Open() rejects a strip larger than the caller limit");
+    pixels.Close();
+
+    // The safe default must remain usable by command-line tools without making
+    // it an absolute TIFF-format restriction. Exercise the small fixture with
+    // a small opt-in value so CI proves the environment path without reserving
+    // hundreds of MiB. A direct API budget wins over even a malformed setting.
+    const char *oldEnv = std::getenv("ICCDEV_TIFF_MAX_DECODE_MIB");
+    const bool hadOldEnv = oldEnv != NULL;
+    const std::string oldEnvValue = oldEnv ? oldEnv : "";
+
+    check(setDecodeBufferEnv("1"), "set one-MiB TIFF decode-buffer environment limit");
+    CTiffImg envLimited;
+    check(!envLimited.Open(kOversizedStripPath),
+          "default Open() honors a smaller environment decode-buffer limit");
+    envLimited.Close();
+    CTiffImg envLimitedOutput;
+    check(!envLimitedOutput.Create(kOutPath, 1u, 1u, 8u, PHOTO_MINISBLACK,
+                                   1u, 0u, 96.0f, 96.0f, false, false,
+                                   RESUNIT_INCH, 2048u, 1024u),
+          "default Create() honors a smaller environment decode-buffer limit");
+    envLimitedOutput.Close();
+    std::remove(kOutPath);
+
+    check(setDecodeBufferEnv("3"), "set three-MiB TIFF decode-buffer environment limit");
+    CTiffImg envRaised;
+    const bool envRaisedOk = envRaised.Open(kOversizedStripPath);
+    check(envRaisedOk,
+          "default Open() honors an explicitly raised environment decode-buffer limit");
+    if (envRaisedOk) {
+      unsigned char row[3] = {};
+      check(envRaised.ReadLine(row),
+            "environment-authorized strip still decodes its first row");
+    }
+    envRaised.Close();
+    CTiffImg envRaisedOutput;
+    check(envRaisedOutput.Create(kOutPath, 1u, 1u, 8u, PHOTO_MINISBLACK,
+                                 1u, 0u, 96.0f, 96.0f, false, false,
+                                 RESUNIT_INCH, 2048u, 1024u),
+          "default Create() honors an explicitly raised environment decode-buffer limit");
+    envRaisedOutput.Close();
+    std::remove(kOutPath);
+
+    check(setDecodeBufferEnv("not-a-number"), "set malformed TIFF decode-buffer environment value");
+    CTiffImg badEnv;
+    check(!badEnv.Open(kOversizedStripPath),
+          "malformed environment decode-buffer value fails closed");
+    badEnv.Close();
+
+    check(setDecodeBufferEnv("0"), "set zero TIFF decode-buffer environment value");
+    CTiffImg zeroEnv;
+    check(!zeroEnv.Open(kOversizedStripPath),
+          "zero environment decode-buffer value fails closed");
+    zeroEnv.Close();
+
+    check(setDecodeBufferEnv("4096"), "set above-range TIFF decode-buffer environment value");
+    CTiffImg aboveRangeEnv;
+    check(!aboveRangeEnv.Open(kOversizedStripPath),
+          "above-range environment decode-buffer value fails closed");
+    aboveRangeEnv.Close();
+
+    check(setDecodeBufferEnv("not-a-number"),
+          "restore malformed TIFF decode-buffer environment value");
+
+    CTiffImg explicitBudget;
+    check(explicitBudget.Open(kOversizedStripPath, false, 0, 3u * 1024u * 1024u),
+          "explicit API budget takes precedence over the environment");
+    explicitBudget.Close();
+    CTiffImg explicitOutputBudget;
+    check(explicitOutputBudget.Create(kOutPath, 1u, 1u, 8u, PHOTO_MINISBLACK,
+                                      1u, 0u, 96.0f, 96.0f, false, false,
+                                      RESUNIT_INCH, 2048u, 1024u, false,
+                                      3u * 1024u * 1024u),
+          "explicit Create() budget takes precedence over the environment");
+    explicitOutputBudget.Close();
+    std::remove(kOutPath);
+
+    check(hadOldEnv ? setDecodeBufferEnv(oldEnvValue.c_str()) : clearDecodeBufferEnv(),
+          "restore TIFF decode-buffer environment");
     cleanup();
   }
 

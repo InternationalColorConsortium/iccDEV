@@ -70,7 +70,7 @@ def main():
         rejected = root / "rejected.tif"
         result = run(args.specsep, rejected, 0, 1, root / "huge_", 1, 2, 1,
                      success=False)
-        if b"caller memory limit" not in result.stderr or rejected.exists():
+        if b"configured decode-buffer limit" not in result.stderr or rejected.exists():
             raise AssertionError("Aggregate tile-band limit did not reject before output creation")
     print("[OK] 16 mixed inputs match and aggregate tile bands reject before allocation")
 

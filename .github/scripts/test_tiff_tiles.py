@@ -138,7 +138,7 @@ def main():
                     switches = ["--tiles", 16, 16777216] + (["--bigtiff"] if big else [])
                     result = run(args.specsep, *switches, output, 0, planar,
                                  root / "gray8_", 1, 3, 1, success=False)
-                    assert b"maximum 256 MiB" in result.stderr
+                    assert b"configured decode-buffer limit" in result.stderr
                     assert output.read_bytes() == before if existing else not output.exists()
 
         profile = root / "display.icc"
@@ -237,7 +237,7 @@ def main():
                                               dstPlanar=planar)
                     config.write_text(json.dumps(base), encoding="ascii")
                     result = run(args.apply, "-cfg", config, success=False)
-                    assert b"maximum 256 MiB" in result.stderr
+                    assert b"configured decode-buffer limit" in result.stderr
                     assert output.read_bytes() == before if existing else not output.exists()
     print("[OK] TIFF dump, apply, and spectral separator tile CLI regression")
 
