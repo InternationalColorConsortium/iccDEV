@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import struct
 import subprocess
 import tempfile
@@ -22,6 +23,13 @@ def run(*args, success=True):
     if b"runtime error:" in result.stderr or b"ERROR: AddressSanitizer" in result.stderr:
         raise AssertionError(result.stderr.decode("ascii", errors="backslashreplace"))
     return result
+
+
+def bits_per_sample(dump, path):
+    report = run(dump, path).stdout
+    match = re.search(rb"BitsPerSample:\s*(\d+)\b", report)
+    assert match, report
+    return int(match.group(1))
 
 
 def replace_compression(path, value):
@@ -58,9 +66,44 @@ def main():
     for name in ("fixture", "dump", "apply", "specsep", "fromxml", "source"):
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args()
+    apply_version = run(args.apply, "--version").stdout
+    assert b"IccProfLib=" in apply_version
+    assert b"IccLibConnect=" in apply_version
+    assert b"libtiff: " in apply_version
+    apply_help = run(args.apply, "--help").stdout
+    assert b"libtiff: " in apply_help.split(b"Usage:", 1)[0]
     with tempfile.TemporaryDirectory(prefix="iccdev-tiff-tiles-") as temp:
         root = pathlib.Path(temp)
         run(args.fixture, "--fixtures", root)
+        multi_gray = root / "multi-gray_"
+        default_gray = root / "multi-gray-default.tif"
+        selected_gray = root / "multi-gray-selected.tif"
+        first = run(args.specsep, default_gray, 0, 0, multi_gray, 1, 3, 1)
+        selected = run(args.specsep, "--ifd", 1, selected_gray,
+                       0, 0, multi_gray, 1, 3, 1)
+        assert b"additional main IFDs" in first.stderr
+        assert b"additional main IFDs" in selected.stderr
+        assert bits_per_sample(args.dump, default_gray) == 8
+        assert bits_per_sample(args.dump, selected_gray) == 16
+        missing_gray = root / "multi-gray-missing.tif"
+        run(args.specsep, "--ifd", 2, missing_gray,
+            0, 0, multi_gray, 1, 3, 1, success=False)
+        assert not missing_gray.exists()
+        mixed_gray = root / "mixed-gray_"
+        for channel in (1, 3):
+            (root / f"mixed-gray_{channel}").write_bytes(
+                (root / f"multi-gray_{channel}").read_bytes())
+        (root / "mixed-gray_2").write_bytes((root / "gray8_2").read_bytes())
+        run(args.specsep, "--ifd", 1, missing_gray,
+            0, 0, mixed_gray, 1, 3, 1, success=False)
+        assert not missing_gray.exists()
+        run(args.specsep, "--ifd", "bad", missing_gray,
+            0, 0, multi_gray, 1, 3, 1, success=False)
+        assert not missing_gray.exists()
+        for invalid in ("-1", "4096", "1.5"):
+            run(args.specsep, "--ifd", invalid, missing_gray,
+                0, 0, multi_gray, 1, 3, 1, success=False)
+            assert not missing_gray.exists()
         multi = root / "multi.tif"
         inventory = json.loads(run(args.dump, "--evidence-json", "--list-directories", multi).stdout)
         directories = inventory["directories"]
@@ -143,6 +186,80 @@ def main():
 
         profile = root / "display.icc"
         run(args.fromxml, pathlib.Path(args.source) / "Testing" / "Display" / "LCDDisplay.xml", profile)
+        multi_rgb = root / "multi-rgb.tif"
+        apply_config = root / "multi-apply.json"
+        apply_options = {
+            "imageFiles": {
+                "srcImageFile": str(multi_rgb),
+                "dstImageFile": str(root / "multi-apply-default.tif"),
+                "dstEncoding": "sameAsSource",
+                "dstCompression": False,
+                "dstPlanar": False,
+                "dstEmbedIcc": False,
+            },
+            "connect": {"threads": 1},
+            "profileSequence": [
+                {"iccFile": str(profile), "intent": "relative"},
+                {"iccFile": str(profile), "intent": "relative"},
+            ],
+        }
+        apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+        default_apply = run(args.apply, "--cfg", apply_config)
+        assert b"other main IFD" in default_apply.stderr
+        assert bits_per_sample(args.dump, root / "multi-apply-default.tif") == 8
+        apply_options["imageFiles"].update(srcIfd=1,
+                                           dstImageFile=str(root / "multi-apply-selected.tif"))
+        apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+        selected_apply = run(args.apply, "--cfg", apply_config)
+        assert b"other main IFD" in selected_apply.stderr
+        assert bits_per_sample(args.dump, root / "multi-apply-selected.tif") == 16
+        apply_options["imageFiles"].update(srcIfd=1.0,
+                                           dstImageFile=str(root / "multi-apply-integral-float.tif"))
+        apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+        run(args.apply, "--cfg", apply_config)
+        assert bits_per_sample(args.dump, root / "multi-apply-integral-float.tif") == 16
+        has_evidence = b"--evidence-file" in run(args.apply, "--help").stdout
+        if has_evidence:
+            apply_options["imageFiles"]["srcIfd"] = 1
+            apply_options["imageFiles"]["dstImageFile"] = str(root / "multi-apply-evidence.tif")
+            apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+            evidence = root / "multi-apply-evidence.json"
+            run(args.apply, "--evidence-file", evidence, "--cfg", apply_config)
+            provenance = json.loads(evidence.read_text(encoding="utf-8"))
+            assert provenance["input_ifd"] == 1
+            assert provenance["input_ifd_provenance"] == "config"
+            assert provenance["input_main_ifd_count"] == 2
+            assert provenance["input_subifd_count"] == 0
+        apply_options["imageFiles"].update(srcIfd=0,
+                                           dstImageFile=str(root / "multi-apply-override.tif"))
+        apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+        override_args = ["--ifd", 1, "--cfg", apply_config]
+        if has_evidence:
+            override_evidence = root / "multi-apply-override-evidence.json"
+            override_args = ["--evidence-file", override_evidence, *override_args]
+        run(args.apply, *override_args)
+        assert bits_per_sample(args.dump, root / "multi-apply-override.tif") == 16
+        if has_evidence:
+            provenance = json.loads(override_evidence.read_text(encoding="utf-8"))
+            assert provenance["input_ifd"] == 1
+            assert provenance["input_ifd_provenance"] == "cli"
+        apply_options["imageFiles"].update(srcIfd=2,
+                                           dstImageFile=str(root / "multi-apply-missing.tif"))
+        apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+        run(args.apply, "--cfg", apply_config, success=False)
+        assert not (root / "multi-apply-missing.tif").exists()
+        if b"--telemetry=jsonl" in apply_help:
+            missing_log = root / "multi-apply-missing.jsonl"
+            run(args.apply, "--telemetry=jsonl", "--telemetry-file",
+                missing_log, "--cfg", apply_config, success=False)
+            assert not missing_log.exists()
+        run(args.apply, "--ifd", "bad", "--cfg", apply_config, success=False)
+        assert not (root / "multi-apply-missing.tif").exists()
+        for invalid in (-1, 1.5, 4096, "1", True):
+            apply_options["imageFiles"]["srcIfd"] = invalid
+            apply_config.write_text(json.dumps(apply_options), encoding="ascii")
+            run(args.apply, "--cfg", apply_config, success=False)
+            assert not (root / "multi-apply-missing.tif").exists()
         for threads in (1, 2):
             strip = root / f"apply-strip-{threads}.tif"
             tile = root / f"apply-tile-{threads}.tif"

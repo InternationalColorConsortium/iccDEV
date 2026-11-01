@@ -155,6 +155,10 @@ Only inventory walks the full main-directory chain.
 `dstBigTiff: true` for BigTIFF output. `iccSpecSepToTiff` accepts tiled grayscale
 inputs and offers `--tiles WIDTH HEIGHT` and `--bigtiff` for output. Defaults
 remain classic stripped TIFF with the existing NONE/LZW compression controls.
+Both processors default to main IFD 0; `--ifd N` selects a zero-based main
+directory, and ApplyProfiles also accepts `imageFiles.srcIfd` in its JSON
+configuration. Other main IFDs and SubIFDs are not copied. A warning and
+structured provenance make that omission visible when present.
 Tiles support 8/16-bit unsigned and 32-bit float samples; decoded strip and
 tile-band buffers default to a 256 MiB limit. Trusted runs can raise the
 per-buffer budget with `ICCDEV_TIFF_MAX_DECODE_MIB`; this does not limit TIFF

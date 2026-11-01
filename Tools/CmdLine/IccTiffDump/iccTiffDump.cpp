@@ -271,8 +271,10 @@ static bool WriteEmbeddedIccProfile(const char* szFname,
 
 void Usage()
 {
-  printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n");
+  printf("libtiff: %s\n\n", icTiffRuntimeVersion().c_str());
   printf("Usage: iccTiffDump {--evidence-json} {--ifd N} {--list-directories} tiff_file {exported_icc_file}\n\n");
+  printf("  --version prints tool and linked-library versions only.\n");
   printf("IFD indexes are zero-based main-chain directories. Listing does not extract or validate ICC data.\n");
   printf("Inspection is metadata-only; it does not assert pixel decoding or SVS compatibility.\n\n");
   printf("Values reflect libtiff's interpretation, including defaults and repairs, not a raw IFD dump.\n");
@@ -729,6 +731,11 @@ int main(int argc, icChar* argv[])
   bool hasDirectory = false;
   std::vector<icChar*> positional;
   const bool bareInvocation = argc <= 1;
+  if (argc == 2 && !stricmp(argv[1], "--version")) {
+    printf("iccTiffDump IccProfLib=" ICCPROFLIBVER "\n");
+    printf("libtiff: %s\n", icTiffRuntimeVersion().c_str());
+    return 0;
+  }
 #ifdef ICCDEV_TELEMETRY
   CIccTiffTelemetry telemetry;
   TiffDumpTelemetryStats telemetryStats(telemetry);
@@ -752,6 +759,10 @@ int main(int argc, icChar* argv[])
     if (!stricmp(argv[arg], "--help") || !stricmp(argv[arg], "-h")) {
       Usage();
       return 0;
+    }
+    if (!stricmp(argv[arg], "--version")) {
+      fprintf(stderr, "--version must be used alone\n");
+      return 1;
     }
     if (!stricmp(argv[arg], "--evidence-json"))
       bEvidenceJson = true;
@@ -799,7 +810,13 @@ int main(int argc, icChar* argv[])
   if (argc > 2)
     protectedPaths.push_back(argv[2]);
   if (!telemetry.Start("iccTiffDump", protectedPaths,
-                       "\"metadata_only\":true,\"decoded_pixels\":0,\"decoded_bytes\":0"))
+                       std::string("\"tool_version\":") +
+                       CIccTiffTelemetry::JsonString(ICCPROFLIBVER) +
+                       ",\"library_versions\":{\"IccProfLib\":" +
+                       CIccTiffTelemetry::JsonString(ICCPROFLIBVER) +
+                       ",\"libtiff\":" +
+                       CIccTiffTelemetry::JsonString(icTiffRuntimeVersion()) + "}" +
+                       ",\"metadata_only\":true,\"decoded_pixels\":0,\"decoded_bytes\":0"))
     return 1;
   telemetryStats.started = true;
 #endif

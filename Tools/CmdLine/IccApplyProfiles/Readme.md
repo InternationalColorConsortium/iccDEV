@@ -12,6 +12,9 @@ Run without arguments to print the current command syntax and supported options:
 iccApplyProfiles
 ```
 
+`--version` prints the ICC libraries and linked runtime libtiff version without
+opening an image. The same versions appear at the top of the usage banner.
+
 ## TIFF Pixel Encoding
 
 Stripped and tiled input use the same device-sample encoding. Tiled input
@@ -52,8 +55,16 @@ working set or account for ICC/CMM worker allocations, so leave memory headroom
 when raising it. Padding outside the image is zeroed. Failed conversions
 discard partial output.
 
-Only the first main-chain IFD is transformed. ROI, SubIFD/pyramid rewriting,
-orientation normalization and SVS-specific decoding are not implemented.
+The first main-chain IFD (index 0) is transformed by default. Use `--ifd N`
+before `--cfg` or the positional arguments, or set `imageFiles.srcIfd` to a
+zero-based main-chain index from 0 through 4095. `--ifd` overrides the JSON
+value. A missing index or an invalid main-chain inventory fails before output
+creation. When other main IFDs or selected-IFD SubIFDs exist, the tool warns
+on stderr that they will not be copied; telemetry and evidence record the
+selected index and the discovered main/SubIFD counts. SubIFDs have their own
+offset-based graph and cannot be selected with `--ifd`. ROI, whole-sequence or
+pyramid rewriting, orientation normalization and SVS-specific decoding are not
+implemented.
 
 `iccApplyProfiles` treats TIFF pixel values as a *device encoding* regardless
 of color space or TIFF photometric tag. The rule applies symmetrically on

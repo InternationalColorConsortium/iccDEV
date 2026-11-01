@@ -430,6 +430,8 @@ void CIccCfgImageApply::reset()
 {
   m_srcImgFile.clear();
   m_dstImgFile.clear();
+  m_srcIfd = 0;
+  m_srcIfdSpecified = false;
   m_dstEncoding = icEncode8Bit;
   m_dstCompression = icDstBoolTrue;
   m_dstPlanar = icDstBoolFalse;
@@ -534,6 +536,17 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
 
   jsonToValue(j["srcImageFile"], m_srcImgFile);
   jsonToValue(j["dstImageFile"], m_dstImgFile);
+  if (j.contains("srcIfd")) {
+    const json &value = j["srcIfd"];
+    if (!value.is_number())
+      return false;
+    const double directory = value.get<double>();
+    if (!std::isfinite(directory) || directory < 0 || directory > 4095 ||
+        std::floor(directory) != directory)
+      return false;
+    m_srcIfd = static_cast<unsigned int>(directory);
+    m_srcIfdSpecified = true;
+  }
   
   std::string str;
   if (jsonToValue(j["dstEncoding"], str))
@@ -583,6 +596,8 @@ void CIccCfgImageApply::toJson(json& j) const
     j["srcImageFile"] = m_srcImgFile;
   if (m_dstImgFile.size() != size_t(0))
     j["dstImageFile"] = m_dstImgFile;
+  if (m_srcIfdSpecified || m_srcIfd)
+    j["srcIfd"] = m_srcIfd;
 
   if (m_dstEncoding != icEncode8Bit)
     j["dstEncoding"] = icGetJsonFileEncoding(m_dstEncoding);

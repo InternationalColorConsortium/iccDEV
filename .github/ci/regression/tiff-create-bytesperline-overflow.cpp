@@ -620,6 +620,45 @@ int main()
     cleanup();
   }
 
+  // --- 13. BitsPerSample is stored in a 16-bit TIFF field. The old Create()
+  // accepted 65544 for uncompressed output, narrowed it to 8, and wrote a
+  // different image than the caller requested. Refuse it before opening a file.
+  {
+    cleanup();
+    CTiffImg img;
+    const bool ok = img.Create(kOutPath, 1u, 1u, 65544u, PHOTO_MINISBLACK,
+                               1u, 0u, 72.0f, 72.0f, /*bCompress=*/false);
+    check(!ok, "Create() rejects a BitsPerSample value above the TIFF field range");
+    check(!img.WasOutputOpened(), "oversized BitsPerSample fails before opening output");
+    img.Close();
+    std::FILE *left = std::fopen(kOutPath, "rb");
+    check(left == NULL, "oversized BitsPerSample leaves no output file");
+    if (left)
+      std::fclose(left);
+    cleanup();
+  }
+
+  // --- 14. PHOTO_PALETTE and PHOTO_UNKNOWN are read-side diagnostics, not
+  // writable selectors. The old switch had no default, so either value kept
+  // Close()'s zero and wrote a MINISWHITE TIFF instead of rejecting the call.
+  {
+    const unsigned int unsupported[] = { PHOTO_PALETTE, PHOTO_UNKNOWN, 99u };
+    for (unsigned int photo : unsupported) {
+      cleanup();
+      CTiffImg img;
+      const bool ok = img.Create(kOutPath, 1u, 1u, 8u, photo,
+                                 1u, 0u, 72.0f, 72.0f, /*bCompress=*/false);
+      check(!ok, "Create() rejects an unsupported output photometric selector");
+      check(!img.WasOutputOpened(), "unsupported photometric fails before opening output");
+      img.Close();
+      std::FILE *left = std::fopen(kOutPath, "rb");
+      check(left == NULL, "unsupported photometric leaves no output file");
+      if (left)
+        std::fclose(left);
+      cleanup();
+    }
+  }
+
   if (g_fail)
     std::fprintf(stderr, "[tiff-create-overflow] %d assertion(s) failed\n", g_fail);
   else

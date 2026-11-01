@@ -102,6 +102,8 @@ public:
 
 	std::string m_srcImgFile;
 	std::string m_dstImgFile;
+  unsigned int m_srcIfd;
+  bool m_srcIfdSpecified;
 	icFloatColorEncoding m_dstEncoding;
 	icDstBool m_dstCompression;
 	icDstBool m_dstPlanar;

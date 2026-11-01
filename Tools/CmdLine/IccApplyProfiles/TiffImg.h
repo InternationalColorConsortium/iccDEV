@@ -50,6 +50,7 @@
 #include "tiffio.h"                  // need tiff library
 #include "IccProfLibConf.h"
 #include "icProfileHeader.h"
+#include <string>
 
 #define PHOTO_MINISBLACK  0
 #define PHOTO_MINISWHITE  1
@@ -75,6 +76,10 @@
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
+
+// TIFFGetVersion() also contains copyright lines. Keep CLI and telemetry
+// version reports to its first line while reading the linked runtime library.
+std::string icTiffRuntimeVersion();
 
 class CTiffImg
 {

@@ -203,6 +203,19 @@ bool multiFixture(const char *path)
   TIFFClose(tif);
   return ok;
 }
+
+bool twoPageFixture(const char *path, unsigned int samples)
+{
+  TIFF *tif = TIFFOpen(path, "w8l");
+  if (!tif)
+    return false;
+  const bool ok = fields(tif, 8, samples, false, false, true) &&
+    rawTiles(tif, 8, samples, false) && TIFFWriteDirectory(tif) &&
+    fields(tif, 16, samples, false, false, true) &&
+    rawTiles(tif, 16, samples, false) && TIFFWriteDirectory(tif);
+  TIFFClose(tif);
+  return ok;
+}
 }
 
 int main(int argc, char **argv)
@@ -226,7 +239,12 @@ int main(int argc, char **argv)
               createRaw((dir / "malformed-classic.tif").string().c_str(), "wl", 8, 3,
                         false, false, false, "malformed-classic-icc") &&
               multiFixture((dir / "multi.tif").string().c_str()) &&
+              twoPageFixture((dir / "multi-rgb.tif").string().c_str(), 3) &&
               createBilevel((dir / "bilevel.tif").string().c_str());
+    for (unsigned int channel : {1u, 2u, 3u}) {
+      const std::string name = "multi-gray_" + std::to_string(channel);
+      ok &= twoPageFixture((dir / name).string().c_str(), 1);
+    }
     for (unsigned int bits : {8u, 16u, 32u}) {
       for (unsigned int channel : {1u, 2u, 3u}) {
         const std::string name = "gray" + std::to_string(bits) + "_" + std::to_string(channel);

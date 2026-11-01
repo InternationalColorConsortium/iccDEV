@@ -328,9 +328,10 @@ static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 
 void Usage(FILE* stream) 
 {
-  fprintf(stream, "iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
+  fprintf(stream, "iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n");
+  fprintf(stream, "libtiff: %s\n\n", icTiffRuntimeVersion().c_str());
 
-  fprintf(stream, "Usage: iccApplyProfiles {--quiet} {--threads N} --cfg config_file\n\n");
+  fprintf(stream, "Usage: iccApplyProfiles {--quiet} {--threads N} {--ifd N} --cfg config_file\n\n");
   fprintf(stream, "  --version prints tool and linked-library versions only.\n");
 #ifdef ICCDEV_TELEMETRY
   fprintf(stream, "  --verbose writes a resolved-operation receipt to stderr.\n");
@@ -347,9 +348,10 @@ void Usage(FILE* stream)
   fprintf(stream, "  Global options may be combined in any order before --cfg or the alternate-form arguments.\n");
   fprintf(stream, "  Optional: --threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
+  fprintf(stream, "  Optional: --ifd N (select main TIFF directory 0..4095; default 0)\n");
   fprintf(stream, "  Optional: --cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
-  fprintf(stream, "Alt-Usage: iccApplyProfiles {--threads N} {--exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  fprintf(stream, "Alt-Usage: iccApplyProfiles {--threads N} {--ifd N} {--exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
   fprintf(stream, "  Optional: --threads [N] (use 0..%d worker threads; 0=hardware concurrency, 1=single-threaded)\n",
          CIccThreadedCmm::GetMaxThreads());
   fprintf(stream, "  Optional: --exportcfg config_file (create config_file based on rest of arguments)\n");
@@ -468,6 +470,8 @@ int main(int argc, const char** argv)
 #endif
   bool bThreadArg = false;
   int nThreadArg = 0;
+  bool bIfdArg = false;
+  unsigned int nIfdArg = 0;
 
   // An explicit help request is the one invocation here that is not an error, so
   // it prints on stdout and exits 0; every malformed form below prints on stderr
@@ -481,6 +485,7 @@ int main(int argc, const char** argv)
   if (argc == 2 && !strcmp(argv[1], "--version")) {
     printf("iccApplyProfiles IccProfLib=" ICCPROFLIBVER
            " IccLibConnect=" ICCLIBCONNECTVER "\n");
+    printf("libtiff: %s\n", icTiffRuntimeVersion().c_str());
     return 0;
   }
 
@@ -503,6 +508,25 @@ int main(int argc, const char** argv)
 #endif
     else if (!strcmp(argv[1], "--quiet")) {
       bQuiet = true;
+    }
+    else if (!strcmp(argv[1], "--ifd")) {
+      if (bIfdArg || argc < 3) {
+        fprintf(stderr, "Invalid --ifd index (expected 0..4095)\n");
+        return EXIT_FAILURE;
+      }
+      char *end = nullptr;
+      errno = 0;
+      const unsigned long value = strtoul(argv[2], &end, 10);
+      if (argv[2][0] < '0' || argv[2][0] > '9' || !end || *end ||
+          errno || value > 4095) {
+        fprintf(stderr, "Invalid --ifd index (expected 0..4095)\n");
+        return EXIT_FAILURE;
+      }
+      nIfdArg = static_cast<unsigned int>(value);
+      bIfdArg = true;
+      argv += 2;
+      argc -= 2;
+      continue;
     }
     else if (!stricmp(argv[1], "--threads") || !stricmp(argv[1], "-threads")) {
       if (argc < 3) {
@@ -752,6 +776,10 @@ int main(int argc, const char** argv)
 
     if (bThreadArg)
       cfgConnect.m_nThreads = nThreadArg;
+    if (bIfdArg) {
+      cfgApply.m_srcIfd = nIfdArg;
+      cfgApply.m_srcIfdSpecified = true;
+    }
 
     if (!exportFile.empty()) {
       if (OutputIsAnInput(exportFile.c_str(), cfgApply, cfgFile,
@@ -793,8 +821,14 @@ int main(int argc, const char** argv)
 
   if (bThreadArg)
     cfgConnect.m_nThreads = nThreadArg;
+  if (bIfdArg) {
+    cfgApply.m_srcIfd = nIfdArg;
+    cfgApply.m_srcIfdSpecified = true;
+  }
 
 #ifdef ICCDEV_TELEMETRY
+  const char *ifdProvenance = bIfdArg ? "cli" :
+      (cfgApply.m_srcIfdSpecified ? "config" : "default");
   const CIccCfgProfileArray& reportProfiles =
     cfgConnect.m_bUseSearch ? cfgSearch.m_profiles : cfgProfiles.m_profiles;
 
@@ -821,8 +855,6 @@ int main(int argc, const char** argv)
 
   CIccApplyTelemetry telemetry;
   telemetry.m_mode = telemetryMode;
-  if (telemetryMode == icTelemetryJsonl && !telemetry.Open(telemetryFile))
-    return EXIT_FAILURE;
   if (telemetryMode == icTelemetryJsonl &&
       icOutputPathsAlias(telemetryFile.c_str(), cfgApply.m_dstImgFile.c_str())) {
     fprintf(stderr, "Telemetry file aliases transform output\n");
@@ -836,8 +868,40 @@ int main(int argc, const char** argv)
   unsigned char *sptr, *dptr;
   const char *last_path = NULL;
 
+  // Inventory the main IFD chain before decoding or opening a destination.
+  // SubIFDs are a separate graph and are never indexed by --ifd.
+  CTiffImg sourceMetadata;
+  if (!sourceMetadata.Open(cfgApply.m_srcImgFile.c_str(), true, cfgApply.m_srcIfd)) {
+    fprintf(stderr, "Cannot open main TIFF IFD %u in '%s'\n", cfgApply.m_srcIfd,
+            icSanitizeConsoleText(cfgApply.m_srcImgFile).c_str());
+    return EXIT_FAILURE;
+  }
+  const unsigned int inputMainIfdCount = sourceMetadata.GetDirectoryCount();
+  if (!inputMainIfdCount || cfgApply.m_srcIfd >= inputMainIfdCount) {
+    fprintf(stderr, "Cannot inventory main TIFF IFDs in '%s' (limit 4096)\n",
+            icSanitizeConsoleText(cfgApply.m_srcImgFile).c_str());
+    return EXIT_FAILURE;
+  }
+  icUInt16Number inputSubIfdCount = 0;
+  toff_t *inputSubIfdOffsets = nullptr;
+  if (TIFFGetField(sourceMetadata.GetTiffHandle(), TIFFTAG_SUBIFD,
+                   &inputSubIfdCount, &inputSubIfdOffsets) != 1)
+    inputSubIfdCount = 0;
+  sourceMetadata.Close();
+#ifdef ICCDEV_TELEMETRY
+  // A missing or malformed selected IFD must not leave an empty receipt file.
+  if (telemetryMode == icTelemetryJsonl && !telemetry.Open(telemetryFile))
+    return EXIT_FAILURE;
+#endif
+  if (inputMainIfdCount > 1 || inputSubIfdCount) {
+    fprintf(stderr,
+            "Source TIFF: processing main IFD %u of %u; %u other main IFD(s) and %u selected-IFD SubIFD(s) will not be copied.\n",
+            cfgApply.m_srcIfd, inputMainIfdCount, inputMainIfdCount - 1,
+            static_cast<unsigned int>(inputSubIfdCount));
+  }
+
   //Open source image file and get information from it
-  if (!SrcImg.Open(cfgApply.m_srcImgFile.c_str())) {
+  if (!SrcImg.Open(cfgApply.m_srcImgFile.c_str(), false, cfgApply.m_srcIfd)) {
     printf("\nFile [%s] cannot be opened.\n", icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str());
     return -1;
   }
@@ -961,10 +1025,15 @@ int main(int argc, const char** argv)
       {"tool_version", ICCPROFLIBVER},
       {"library_versions", {
         {"IccProfLib", ICCPROFLIBVER},
-        {"IccLibConnect", ICCLIBCONNECTVER}
+        {"IccLibConnect", ICCLIBCONNECTVER},
+        {"libtiff", icTiffRuntimeVersion()}
       }},
       {"config_file", cfgFile.empty() ? json(nullptr) : json(cfgFile)},
       {"input", cfgApply.m_srcImgFile},
+      {"input_ifd", cfgApply.m_srcIfd},
+      {"input_ifd_provenance", ifdProvenance},
+      {"input_main_ifd_count", inputMainIfdCount},
+      {"input_subifd_count", inputSubIfdCount},
       {"output", cfgApply.m_dstImgFile},
       {"requested_threads", cfgConnect.m_nThreads},
       {"effective_threads", effectiveThreads},
@@ -974,9 +1043,11 @@ int main(int argc, const char** argv)
       return EXIT_FAILURE;
   }
   if (bVerbose && !bQuiet) {
-    fprintf(stderr, "[%s] iccApplyProfiles: started input=%s output=%s requested_threads=%d effective_threads=%d mode=%s\n",
+    fprintf(stderr, "[%s] iccApplyProfiles: started input=%s input_ifd=%u input_main_ifd_count=%u input_subifd_count=%u output=%s requested_threads=%d effective_threads=%d mode=%s\n",
             CIccApplyTelemetry::TimestampUtc().c_str(),
             icSanitizeConsoleText(cfgApply.m_srcImgFile.c_str()).c_str(),
+            cfgApply.m_srcIfd, inputMainIfdCount,
+            static_cast<unsigned int>(inputSubIfdCount),
             icSanitizeConsoleText(cfgApply.m_dstImgFile.c_str()).c_str(),
             cfgConnect.m_nThreads,
             effectiveThreads,
@@ -1640,6 +1711,10 @@ int main(int argc, const char** argv)
         {"tool", "iccApplyProfiles"},
         {"status", "success"},
         {"input", cfgApply.m_srcImgFile},
+        {"input_ifd", cfgApply.m_srcIfd},
+        {"input_ifd_provenance", ifdProvenance},
+        {"input_main_ifd_count", inputMainIfdCount},
+        {"input_subifd_count", inputSubIfdCount},
         {"output", cfgApply.m_dstImgFile},
         {"output_digest", hasOutputDigest ? json(outputDigest) : json(nullptr)},
         {"requested_threads", cfgConnect.m_nThreads},

@@ -160,6 +160,17 @@ static char THIS_FILE[]=__FILE__;
 namespace iccDEV {
 #endif
 
+std::string icTiffRuntimeVersion()
+{
+  const char *version = TIFFGetVersion();
+  if (!version)
+    return "unknown";
+  const char *end = version;
+  while (*end && *end != '\r' && *end != '\n')
+    ++end;
+  return std::string(version, end);
+}
+
 namespace {
 
 const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
@@ -632,7 +643,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   // and refuses before the destination is touched (#2386).  Neither tool caller can
   // reach it -- their depth comes back out of Open() -- so this guards the public API,
   // as the ResolutionUnit check below does.
-  if (!nBPS || nBPS % 8)
+  // The TIFF field is 16 bits. Reject an oversized caller value before the
+  // assignment below can wrap it into a different, apparently valid depth.
+  if (!nBPS || nBPS > std::numeric_limits<icUInt16Number>::max() || nBPS % 8)
     return false;
 
   if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
@@ -698,6 +711,12 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   case PHOTO_ICCLAB:
     m_nPhoto = PHOTOMETRIC_ICCLAB;
     break;
+
+  default:
+    // PHOTO_PALETTE and PHOTO_UNKNOWN are read-side diagnostics, not writable
+    // formats. An unrecognized selector would otherwise keep Close()'s zero
+    // value, silently writing PHOTOMETRIC_MINISWHITE.
+    return false;
   }
 
   // Reject unsupported or oversized tile layouts before opening a destination

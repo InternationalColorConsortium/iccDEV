@@ -1,6 +1,8 @@
 # IccTiffDump
 
 `iccTiffDump` prints TIFF metadata and embedded ICC profile information.
+Use `iccTiffDump --version` to print the ICC library and runtime libtiff
+versions without opening an image.
 
 ## Usage
 
