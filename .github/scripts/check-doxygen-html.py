@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) International Color Consortium.
+# SPDX-License-Identifier: BSD-3-Clause
+
 """Check the packaged Doxygen navigation and local HTML links."""
 
 from __future__ import annotations

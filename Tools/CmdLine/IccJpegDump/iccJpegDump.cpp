@@ -339,7 +339,7 @@ static bool CopyJpegMarkersWithoutIcc(FILE* in, FILE* out, size_t& removedChunks
 {
     static const unsigned char kSig[12] = {
         'I','C','C','_','P','R','O','F','I','L','E','\0' };
-    unsigned char payload[65533];
+    static unsigned char payload[65533];
 
     for (;;) {
         int marker = fgetc(in);

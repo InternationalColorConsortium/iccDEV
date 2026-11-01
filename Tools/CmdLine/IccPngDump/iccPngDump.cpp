@@ -99,6 +99,9 @@
 
 static const png_uint_32 kMaxPngDimension = 100000;
 static const png_alloc_size_t kMaxPngChunkBytes = 64U * 1024U * 1024U;
+static const size_t kMaxPngReplayChunks = 1000;
+static const size_t kMaxPngReplayBytes =
+    static_cast<size_t>(kMaxPngChunkBytes) + 8U + 12U * kMaxPngReplayChunks;
 static const size_t kMaxPngRasterBytes = 256U * 1024U * 1024U;
 static const size_t kMaxIccProfileBytes = 64U * 1024U * 1024U;
 
@@ -716,11 +719,18 @@ static void ClosePngReadContext(PngReadContext* context)
     free(context);
 }
 
-static bool ReadPngPrefix(FILE* input, FILE* replay, void* buffer, size_t size)
+static bool ReadPngPrefix(FILE* input, FILE* replay, void* buffer, size_t size,
+                          size_t& prefixBytes)
 {
+    if (prefixBytes > kMaxPngReplayBytes ||
+        size > kMaxPngReplayBytes - prefixBytes)
+        return false;
     if (fread(buffer, 1, size, input) != size)
         return false;
-    return !replay || fwrite(buffer, 1, size, replay) == size;
+    if (replay && fwrite(buffer, 1, size, replay) != size)
+        return false;
+    prefixBytes += size;
+    return true;
 }
 
 static void ReadPngStream(png_structp png_ptr, png_bytep data,
@@ -754,7 +764,8 @@ static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated,
     }
 
     unsigned char signature[8];
-    if (!ReadPngPrefix(input, replay, signature, sizeof(signature)) ||
+    size_t prefixBytes = 0;
+    if (!ReadPngPrefix(input, replay, signature, sizeof(signature), prefixBytes) ||
         png_sig_cmp(signature, 0, sizeof(signature))) {
         ClosePngReplay(replay);
         return false;
@@ -764,17 +775,27 @@ static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated,
     // chunk headers preceding image data so rejection never decodes the raster
     // or creates an output file. Skip payloads in bounded blocks.
     unsigned char discard[4096];
+    size_t chunkCount = 0;
     for (;;) {
-        unsigned char header[8];
-        if (!ReadPngPrefix(input, replay, header, sizeof(header))) {
+        if (chunkCount >= kMaxPngReplayChunks) {
             ClosePngReplay(replay);
             return false;
         }
+        unsigned char header[8];
+        if (!ReadPngPrefix(input, replay, header, sizeof(header), prefixBytes)) {
+            ClosePngReplay(replay);
+            return false;
+        }
+        ++chunkCount;
         const png_uint_32 length =
             (static_cast<png_uint_32>(header[0]) << 24) |
             (static_cast<png_uint_32>(header[1]) << 16) |
             (static_cast<png_uint_32>(header[2]) << 8) | header[3];
-        if (length > 0x7fffffffU) {
+        const bool isIhdr = memcmp(header + 4, "IHDR", 4) == 0;
+        if ((chunkCount == 1 && (!isIhdr || length != 13)) ||
+            (chunkCount != 1 && isIhdr) ||
+            length > 0x7fffffffU ||
+            length > static_cast<png_uint_32>(kMaxPngChunkBytes)) {
             ClosePngReplay(replay);
             return false;
         }
@@ -789,9 +810,14 @@ static bool CheckPngAnimationBeforeImage(FILE* input, bool& animated,
             break;
 
         size_t remaining = static_cast<size_t>(length) + 4; // payload and CRC
+        if (prefixBytes > kMaxPngReplayBytes ||
+            remaining > kMaxPngReplayBytes - prefixBytes) {
+            ClosePngReplay(replay);
+            return false;
+        }
         while (remaining) {
             const size_t part = remaining < sizeof(discard) ? remaining : sizeof(discard);
-            if (!ReadPngPrefix(input, replay, discard, part)) {
+            if (!ReadPngPrefix(input, replay, discard, part, prefixBytes)) {
                 ClosePngReplay(replay);
                 return false;
             }

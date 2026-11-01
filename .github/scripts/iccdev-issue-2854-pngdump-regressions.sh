@@ -267,6 +267,98 @@ for output in "$OUTDIR/apng-existing.png" "$OUTDIR/apng-new.png"; do
   done
 done
 
+python3 - "$PNGDUMP" "$INPUT_ICC" "$OUTDIR" <<'PY'
+import binascii
+import pathlib
+import struct
+import subprocess
+import sys
+import time
+import zlib
+
+tool, profile, outdir = sys.argv[1:]
+tool = pathlib.Path(tool).resolve()
+root = pathlib.Path(outdir)
+signature = b"\x89PNG\r\n\x1a\n"
+ihdr_data = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+
+def chunk(kind, payload):
+    checksum = binascii.crc32(kind + payload) & 0xffffffff
+    return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", checksum)
+
+def assert_rejected_while_open(prefix, name, writer=None):
+    output = root / name
+    output.unlink(missing_ok=True)
+    for staged in root.glob(output.name + ".tmp-*"):
+        staged.unlink()
+    child = subprocess.Popen(
+        [str(tool), "/dev/stdin", "--write-icc", profile,
+         "--output", str(output)],
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    try:
+        child.stdin.write(prefix)
+        if writer:
+            writer(child.stdin)
+        child.stdin.flush()
+        deadline = time.monotonic() + 10
+        while child.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if child.poll() is None:
+            raise SystemExit(f"{name}: parser waited for payload beyond its bounds")
+        diagnostics = child.communicate(timeout=5)[0]
+        if child.returncode != 1:
+            raise SystemExit(
+                f"{name}: expected graceful rejection, got {child.returncode}: "
+                f"{diagnostics!r}")
+        if any(marker in diagnostics for marker in (
+                b"AddressSanitizer", b"runtime error:", b"LeakSanitizer",
+                b"UndefinedBehaviorSanitizer", b"DEADLYSIGNAL")):
+            raise SystemExit(f"{name}: sanitizer diagnostic: {diagnostics!r}")
+        if b"Failed to inspect PNG chunk structure before injection." not in diagnostics:
+            raise SystemExit(f"{name}: missing preflight rejection: {diagnostics!r}")
+        if output.exists() or list(root.glob(output.name + ".tmp-*")):
+            raise SystemExit(f"{name}: rejected input created output files")
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate()
+
+assert_rejected_while_open(
+    signature + struct.pack(">I", 0x7fffffff) + b"IHDR",
+    "oversized-ihdr-stream.png")
+assert_rejected_while_open(
+    signature + struct.pack(">I", 0x7fffffff) + b"vpAg",
+    "missing-ihdr-stream.png")
+assert_rejected_while_open(
+    signature + chunk(b"IHDR", ihdr_data) +
+    struct.pack(">I", 64 * 1024 * 1024 + 1) + b"vpAg",
+    "oversized-chunk-stream.png")
+
+many_chunks = (signature + chunk(b"IHDR", ihdr_data) +
+               chunk(b"vpAg", b"") * 999 +
+               struct.pack(">I", 0) + b"IDAT")
+assert_rejected_while_open(many_chunks, "too-many-chunks-stream.png")
+
+def write_aggregate_overflow(stream):
+    remaining = 64 * 1024 * 1024
+    block = b"\x00" * (1024 * 1024)
+    checksum = zlib.crc32(b"vpAg")
+    while remaining:
+        part = block[:min(remaining, len(block))]
+        stream.write(part)
+        checksum = zlib.crc32(part, checksum)
+        remaining -= len(part)
+    stream.write(struct.pack(">I", checksum & 0xffffffff))
+    stream.write(struct.pack(">I", 16384) + b"tEXt")
+
+assert_rejected_while_open(
+    signature + chunk(b"IHDR", ihdr_data) +
+    struct.pack(">I", 64 * 1024 * 1024) + b"vpAg",
+    "aggregate-prefix-limit-stream.png",
+    write_aggregate_overflow)
+PY
+
 python3 - "$PNGDUMP" "$INPUT_PNG" "$INPUT_ICC" "$OUTDIR" <<'PY'
 import os
 import pathlib
