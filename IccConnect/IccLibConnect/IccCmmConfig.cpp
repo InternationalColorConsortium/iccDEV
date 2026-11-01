@@ -542,7 +542,7 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
       return false;
     const double directory = value.get<double>();
     if (!std::isfinite(directory) || directory < 0 || directory > 4095 ||
-        std::floor(directory) != directory)
+        std::floor(directory) < directory)
       return false;
     m_srcIfd = static_cast<unsigned int>(directory);
     m_srcIfdSpecified = true;
@@ -568,7 +568,7 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
       // exactly representable as double; validate before the narrowing cast.
       const double dimension = value.get<double>();
       if (!std::isfinite(dimension) || dimension < 0 || dimension > UINT32_MAX ||
-          std::floor(dimension) != dimension)
+          std::floor(dimension) < dimension)
         return false;
       if (key == std::string("dstTileWidth"))
         width = static_cast<unsigned int>(dimension);
