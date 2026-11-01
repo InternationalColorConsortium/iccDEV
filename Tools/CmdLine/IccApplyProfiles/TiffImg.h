@@ -94,9 +94,16 @@ public:
               float fXRes, float fYRes, bool bCompress=true, bool bSep=false,
               unsigned int nResolutionUnit=RESUNIT_INCH,
               unsigned int nTileWidth=0, unsigned int nTileHeight=0,
-              bool bBigTiff=false);
+              bool bBigTiff=false, unsigned int nMaxDecodeBufferBytes=0);
+  // nMaxDecodeBufferBytes bounds one internal strip or tile-band allocation.
+  // Zero selects the safe 256 MiB default, which can be raised for trusted large
+  // images with ICCDEV_TIFF_MAX_DECODE_MIB. A nonzero API argument takes
+  // precedence over the environment. Metadata-only opens allocate neither
+  // buffer and are unaffected.
   bool Open(const char *szFname, bool bMetadataOnly=false, unsigned int nDirectory=0,
-            unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
+            unsigned int nMaxDecodeBufferBytes=0);
+  // Resolve the command-line default, including its strict environment opt-in.
+  static bool GetDefaultDecodeBufferLimit(unsigned int &nBytes);
   bool IsTiled() const { return m_bTiled; }
   unsigned int GetTileBandSize() const { return m_bTiled ? m_nTileBandSize : 0; }
   bool IsBigTiff() const { return m_hTif && TIFFIsBigTIFF(m_hTif); }
@@ -202,8 +209,8 @@ public:
   bool SetIccProfile(unsigned char *pProfile, unsigned int  nLen);
 
 protected:
-  bool CalcTileLayout(unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
-  bool SetupTiles(unsigned int nMaxTileBandBytes=256u * 1024u * 1024u);
+  bool CalcTileLayout(unsigned int nMaxTileBandBytes=0);
+  bool SetupTiles(unsigned int nMaxTileBandBytes=0);
   bool ReadTileLine(unsigned char *pBuf);
   bool WriteTileLine(const unsigned char *pBuf);
   // Shared by GetWidthIn()/GetHeightIn(); see the comment on those.  Guards fRes as

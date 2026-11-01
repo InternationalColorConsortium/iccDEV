@@ -77,11 +77,16 @@ single-channel TIFF inputs.
 - Stripped and tiled single-channel inputs may be combined. Tiled input/output
   supports 8-bit unsigned, 16-bit unsigned, and 32-bit float samples. Interleaved
   and separated output preserve every spectral sample; edge-tile padding is zero.
-  All concurrently open tiled inputs share a 256 MiB tile-band budget. The
-  next input is rejected before its tile band is allocated if it would exceed
-  the remaining budget. The output tile band has a separate 256 MiB cap; row
-  and stripped-input buffers are outside these tile-band limits. These are not
-  total-process memory guarantees.
+  All concurrently open tiled inputs share a 256 MiB tile-band budget by
+  default. The next input is rejected before its tile band is allocated if it
+  would exceed the remaining budget. The output tile band has a separate budget
+  with the same default; row and stripped-input buffers are outside these
+  tile-band limits. Set `ICCDEV_TIFF_MAX_DECODE_MIB` to an integer from 1 through
+  4095 to opt a trusted large conversion into a larger shared-input and
+  per-output budget. These are not total-process memory guarantees or limits on
+  file size, total pixels, total decoded image bytes, or embedded ICC profile
+  size. Leave headroom for row buffers, profile parsing, libtiff, and other
+  process allocations when raising the value.
 - Tiled output preserves the existing unspecified-extra-sample policy, profile
   checks, resolution metadata, and partial-output cleanup. It does not generate
   pyramids or vendor-specific SVS files.
@@ -151,8 +156,9 @@ single-channel TIFF inputs.
 - All input TIFFs remain open during conversion. The operating system's
   per-process open-file limit can therefore impose a lower practical channel
   cap than the TIFF field.
-- Concurrent tiled inputs share a 256 MiB decoded tile-band budget. A channel
-  set that exceeds it fails before output creation.
+- Concurrent tiled inputs share a 256 MiB decoded tile-band budget by default.
+  A channel set that exceeds it fails before output creation unless a trusted
+  run explicitly raises `ICCDEV_TIFF_MAX_DECODE_MIB`.
 
 There is no additional tool-specific cap on image dimensions, total pixels, or
 prefix length. Allocation failures and arithmetic overflow fail the conversion

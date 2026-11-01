@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cerrno>
 #include <algorithm>
 #include <limits>
 #include <climits>   // LONG_MAX, for the IFD-offset bound in readStoredExtraSamplesCount()
@@ -135,7 +136,6 @@ const IccTiffSanitizedHandlers g_icTiffSanitizedHandlers;
 #undef min
 #endif
 #else
-#include <cerrno>
 #include <sys/stat.h>
 #endif
 
@@ -176,6 +176,41 @@ bool checkedUInt32(icUInt64Number value, unsigned int &result)
 bool checkedUInt32Product(unsigned int a, unsigned int b, unsigned int &result)
 {
   return checkedUInt32(static_cast<icUInt64Number>(a) * b, result);
+}
+
+const unsigned int kDefaultTiffDecodeBufferBytes = 256u * 1024u * 1024u;
+const char *const kTiffDecodeBufferEnv = "ICCDEV_TIFF_MAX_DECODE_MIB";
+
+// Keep hostile-input behavior bounded by default without turning that default
+// into a format restriction. A caller that has already made its own trust and
+// memory decision can pass an exact byte limit. Command-line invocations do not
+// pass a per-run API argument, so the environment provides the same opt-in.
+bool resolveDecodeBufferLimit(unsigned int requested, unsigned int &resolved)
+{
+  if (requested) {
+    resolved = requested;
+    return true;
+  }
+
+  const char *value = std::getenv(kTiffDecodeBufferEnv);
+  if (!value) {
+    resolved = kDefaultTiffDecodeBufferBytes;
+    return true;
+  }
+  if (!*value)
+    return false;
+  for (const char *p = value; *p; ++p) {
+    if (*p < '0' || *p > '9')
+      return false;
+  }
+
+  errno = 0;
+  char *end = NULL;
+  const unsigned long long mib = std::strtoull(value, &end, 10);
+  if (errno == ERANGE || !end || *end || !mib ||
+      mib > std::numeric_limits<unsigned int>::max() / (1024u * 1024u))
+    return false;
+  return checkedUInt32(mib * 1024ull * 1024ull, resolved);
 }
 
 #if defined(_WIN32)
@@ -571,7 +606,8 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
               unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
               float fXRes, float fYRes, bool bCompress, bool bSep,
               unsigned int nResolutionUnit, unsigned int nTileWidth,
-              unsigned int nTileHeight, bool bBigTiff)
+              unsigned int nTileHeight, bool bBigTiff,
+              unsigned int nMaxDecodeBufferBytes)
 {
   Close();
   m_bRead = false;
@@ -666,8 +702,13 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 
   // Reject unsupported or oversized tile layouts before opening a destination
   // that TIFFOpen would truncate, including a pre-existing regular file.
-  if (m_bTiled && !CalcTileLayout()) {
-    TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB)");
+  unsigned int decodeBufferLimit = 0;
+  if (m_bTiled && !resolveDecodeBufferLimit(nMaxDecodeBufferBytes, decodeBufferLimit)) {
+    TIFFError(szFname, "Invalid ICCDEV_TIFF_MAX_DECODE_MIB value");
+    return false;
+  }
+  if (m_bTiled && !CalcTileLayout(decodeBufferLimit)) {
+    TIFFError(szFname, "Invalid TIFF tile layout or tile band exceeds the configured decode-buffer limit");
     return false;
   }
 
@@ -809,8 +850,8 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   // we should always calculate this
   m_nBytesPerSample = m_nBitsPerSample / 8;
   if (m_bTiled) {
-    if (!SetupTiles()) {
-      TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB)");
+    if (!SetupTiles(decodeBufferLimit)) {
+      TIFFError(szFname, "Invalid TIFF tile layout or tile band exceeds the configured decode-buffer limit");
       Close();
       return false;
     }
@@ -896,7 +937,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 }
 
 bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirectory,
-                    unsigned int nMaxTileBandBytes)
+                    unsigned int nMaxDecodeBufferBytes)
 {
   Close();
   m_bRead = true;
@@ -992,6 +1033,13 @@ bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirec
     calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine);
     return true;
   }
+
+  unsigned int decodeBufferLimit = 0;
+  if (!resolveDecodeBufferLimit(nMaxDecodeBufferBytes, decodeBufferLimit)) {
+    TIFFError(szFname, "Invalid ICCDEV_TIFF_MAX_DECODE_MIB value");
+    Close();
+    return false;
+  }
   
   if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
@@ -1026,8 +1074,8 @@ bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirec
   m_nCurStrip=(unsigned int)-1;
   m_nCurLine = 0;
   if (m_bTiled) {
-    if (!SetupTiles(nMaxTileBandBytes)) {
-      TIFFError(szFname, "Invalid or oversized TIFF tile band (maximum 256 MiB per image or caller memory limit)");
+    if (!SetupTiles(decodeBufferLimit)) {
+      TIFFError(szFname, "Invalid TIFF tile layout or tile band exceeds the configured decode-buffer limit");
       Close();
       return false;
     }
@@ -1095,6 +1143,21 @@ bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirec
     return false;
   }
 
+  // A hostile directory can declare one multi-gigabyte strip while carrying
+  // only a few bytes of file data. libtiff reports that declared decoded size,
+  // and malloc() may either trip a fuzzer RSS limit or succeed under overcommit
+  // before ReadLine() attempts to materialize it. Apply the same configured
+  // limit used for tile bands to strip-backed images before allocating. The
+  // default is 256 MiB; trusted callers may explicitly raise it without making
+  // the fuzzer and ordinary CLI paths unbounded.
+  if (!stripBufferSize || stripBufferSize > decodeBufferLimit) {
+    TIFFError(szFname,
+              "Invalid TIFF strip buffer (%u bytes; configured maximum %u bytes)",
+              stripBufferSize, decodeBufferLimit);
+    Close();
+    return false;
+  }
+
   m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)stripBufferSize));
 
   if (!m_pStripBuf) {
@@ -1103,6 +1166,11 @@ bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirec
   }
 
   return true;
+}
+
+bool CTiffImg::GetDefaultDecodeBufferLimit(unsigned int &nBytes)
+{
+  return resolveDecodeBufferLimit(0, nBytes);
 }
 
 
@@ -1241,14 +1309,19 @@ bool CTiffImg::CalcTileLayout(unsigned int nMaxTileBandBytes)
   m_nBytesPerSample = m_nBitsPerSample / 8;
   if (!calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine))
     return false;
-  const uint64_t limit = std::min<uint64_t>(256u * 1024u * 1024u,
-                                             nMaxTileBandBytes);
+  unsigned int resolvedLimit = 0;
+  if (!resolveDecodeBufferLimit(nMaxTileBandBytes, resolvedLimit))
+    return false;
+  const uint64_t limit = resolvedLimit;
   const uint64_t expectedRow = static_cast<uint64_t>(m_nTileWidth) *
     m_nBytesPerSample * (m_nPlanar == PLANARCONFIG_SEPARATE ? 1 : m_nSamples);
-  if (expectedRow > limit || m_nTileHeight > limit / expectedRow)
+  if (!expectedRow || expectedRow > limit || m_nTileHeight > limit / expectedRow)
     return false;
-  m_nTileRowSize = static_cast<unsigned int>(expectedRow);
-  m_nTileSize = m_nTileRowSize * m_nTileHeight;
+  const uint64_t tileSize = expectedRow * m_nTileHeight;
+  if (tileSize > static_cast<uint64_t>(std::numeric_limits<tmsize_t>::max()) ||
+      !checkedUInt32(expectedRow, m_nTileRowSize) ||
+      !checkedUInt32(tileSize, m_nTileSize))
+    return false;
   m_nTilesAcross = m_nWidth / m_nTileWidth + (m_nWidth % m_nTileWidth != 0);
   const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
   const unsigned int tilesDown = m_nHeight / m_nTileHeight + (m_nHeight % m_nTileHeight != 0);
@@ -1284,8 +1357,8 @@ bool CTiffImg::ReadTileLine(unsigned char *pBuf)
   const unsigned int tileY = m_nCurLine / m_nTileHeight * m_nTileHeight;
   const unsigned int row = m_nCurLine % m_nTileHeight;
   const unsigned int planes = m_nPlanar == PLANARCONFIG_SEPARATE ? m_nSamples : 1;
-  // CalcTileLayout() caps m_nTileSize at 256 MiB, so it fits tmsize_t on
-  // 32-bit targets such as wasm32 where tmsize_t is int (#2919).
+  // CalcTileLayout() independently proves that m_nTileSize fits tmsize_t,
+  // including on 32-bit targets such as wasm32 (#2919).
   const tmsize_t tileBytes = static_cast<tmsize_t>(m_nTileSize);
   if (!row) {
     for (unsigned int s = 0; s < planes; s++) {

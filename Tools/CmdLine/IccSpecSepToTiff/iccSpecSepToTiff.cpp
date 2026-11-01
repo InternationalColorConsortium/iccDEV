@@ -643,9 +643,15 @@ int main(int argc, char* argv[]) {
 #endif
 
   // Each tiled input keeps one decoded tile band until the conversion ends.
-  // Give Open() the remaining budget so the aggregate cannot grow by 256 MiB
-  // for every channel, and reject before allocating the band that exceeds it.
-  const unsigned int maxInputTileBandBytes = 256u * 1024u * 1024u;
+  // Give Open() the remaining budget so the aggregate cannot grow by one full
+  // allowance for every channel, and reject before allocating the band that
+  // exceeds it. The default remains 256 MiB; trusted large conversions can
+  // deliberately raise the shared budget with ICCDEV_TIFF_MAX_DECODE_MIB.
+  unsigned int maxInputTileBandBytes = 0;
+  if (!CTiffImg::GetDefaultDecodeBufferLimit(maxInputTileBandBytes)) {
+    fprintf(stderr, "Invalid ICCDEV_TIFF_MAX_DECODE_MIB value\n");
+    return -1;
+  }
   unsigned int remainingInputTileBandBytes = maxInputTileBandBytes;
 
   // open ALL input files
@@ -667,8 +673,29 @@ int main(int argc, char* argv[]) {
     // built here.
     if (icOutputIsInput(argv[1], filename.c_str()))
       return -1;
+
+    // The aggregate allowance applies only to decoded tile bands. Strip
+    // buffers have their own per-image decode limit, as documented, so inspect
+    // storage without allocating pixels and choose the appropriate budget.
+    // This also keeps zero remaining bytes from being mistaken for Open()'s
+    // "use the default" sentinel.
+    CTiffImg metadata;
+    if (!metadata.Open(filename.c_str(), true)) {
+      fprintf(stderr, "Cannot open input %s\n",
+              icSanitizeConsoleText(filename).c_str());
+      return -1;
+    }
+    const bool inputIsTiled = metadata.IsTiled();
+    metadata.Close();
+    if (inputIsTiled && !remainingInputTileBandBytes) {
+      fprintf(stderr, "%s: TIFF tile band exceeds the configured decode-buffer limit\n",
+              icSanitizeConsoleText(filename).c_str());
+      return -1;
+    }
+    const unsigned int inputDecodeBufferBytes =
+      inputIsTiled ? remainingInputTileBandBytes : maxInputTileBandBytes;
     if (!infile[i].Open(filename.c_str(), false, 0,
-                        remainingInputTileBandBytes)) {
+                        inputDecodeBufferBytes)) {
       fprintf(stderr, "Cannot open input %s\n",
               icSanitizeConsoleText(filename).c_str());
       return -1;

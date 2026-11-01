@@ -155,10 +155,15 @@ Only inventory walks the full main-directory chain.
 `dstBigTiff: true` for BigTIFF output. `iccSpecSepToTiff` accepts tiled grayscale
 inputs and offers `--tiles WIDTH HEIGHT` and `--bigtiff` for output. Defaults
 remain classic stripped TIFF with the existing NONE/LZW compression controls.
-Tiles support 8/16-bit unsigned and 32-bit float samples; tile-band buffers are
-capped at 256 MiB per image. `iccSpecSepToTiff` also caps the combined decoded
-tile bands of its concurrently open inputs at 256 MiB and rejects an input
-before allocating a band that would exceed the remaining budget. These options
+Tiles support 8/16-bit unsigned and 32-bit float samples; decoded strip and
+tile-band buffers default to a 256 MiB limit. Trusted runs can raise the
+per-buffer budget with `ICCDEV_TIFF_MAX_DECODE_MIB`; this does not limit TIFF
+file size, total pixels, IFD metadata, or embedded ICC profile size, and it is
+not a total-process RSS guarantee. Leave headroom for row buffers, profile/CMM
+state, worker threads, libtiff, and other allocations when raising it.
+`iccSpecSepToTiff` also applies that value as the combined decoded tile-band
+budget for its concurrently open inputs and rejects an input before allocating
+a band that would exceed the remaining budget. These options
 do not imply SVS-specific decoding, ROI, SubIFD processing, or pyramid rewriting.
 
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends
