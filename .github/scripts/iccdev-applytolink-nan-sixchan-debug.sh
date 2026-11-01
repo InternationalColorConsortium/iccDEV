@@ -234,7 +234,7 @@ if [ "$has_asan" -eq 1 ] || [ "$has_ubsan" -eq 1 ]; then
 elif [ "$status" -eq 124 ]; then
   classification="TIMEOUT"
   detail="timeout after 30s"
-elif [ "$status" -eq 134 ] || [ "$status" -eq 136 ] || [ "$status" -eq 137 ] || [ "$status" -eq 139 ]; then
+elif [ "$status" -ge 128 ]; then
   classification="SIGNAL"
   detail="signal exit $((status - 128)) without sanitizer report"
 elif [ "$status" -eq 0 ]; then

@@ -18,10 +18,11 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 
 | Workflow | Platform | Compiler | Key Differences |
 |----------|----------|----------|-----------------|
-| `ci-pr-action.yml` | ubuntu-latest | clang | Core PR orchestration and bash governance |
-| `ci-pr-unix.yml` | ubuntu-latest | GCC 15, Clang 22 | Versioned compilers selected from the runner packages or signed APT repositories |
-| `ci-pr-win.yml` | windows-latest | MSVC | vcpkg deps, PowerShell governance |
-| `ci-sanitizer-tests.yml` | ubuntu-latest | clang | ASan, UBSan, TSan, MSan matrix |
+| `ci-pr-action.yml` | ubuntu-latest orchestrator; delegated runners | Varies by selected lane | GCC 15.2 and GCC tool gates; optional macOS Clang and Windows validation |
+| `ci-pr-unix.yml` | ubuntu-latest, macos-latest | System GCC/Clang by default; GCC 15/Clang 22 selectable on Linux | Versioned compilers come from runner packages or signed APT repositories |
+| `ci-pr-win.yml` | windows-latest | MSVC, ClangCL, MinGW UCRT64 | vcpkg and MSYS2 deps, PowerShell governance |
+| `ci-sanitizer-tests.yml` | ubuntu-latest, windows-2025-vs2026 | N/A (shell tests) | Bash and PowerShell sanitizer-helper regressions |
+| `ci-sanitizer-regression.yml` | ubuntu-latest | GCC with ASan and UBSan | Path-scoped native regression gate using the tool workflow |
 | `ci-pr-wasm.yml` | ubuntu-latest | emcc | Release WASM PR parity gate |
 | `ci-vcpkg-ports.yml` | windows-2022 | MSVC | Required vcpkg overlay port install + verify; Linux/macOS are manual diagnostics |
 

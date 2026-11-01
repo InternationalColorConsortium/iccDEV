@@ -969,29 +969,21 @@ jobs:
               date -u '+%Y-%m-%d %H:%M:%S UTC'
               echo ""
               timing_header='| Case | Threads | Command | Status | Elapsed s |'
-              timing_header+=' Loop ms | Apply ms | Apply % | Apply calls |'
-              timing_header+=' Async launches | User s | System s | RSS KB |'
+              timing_header+=' User s | System s | RSS KB |'
               timing_header+=' Minor faults | Vol ctx | Invol ctx |'
               timing_rule='|------|---------|---------|--------|-----------|'
-              timing_rule+='---------|----------|---------|-------------|'
-              timing_rule+='----------------|--------|----------|--------|'
+              timing_rule+='--------|----------|--------|'
               timing_rule+='---------------|---------|-----------|'
               echo "$timing_header"
               echo "$timing_rule"
               tail -n +2 "$timing_report" | while IFS=$'\t' read -r \
-                case_name threads command_name status elapsed_s loop_ms apply_ms \
-                apply_pct apply_calls async_launches user_s system_s rss faults \
-                vol_ctx invol_ctx _log_path; do
+                case_name threads command_name status elapsed_s user_s system_s \
+                rss faults vol_ctx invol_ctx _sha256 _log_path; do
                 timing_row="| $(sanitize_line "$case_name")"
                 timing_row+=" | $(sanitize_line "$threads")"
                 timing_row+=" | $(sanitize_line "$command_name")"
                 timing_row+=" | $(sanitize_line "$status")"
                 timing_row+=" | $(sanitize_line "$elapsed_s")"
-                timing_row+=" | $(sanitize_line "$loop_ms")"
-                timing_row+=" | $(sanitize_line "$apply_ms")"
-                timing_row+=" | $(sanitize_line "$apply_pct")"
-                timing_row+=" | $(sanitize_line "$apply_calls")"
-                timing_row+=" | $(sanitize_line "$async_launches")"
                 timing_row+=" | $(sanitize_line "$user_s")"
                 timing_row+=" | $(sanitize_line "$system_s")"
                 timing_row+=" | $(sanitize_line "$rss")"

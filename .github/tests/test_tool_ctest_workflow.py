@@ -84,6 +84,43 @@ def test_developer_report_copies_junit_from_ctest_build_dir():
     assert 'copy_file_if_present "${BUILD_DIR}/ctest-results.xml"' in report_run
 
 
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,
+                    reason="Bash summary probe requires Unix execution")
+def test_hybrid_timing_summary_matches_produced_tsv(tmp_path):
+    report = tmp_path / "hybrid-applyprofiles-timing.tsv"
+    report.write_text(
+        "case\tthreads\tcommand\tstatus\telapsed_s\tuser_s\tsystem_s\t"
+        "max_rss_kb\tminor_faults\tvoluntary_ctx\tinvoluntary_ctx\tsha256\tlog\n"
+        "cmykw\t4\tdebug-export\t0\t10.5\t3.4\t1.2\t123456\t789\t9\t10\t"
+        "abc123\tcase.log\n",
+        encoding="ascii",
+    )
+    run = tool_step("Generate summary")["run"]
+    start = run.index('if [ -f "$timing_report" ]; then')
+    end = re.search(r"(?m)^\s*fi\s*$", run[start:])
+    assert end is not None
+    snippet = run[start:start + end.end()]
+    script = (
+        'set -euo pipefail\ntiming_report="$TEST_TIMING_REPORT"\n'
+        'sanitize_line() { printf "%s" "$1"; }\n' + snippet + "\n"
+    )
+    result = subprocess.run(
+        ["bash", "--noprofile", "--norc"],
+        input=script,
+        env=dict(os.environ, BASH_ENV="/dev/null", TEST_TIMING_REPORT=str(report)),
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    table = [line.strip("|").split("|") for line in result.stdout.splitlines()
+             if line.startswith("|")]
+    assert [[cell.strip() for cell in row] for row in (table[0], table[2])] == [
+        ["Case", "Threads", "Command", "Status", "Elapsed s", "User s",
+         "System s", "RSS KB", "Minor faults", "Vol ctx", "Invol ctx"],
+        ["cmykw", "4", "debug-export", "0", "10.5", "3.4", "1.2",
+         "123456", "789", "9", "10"],
+    ]
+
+
 def test_image_reuse_keeps_pinned_requirements_and_brotli_checks():
     run = tool_step("Install spectral preview Python dependencies")["run"]
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="ascii")

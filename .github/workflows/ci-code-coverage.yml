@@ -998,4 +998,6 @@ jobs:
           name: iccdev-code-coverage-developer-report
           path: coverage-report
           if-no-files-found: error
+          # llvm-cov includes generated pages under html/.../.github/.
+          include-hidden-files: true
           retention-days: 14

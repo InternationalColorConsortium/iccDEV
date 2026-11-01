@@ -57,6 +57,12 @@ def test_nan_range_helper_distinguishes_skip_failure_and_pass(tmp_path):
     assert measured.returncode == 0, measured.stdout + measured.stderr
     assert "[PASS]" in measured.stdout
 
+    apply.write_text("#!/bin/sh\necho 'Invalid input range' >&2\nexit 130\n",
+                     encoding="ascii")
+    signal_exit = run()
+    assert signal_exit.returncode == 2
+    assert "signal exit 2" in signal_exit.stdout
+
     apply.write_text("#!/bin/sh\necho 'cannot open profile' >&2\nexit 1\n",
                      encoding="ascii")
     wrong_failure = run()
