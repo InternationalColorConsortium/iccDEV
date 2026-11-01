@@ -92,8 +92,9 @@ where the resolution values fix an aspect ratio and no absolute size exists. The
 `Size:` line reports the physical size in inches, converted from centimeters when
 needed, and omits it entirely under `RESUNIT_NONE`.
 
-The no-argument form is a help/syntax path and exits successfully. Other
-malformed invocations fail: extra trailing arguments are rejected, missing input
+The no-argument form is a help/syntax path and exits successfully. `--help`
+short-circuits parsing wherever it appears. Other malformed invocations fail:
+extra trailing arguments are rejected, missing input
 files fail, and export requests fail when the TIFF has no embedded ICC profile.
 
 ## Optional telemetry

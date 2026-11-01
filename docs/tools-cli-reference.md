@@ -27,7 +27,7 @@ single index for common command shapes and shared option tables.
 | `iccApplyToLink` | Build DeviceLink profiles or `.cube` LUTs | `iccApplyToLink output.icc 0 33 1 "Link" 0.0 1.0 1 1 src.icc 1 dst.icc 1` |
 | `iccRoundTrip` | Evaluate round-trip behavior | `iccRoundTrip profile.icc` |
 
-`iccApplySearch` accepts an optional leading `--threads N`. `N=0` uses hardware
+`iccApplySearch` accepts an optional `--threads N` in any argument order. `N=0` uses hardware
 concurrency, `N=1` is scalar, and larger values select workers up to
 `CIccThreadedCmm::GetMaxThreads()`; `-debugcalc` requires `N=1`. Legacy
 single-dash forms remain accepted.
@@ -123,9 +123,9 @@ node throughput.
 | Tool | Purpose | Example |
 |------|---------|---------|
 | `iccTiffDump` | Inspect TIFF metadata and embedded ICC | `iccTiffDump image.tif` |
-| `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
-| `iccJpegDump` | Inspect JPEG size and embedded ICC APP2 information without writing files | `iccJpegDump image.jpg` |
-| `iccHeifDump` | Locally compare HEIF carrier ICC blobs with IccProfLib parsing | See [the tool Readme](../Tools/CmdLine/IccHeifDump/Readme.md) |
+| `iccPngDump` | Inspect or extract embedded ICC; inject ICC into a separate PNG | `iccPngDump image.png` |
+| `iccJpegDump` | Inspect or extract ICC APP2; replace ICC in a separate JPEG | `iccJpegDump image.jpg` |
+| `iccHeifDump` | Inspect HEIF ICC properties and optionally extract raw blobs | See [the tool Readme](../Tools/CmdLine/IccHeifDump/Readme.md) |
 | `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport Testing/sRGB_v4_ICC_preference.icc` |
 | `iccPawgReport` | Emit machine-readable assessment results; Q1 includes structured, unrounded round-trip metrics | `iccPawgReport --json Testing/sRGB_v4_ICC_preference.icc` |
 | `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json Testing/sRGB_v4_ICC_preference.icc` |
@@ -166,8 +166,10 @@ file size, total pixels, IFD metadata, or embedded ICC profile size, and it is
 not a total-process RSS guarantee. Leave headroom for row buffers, profile/CMM
 state, worker threads, libtiff, and other allocations when raising it.
 `iccSpecSepToTiff` also applies that value as the combined decoded tile-band
-budget for its concurrently open inputs and rejects an input before allocating
-a band that would exceed the remaining budget. These options
+budget for its concurrently open inputs. With stable input paths, it rejects
+a band that would exceed the remaining budget before allocation; a path swap
+between metadata and pixel opens can cause transient allocation before its
+post-open check rejects the input. These options
 do not imply SVS-specific decoding, ROI, SubIFD processing, or pyramid rewriting.
 
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends

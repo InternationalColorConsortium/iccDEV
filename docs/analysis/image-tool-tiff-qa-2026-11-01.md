@@ -87,14 +87,19 @@ general CMake toggle is justified by these corrections.
 | Surface | Producer | Consumer | Build/runtime behavior | Platform boundary | CI trigger and dependency owner | Local evidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Main IFD selection | CLI or Apply JSON config | `CTiffImg::Open`, SpecSep inputs | Default 0; explicit 0..4095; one output IFD | libtiff directory API; Windows/Unix paths | TIFF tile and SpecSep CTests; iccDEV + libtiff | Multi-page 8/16-bit fixtures, invalid selection, telemetry ON/OFF |
-| TIFF versions and provenance | `TIFFGetVersion`, selected IFD inventory | Help, `--version`, JSONL/evidence | Runtime libtiff; ICC-owned compile-time version | Linked libtiff ABI | TIFF telemetry/directory CTests; libtiff | Version/receipt assertions in Release and sanitizer builds |
+| TIFF versions and provenance | `TIFFGetVersion`, selected IFD inventory | Help, `--version`, JSONL/evidence | Runtime libtiff; ICC-owned compile-time version; line-ending-independent CLI assertion | Linked libtiff ABI and Windows CRT CRLF | TIFF telemetry/directory CTests; libtiff | Version/receipt scripts in WSL Release/sanitizer and Windows MSVC, ClangCL, and MinGW |
 | TIFF writer format validation | `CTiffImg::Create` arguments | TIFF output tags | Reject before opening output | 16-bit TIFF tag fields | Direct overflow CTest; iccDEV/libtiff | `iccdev.tiff-create-overflow` |
 | JPEG APP2 replacement | Marker parser, ICC input | JPEG output | Replace ICC APP2; no direct libjpeg link | JPEG marker format; filesystem errors | JPEG inspection and issue #2162 CTests; iccDEV | Replacement and injected read-fault checks |
 | PNG APNG policy and versions | PNG chunk preflight, libpng APIs | PNG injection and banner | Reject animation before output; runtime libpng | libpng/PNG chunk framing | PNG issue #2854 CTest; libpng | Two-frame APNG and output-preservation checks |
 | HEIF diagnostics and versions | libheif API, `IccFileUtil.h` | CLI banner and path diagnostics | Exclusive create; sanitized console output | libheif, OS path encoding | HEIF output-safety CTest; libheif | Control-character path and version checks |
-| JPEG CMake dependency | Image-tool configure and target | `iccJpegDump` build | Direct JPEG package no longer required | CMake package discovery | Image-tool build lanes; iccDEV | Clang Release build with JPEG discovery disabled |
+| JPEG CMake dependency | Native image-tool target and WASM workflow | `iccJpegDump` and TIFF JPEG codec | Dump tool has no direct libjpeg link; WASM still builds libjpeg for libtiff | CMake, vcpkg, and Emscripten link boundaries | Image-tool and WASM lanes; iccDEV/libtiff/libjpeg | Native build without JPEG discovery; WASM workflow and staged-module audit |
+| TIFF CLI grammar | SpecSep/TiffDump argument parsers and usage banners | Shell users, regression scripts, Doxygen lanes | Reject mixed SpecSep help/version and unknown long options; distinct TiffDump inspection/listing grammar | Windows and Unix argument/stream behavior | TIFF CLI and output-hardening regressions; iccDEV | Focused WSL Release/plain/sanitizer plus three Windows toolchains |
+| Doxygen image-tool lanes | Doxyfile, curated navigation, `.dox` pages, checked-in DOT diagrams | Generated maintainer guide | Apply, TIFF pipeline, SpecSep, and TiffDump parser/pipeline contracts | Doxygen/Graphviz rendering | Documentation build; iccDEV | Graph-light Doxygen exit 0, empty warnings log, and direct DOT renders |
 
 Local validation uses Clang 22 WSL Release with telemetry/QA enabled, Release
 with both disabled, and Debug with ASan, UBSan, integer, and float sanitizers.
-The user will run hosted CI manually after this branch is pushed. Windows and
-macOS behavior remains to be checked by those lanes.
+Focused TIFF telemetry, directory inventory, and tile CLI scripts also passed
+on Windows MSVC, ClangCL, and MinGW UCRT64 builds. The manual hosted run at
+`911fed7` exposed a Windows CRLF-only test assertion; that assertion is fixed
+here, and the stale run was cancelled. The user will run hosted CI manually
+after this update is pushed.

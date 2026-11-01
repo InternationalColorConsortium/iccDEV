@@ -47,6 +47,9 @@ tabs.
 
 \subpage md_docs_2tools-cli-reference "CLI tool reference"
 \subpage iccapply_overview "iccApply visual lanes"
+\subpage tiff_processing_pipeline "TIFF image processing pipeline"
+\subpage specsep_lane "SpecSepToTiff spectral separation lane"
+\subpage tiffdump_lane "TiffDump metadata inspection lane"
 */
 
 /**
@@ -59,4 +62,5 @@ tabs.
 \subpage md_docs_2avx2-clut-diagnostics "AVX2 CLUT diagnostics"
 \subpage md_docs_2avx2-clut-linux-performance "Linux CLUT profiling report"
 \subpage md_docs_2avx2-clut-windows-performance "Windows CLUT performance report"
+\subpage md_docs_2analysis_2image-tool-tiff-qa-2026-11-01 "Image-tool and TIFF QA review"
 */

@@ -1,0 +1,54 @@
+/**
+\page specsep_lane iccSpecSepToTiff: spectral separation TIFF lane
+
+\tableofcontents
+
+\section specsep_cli Positional arguments after option removal
+
+`iccSpecSepToTiff` combines numbered, single-channel grayscale TIFF inputs
+into one multi-sample TIFF. The parser first removes recognized options from
+any position in `argv`: `--ifd N`, `--tiles WIDTH HEIGHT`, `--bigtiff`, and,
+when telemetry is compiled in, the telemetry/file options. It then rebuilds
+`argv` from the remaining positional tokens. The reduced `argc` must be 8
+(program plus seven fields) or 9 (with an optional profile):
+
+| Reduced token | Name | Contract |
+|---|---|---|
+| `argv[0]` | program | Invocation name |
+| `argv[1]` | output | Destination TIFF path |
+| `argv[2]` | compress | Literal `0` (none) or `1` (LZW) |
+| `argv[3]` | sep | Literal `0` (interleaved) or `1` (separate) |
+| `argv[4]` | infile_prefix | Literal prefix; channel number is appended |
+| `argv[5]`, `[6]`, `[7]` | start, end, incr | Signed decimal range; nonzero step must land exactly on end |
+| `argv[8]` | profile | Optional conformant, sample-matching ICC profile |
+
+`--ifd N` selects the same zero-based main-chain IFD, 0 through 4095, from
+every input; the default is 0. Other main IFDs and selected-directory SubIFDs
+are reported but not copied. `--tiles` requires positive dimensions divisible
+by 16. `--bigtiff` selects BigTIFF rather than the classic TIFF default.
+Duplicate, malformed, or unknown `--` options and an unavailable selected IFD
+fail before output creation. Mixed help/version requests are rejected; the
+literal prefix is not a `printf` pattern.
+
+\dotfile specsep-lane.dot "iccSpecSepToTiff option parsing and image assembly"
+
+\section specsep_help Help, output, and receipts
+
+`-h`, `--help`, and `--version` succeed only as standalone invocations.
+Malformed or incomplete conversions print diagnostics to stderr. Mixed
+help/version requests and unknown long options fail with status 1. Most older
+conversion failure paths return `-1` (exit 255 on POSIX); graceful exit-code
+normalization is tracked in the \ref md_docs_2analysis_2image-tool-tiff-qa-2026-11-01
+"image-tool audit".
+
+For each input in turn, its main chain is inventoried without pixel decoding,
+then its selected IFD is opened for pixels. Dimensions, resolution, sample encoding,
+and photometric layout must match. The optional profile is checked before
+output creation. The tool writes one output IFD, with optional tiled and
+BigTIFF layout. Telemetry-enabled builds report selected IFD provenance,
+aggregate main-IFD counts, ignored SubIFD references, and read/write work.
+
+See \ref tiff_processing_pipeline "TIFF image processing pipeline" for the
+cross-tool view and `Tools/CmdLine/IccSpecSepToTiff/Readme.md` for limits and
+examples.
+*/

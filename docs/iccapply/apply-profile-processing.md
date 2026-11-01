@@ -8,8 +8,8 @@ command, output, log, expected result, actual result, and elapsed time.
 
 A positive conversion is a pass only when its destination TIFF is nonempty and
 structurally valid. The validator must verify that it has one page; preserves
-the source geometry, orientation, and intended resolution; uses the requested
-sample encoding, compression, and planar layout; has the channel count required
+the selected source IFD's geometry, orientation, and intended resolution; uses
+the requested sample encoding, compression, and planar layout; has the channel count required
 by the destination profile; and carries the requested embedding state.
 
 Use both `iccTiffDump` and a machine-readable TIFF parser. File existence,
@@ -45,7 +45,7 @@ image progress or sanitizer stderr:
 
 ```sh
 iccApplyProfiles --telemetry=jsonl --telemetry-file run.jsonl \
-  --evidence-json receipt.json --quiet -cfg conversion.json
+  --evidence-file receipt.json --quiet --cfg conversion.json
 ```
 
 The JSONL sidecar records validated lifecycle events without copying raw argv.

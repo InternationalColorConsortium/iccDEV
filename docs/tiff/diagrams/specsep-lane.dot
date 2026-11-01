@@ -1,0 +1,28 @@
+digraph specsep_lane {
+  graph [rankdir=TB, bgcolor="transparent", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica", color="#60758c", fontcolor="#45566a"];
+
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  help [label="-h / --help alone\nusage, exit 0", fillcolor="#d9ead3"];
+  version [label="--version alone\nversions, exit 0", fillcolor="#d9ead3"];
+  options [label="remove --ifd, --tiles, --bigtiff\nand telemetry options anywhere"];
+  positional [label="rebuild positional argv\nargc = 8 or 9"];
+  validate [label="validate booleans and exact range"];
+  input [label="for each input: inventory main IFD chain\nopen selected grayscale pixels; check layout/budget\ncompare geometry with first input"];
+  profile [label="validate optional ICC profile\nagainst sample count"];
+  create [label="create one output IFD\nstripped/tiled; classic/BigTIFF"];
+  combine [label="read, pack, write rows\nthen close output", fillcolor="#d9ead3"];
+  reject [label="reject before output", fillcolor="#f4cccc"];
+  late [label="late failure: remove partial path\nmay affect an existing destination", fillcolor="#f4cccc"];
+
+  entry -> help [label="help alone"];
+  entry -> version [label="version alone"];
+  entry -> options -> positional -> validate -> input -> profile -> create -> combine;
+  options -> reject [label="invalid / duplicate"];
+  positional -> reject [label="wrong argc"];
+  validate -> reject [label="bad range"];
+  input -> reject [label="missing IFD / incompatible input"];
+  profile -> reject [label="bad profile"];
+  combine -> late [label="read / write / close error"];
+}

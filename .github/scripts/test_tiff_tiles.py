@@ -76,6 +76,16 @@ def main():
         root = pathlib.Path(temp)
         run(args.fixture, "--fixtures", root)
         multi_gray = root / "multi-gray_"
+        for option, diagnostic in (("--help", b"must be used alone"),
+                                   ("--version", b"must be used alone"),
+                                   ("--unknown-option", b"Unknown option")):
+            rejected = subprocess.run(
+                [args.specsep, option, "0", "0", str(multi_gray), "1", "3", "1"],
+                cwd=root, capture_output=True, timeout=60,
+            )
+            assert rejected.returncode == 1, rejected
+            assert diagnostic in rejected.stderr and not rejected.stdout
+            assert not (root / option).exists()
         default_gray = root / "multi-gray-default.tif"
         selected_gray = root / "multi-gray-selected.tif"
         first = run(args.specsep, default_gray, 0, 0, multi_gray, 1, 3, 1)

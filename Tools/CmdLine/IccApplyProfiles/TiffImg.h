@@ -105,6 +105,8 @@ public:
   // images with ICCDEV_TIFF_MAX_DECODE_MIB. A nonzero API argument takes
   // precedence over the environment. Metadata-only opens allocate neither
   // buffer and are unaffected.
+  /** Open one zero-based main-chain IFD. nDirectory does not select SubIFDs.
+      Metadata-only mode does not allocate a pixel decode buffer. */
   bool Open(const char *szFname, bool bMetadataOnly=false, unsigned int nDirectory=0,
             unsigned int nMaxDecodeBufferBytes=0);
   // Resolve the command-line default, including its strict environment opt-in.
@@ -115,6 +117,9 @@ public:
   unsigned int GetTileWidth() const { return m_nTileWidth; }
   unsigned int GetTileHeight() const { return m_nTileHeight; }
   unsigned int GetDirectory() const { return m_hTif ? TIFFCurrentDirectory(m_hTif) : 0; }
+  /** Count at most 4096 main-chain IFDs on an open read handle, excluding
+      SubIFDs. Return zero on failure or an overlong chain; restore the selected
+      directory before returning when possible. */
   unsigned int GetDirectoryCount();
   TIFF *GetTiffHandle() const { return m_hTif; }
   // True once this object's Create() got past TIFFOpen(..., "w") -- i.e. the
@@ -161,7 +166,7 @@ public:
   // when you need the count the file actually carries.
   //
   // That matters because colour management keys off this value:
-  // iccApplyProfiles.cpp:541-547 lets a profile match sn-sen instead of sn, so on
+  // iccApplyProfiles can match a profile against sn-sen instead of sn, so on
   // such a file a profile is matched against the repaired channel split rather than
   // the file's own.  The behaviour predates #2386 and is unchanged by it -- which
   // split is correct is the carrier-contract question open on #2379/#2385, so it is

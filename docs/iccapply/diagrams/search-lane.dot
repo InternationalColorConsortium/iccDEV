@@ -3,7 +3,8 @@ digraph search_lane {
   node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
   edge [fontname="Helvetica"];
   entry [label="argc / argv", fillcolor="#fff2cc"];
-  cfg [label="-cfg file\nexact argc", fillcolor="#d9ead3"];
+  global [label="strip --threads N and telemetry/evidence\noptions in any order (when enabled)"];
+  cfg [label="--cfg file\nexact remaining argc", fillcolor="#d9ead3"];
   direct [label="optional export / debug\nCIccCfgDataApply"];
   sequence [label="CIccCfgSearchApply\n2 or 3 profiles"];
   cmm [label="CreateSearch"];
@@ -11,8 +12,9 @@ digraph search_lane {
   apply [label="Apply each color record"];
   output [label="legacy, JSON,\nor IT8 output", fillcolor="#d9ead3"];
   reject [label="reject", fillcolor="#f4cccc"];
-  entry -> cfg [label="-cfg"];
-  entry -> direct [label="direct"];
+  entry -> global;
+  global -> cfg [label="--cfg"];
+  global -> direct [label="direct"];
   cfg -> sequence;
   direct -> sequence;
   sequence -> reject [label="not 2 / 3"];

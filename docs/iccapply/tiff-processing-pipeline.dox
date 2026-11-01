@@ -1,0 +1,56 @@
+/**
+\page tiff_processing_pipeline TIFF image processing pipeline
+
+\tableofcontents
+
+\section tiff_pipeline_scope Inspection and transformation
+
+The TIFF tools share `CTiffImg` and libtiff, but have different output
+contracts. The diagram separates metadata inspection from the two single-IFD
+transform paths. All directory indexes below refer to the zero-based main IFD
+chain. SubIFDs are a separate graph and are not selected by `--ifd`.
+
+\dotfile tiff-pipeline.dot "TIFF inspection and single-IFD transformation paths"
+
+| Tool | Input choice | Pixel processing | Output |
+|---|---|---|---|
+| \ref profiles_lane "iccApplyProfiles" | Main IFD 0 by default; `--ifd N` overrides JSON `imageFiles.srcIfd` | Decode selected image, apply forward or inverse-search profile chain | One transformed TIFF IFD |
+| \ref specsep_lane "iccSpecSepToTiff" | Same `--ifd N` main-chain index in every numbered grayscale input | Decode selected input bands and combine channels | One spectral TIFF IFD |
+| \ref tiffdump_lane "iccTiffDump" | `--ifd N` for one IFD, or `--list-directories` for main-chain inventory | Metadata only; no pixel decode | Human/JSON inspection, optional embedded ICC extraction |
+
+Both transforms warn when additional main IFDs or selected-directory SubIFD
+references are present. They do not copy those directories. TiffDump lists
+SubIFD offsets without following them; its successful inspection does not
+validate the image pixels.
+
+\section tiff_pipeline_bounds Decode and inventory bounds
+
+The main-chain inventory is bounded at 4096 directories. The default decoded
+strip or tile-band buffer limit is 256 MiB. `ICCDEV_TIFF_MAX_DECODE_MIB`
+allows an explicit higher per-buffer limit for trusted inputs; it does not
+bound total process memory, file size, pixel count, IFD metadata, or embedded
+profile size. SpecSep also accounts for concurrently open input tile bands
+against an aggregate budget. Tiled and BigTIFF output are explicit choices;
+otherwise output is classic stripped TIFF.
+
+\section tiff_pipeline_receipts Version and QA evidence
+
+Each TIFF tool's help and `--version` output identifies its IccProfLib build
+version and linked libtiff runtime version. ApplyProfiles also reports its
+IccLibConnect build version. When compiled with
+`ICCDEV_ENABLE_TELEMETRY=ON`, ApplyProfiles records the selected IFD, its
+default/JSON/CLI provenance, and inventory counts. SpecSep records default
+versus explicit selection and aggregate input counts. TiffDump records the
+selected directory in single-IFD mode, or visited counts when listing the
+main chain. See \ref md_docs_2iccapply_2apply-profile-processing
+"ApplyProfiles processing QA" for the output validation contract.
+
+\section tiff_pipeline_followup Known follow-up work
+
+The current transform writers open the final destination path before all
+decoding completes. A late failure can truncate or remove a pre-existing
+destination. A staged-output change and its failure regressions are described
+in \ref md_docs_2analysis_2image-tool-tiff-qa-2026-11-01
+"the image-tool audit and implementation plan". Use a fresh destination for
+current QA runs.
+*/

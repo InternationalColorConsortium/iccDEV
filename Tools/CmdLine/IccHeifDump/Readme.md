@@ -15,6 +15,10 @@ views share the carrier buffer rather than copying each association's payload.
 iccHeifDump input.heic [existing-output-directory]
 ```
 
+`--version` reports the IccProfLib and libheif build versions plus the linked
+libheif runtime version. `--help` prints that banner before the usage text.
+Paths and libheif diagnostics echoed to the console escape control characters.
+
 An input path that cannot be opened is reported separately from a malformed
 HEIF colour-property structure, and both conditions return exit status 2.
 
@@ -44,8 +48,9 @@ path, and `proflib_parse` status:
 - `ok`: IccProfLib parsed the blob.
 - `failed`: the raw blob was preserved but IccProfLib rejected it.
 - `empty`: the carrier has a zero-byte ICC payload.
-- `too-large`: the carrier blob exceeds IccProfLib's `icUInt32Number` input
-  limit.
+- `too-large`: defensive status if a carrier blob exceeds IccProfLib's
+  `icUInt32Number` input limit; the current 256 MiB carrier cap prevents it
+  during normal parsing.
 
 ## Local build and test
 
@@ -68,3 +73,6 @@ python3 .github/scripts/test_heif_output_safety.py \
 The <a href="../../../.github/ci/test-data/heif/Readme.md">native HEIF fixtures</a>
 also cover no-ICC and malformed-input behavior in the Python and MATLAB CLI
 tests and staged release bundles.
+
+See the [image-tool QA review](../../../docs/analysis/image-tool-tiff-qa-2026-11-01.md)
+for remaining cross-tool work.

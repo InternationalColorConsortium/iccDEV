@@ -20,6 +20,13 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 | macOS | `libheif libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
 | Windows | MSVC 2022 or 2026 with vcpkg-managed `libheif`, `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
+These are full development environments, not direct dependencies of every
+tool. `iccJpegDump` parses JPEG markers itself; native CMake no longer searches
+for or links libjpeg for that tool. JPEG libraries remain in these recipes and
+the vcpkg manifests for dependency builds, including JPEG-capable libtiff. The
+WebAssembly workflows build libjpeg for libtiff and supply its archive during
+linking; the staged WebAssembly package also includes `IccJpegDump`.
+
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
 Maintainer sanitizer/regression containers add pinned CI-only packages such as

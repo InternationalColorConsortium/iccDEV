@@ -1,0 +1,48 @@
+/**
+\page tiffdump_lane iccTiffDump: TIFF metadata and ICC inspection lane
+
+\tableofcontents
+
+\section tiffdump_cli Options and positional arguments
+
+`iccTiffDump` parses `--evidence-json`, `--ifd N`, `--list-directories`, and
+telemetry options before rebuilding `argv` from the remaining positional
+tokens. Options may appear before or after the TIFF path. The reduced `argc`
+is 2 for inspection or listing, or 3 when a single-directory ICC extraction
+destination is supplied:
+
+| Reduced token | Name | Contract |
+|---|---|---|
+| `argv[0]` | program | Invocation name |
+| `argv[1]` | tiff_file | Source classic TIFF or BigTIFF |
+| `argv[2]` | exported_icc_file | Optional extraction destination, single-IFD mode only |
+
+`--ifd N` accepts a zero-based main-chain index from 0 through 4095 and
+defaults to 0. `--list-directories` inventories up to 4096 main-chain IFDs;
+it cannot be combined with `--ifd` or extraction. Listing includes SubIFD
+offsets without following them. Single-directory inspection does not
+inventory or validate the rest of the main chain.
+
+\dotfile tiffdump-lane.dot "iccTiffDump option parsing and inspection modes"
+
+\section tiffdump_help Reporting and output
+
+A bare invocation or `--help` prints usage and exits 0; `--help` is recognized
+at any argument position and short-circuits further parsing. `--version` must
+be used alone. Other malformed invocations return status 1 and print usage on
+stderr when the positional count is wrong. Inspection reads metadata
+only: codec availability, directory fields, and ICC tags are reported through
+libtiff, but pixels are not decoded or validated. `--evidence-json` changes
+the report format without changing the inspection scope.
+
+An extraction destination is written through a sibling temporary file and
+atomically renamed after the complete byte copy. The raw ICC bytes are kept
+for forensics even if a later IccProfLib parse fails; that later failure still
+returns nonzero. Telemetry-enabled builds record one selected directory in
+inspection mode or visited directory counts in listing mode. Every help and
+version banner includes the linked libtiff runtime version.
+
+See \ref tiff_processing_pipeline "TIFF image processing pipeline" for the
+cross-tool view and `Tools/CmdLine/IccTiffDump/Readme.md` for report fields
+and diagnostic interpretation.
+*/

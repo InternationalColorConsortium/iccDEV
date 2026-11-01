@@ -96,6 +96,7 @@ static void Usage(FILE *stream, const char *name)
   fprintf(stream, "  %s {--ifd N} {--tiles WIDTH HEIGHT} {--bigtiff} output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
   fprintf(stream, "  %s -h | --help\n", safeName.c_str());
   fprintf(stream, "  %s --version\n\n", safeName.c_str());
+  fprintf(stream, "  Conversion options may appear before or after positional arguments; help/version must be used alone.\n");
   fprintf(stream, "Combine single-channel spectral TIFF files into one multi-sample TIFF.\n\n");
 
   fprintf(stream, "Arguments:\n");
@@ -527,6 +528,16 @@ int main(int argc, char* argv[]) {
       }
       bigTiff = true;
     }
+    else if (!strcmp(argv[arg], "--help") || !strcmp(argv[arg], "-h") ||
+             !strcmp(argv[arg], "--version")) {
+      fprintf(stderr, "%s must be used alone\n", argv[arg]);
+      return EXIT_FAILURE;
+    }
+    else if (argv[arg][0] == '-' && argv[arg][1] == '-') {
+      fprintf(stderr, "Unknown option: %s\n",
+              icSanitizeConsoleText(argv[arg]).c_str());
+      return EXIT_FAILURE;
+    }
     else
       positional.push_back(argv[arg]);
     arg++;
@@ -538,8 +549,8 @@ int main(int argc, char* argv[]) {
     // Say which way the invocation is malformed before the syntax block: a bare
     // Usage() dump left the caller to diff their command against it.  The
     // diagnostic and the usage both go to stderr because this path is a failure;
-    // -h/--help above is the only route to Usage() on stdout.  Fail like every
-    // other error exit in main(), all of which return -1 (process status 255).
+    // -h/--help above is the only route to Usage() on stdout.  Preserve the
+    // legacy -1 return (process status 255) for this positional-error path.
     if (argc < minargs)
       fprintf(stderr, "Missing arguments: expected 7 or 8, received %d.\n",
               argc > 0 ? argc - 1 : 0);
@@ -702,9 +713,11 @@ int main(int argc, char* argv[]) {
 #endif
 
   // Each tiled input keeps one decoded tile band until the conversion ends.
-  // Give Open() the remaining budget so the aggregate cannot grow by one full
-  // allowance for every channel, and reject before allocating the band that
-  // exceeds it. The default remains 256 MiB; trusted large conversions can
+  // Give Open() the remaining budget for a stable input path and reject a band
+  // that exceeds it. A path replaced between metadata and pixel opens can
+  // briefly allocate against stale layout information before the post-open
+  // layout check rejects it; same-handle preflight is follow-up work.
+  // The default remains 256 MiB; trusted large conversions can
   // deliberately raise the shared budget with ICCDEV_TIFF_MAX_DECODE_MIB.
   unsigned int maxInputTileBandBytes = 0;
   if (!CTiffImg::GetDefaultDecodeBufferLimit(maxInputTileBandBytes)) {
@@ -735,8 +748,8 @@ int main(int argc, char* argv[]) {
 
     // Select the requested main IFD directly, then inventory the bounded main
     // chain. A valid later IFD must not depend on IFD 0 passing this helper's
-    // metadata requirements. The output has one IFD, so no pyramid level or
-    // associated image is copied.
+    // metadata requirements. The output has one IFD, so other pyramid levels
+    // or associated images are not copied.
     CTiffImg metadata;
     if (!metadata.Open(filename.c_str(), true, inputIfd)) {
       fprintf(stderr, "Cannot open input %s at main IFD %u (missing or invalid metadata)\n",

@@ -37,6 +37,12 @@ Inject an ICC profile into a separate JPEG:
 iccJpegDump image.jpg --write-icc profile.icc --output tagged.jpg
 ```
 
+Injection removes existing `ICC_PROFILE` APP2 chunks before writing the new
+profile. Other JPEG markers and the compressed image data remain in order.
+`--version` reports the linked IccProfLib build version; the tool parses JPEG
+markers directly and does not link libjpeg. `--help` places the version above
+the usage text.
+
 The focused regression runs on Windows and Unix:
 
 ```sh
@@ -48,3 +54,4 @@ python .github/scripts/test_jpegdump_inspection.py --tool /path/to/iccJpegDump
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
 - [IccPngDump](../IccPngDump/Readme.md)
 - [IccTiffDump](../IccTiffDump/Readme.md)
+- [Image-tool QA review](../../../docs/analysis/image-tool-tiff-qa-2026-11-01.md)

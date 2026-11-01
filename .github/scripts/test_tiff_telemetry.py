@@ -65,7 +65,9 @@ def main():
         version_text = run(tool, "--version").stdout
         if tool == args.specsep:
             icc_version = help_text.split(b"IccProfLib version ", 1)[1].splitlines()[0]
-            assert version_text.startswith(tool_name + b" " + icc_version + b"\n")
+            # Windows CRT text output uses CRLF; compare the complete line.
+            expected = tool_name + b" " + icc_version
+            assert version_text.splitlines()[0] == expected, (version_text, expected)
         else:
             assert version_text.startswith(tool_name + b" IccProfLib=")
         assert b"libtiff: LIBTIFF, Version " in version_text.splitlines()[1]

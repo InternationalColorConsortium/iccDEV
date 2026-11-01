@@ -1,0 +1,39 @@
+digraph tiffdump_lane {
+  graph [rankdir=TB, bgcolor="transparent", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica", color="#60758c", fontcolor="#45566a"];
+
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  help [label="bare or --help\nusage, exit 0", fillcolor="#d9ead3"];
+  version [label="--version alone\nversions, exit 0", fillcolor="#d9ead3"];
+  options [label="parse --evidence-json, --ifd N,\n--list-directories, telemetry"];
+  positional [label="rebuild positional argv\nargc = 2 or 3"];
+  listing [label="--list-directories\nbounded main-chain inventory"];
+  inspection [label="--ifd N or default 0\nopen one metadata IFD"];
+  listed [label="plain/JSON inventory\nSubIFD offsets only", fillcolor="#d9ead3"];
+  report [label="plain metadata report\nno pixel decode"];
+  icc [label="inspect embedded ICC tag"];
+  extract [label="optional raw ICC extraction\natomic rename before parsing"];
+  profile [label="parse, read tags, validate\nembedded ICC profile"];
+  evidence [label="optional evidence JSON\nafter validation; close", fillcolor="#d9ead3"];
+  reject [label="nonzero failure\ninvalid CLI, missing ICC, or profile error", fillcolor="#f4cccc"];
+
+  entry -> help [label="bare"];
+  entry -> version [label="version alone"];
+  entry -> options -> positional;
+  options -> help [label="--help anywhere"];
+  positional -> listing [label="listing + one input"];
+  listing -> listed;
+  positional -> inspection [label="single IFD"];
+  inspection -> report [label="plain mode"];
+  inspection -> icc [label="JSON mode"];
+  report -> icc;
+  icc -> evidence [label="no ICC, no export"];
+  icc -> extract [label="ICC + export path"];
+  icc -> profile [label="ICC, no export"];
+  extract -> profile;
+  profile -> evidence;
+  icc -> reject [label="no ICC + export path"];
+  profile -> reject [label="invalid profile"];
+  positional -> reject [label="invalid shape"];
+}

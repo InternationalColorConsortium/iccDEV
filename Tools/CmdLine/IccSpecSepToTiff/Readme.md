@@ -9,14 +9,15 @@ profile whose channel model matches the generated TIFF.
 
 ## Usage
 
-Use `-h` or `--help` for the command syntax and `--version` for the build
-version. Both exit with status 0 and print to standard output. Running without
+Use `-h` or `--help` for the command syntax and `--version` for the build and
+linked libtiff runtime version. Both exit with status 0 and print to standard output. Running without
 arguments, or with an incomplete or over-long command, names the problem and
 prints the syntax to standard error, then exits with status 255. A conversion is
-`argc=8` without a profile or `argc=9` with one:
+the normalized `argc=8` without a profile or `argc=9` with one:
 
-Optional `--ifd N`, `--tiles WIDTH HEIGHT`, and `--bigtiff` switches are removed before
-the positional arguments below are parsed. Tile dimensions must be positive
+Optional `--ifd N`, `--tiles WIDTH HEIGHT`, and `--bigtiff` switches are removed
+from any argument position before the positional arguments below are parsed.
+Tile dimensions must be positive
 multiples of 16. Without these switches, output stays classic stripped TIFF.
 `--ifd` takes a zero-based main-chain index from 0 through 4095 and selects
 that same directory in every separation input; the default is 0. It may appear
@@ -61,7 +62,9 @@ The command fails before creating output when these checks fail. This prevents
 TIFF files from carrying mislabeled `ICC Profile` tag data or profiles that
 cannot describe the image samples. Diagnostics for every rejection go to
 standard error; the accepted-profile line and the conversion summary go to
-standard output. Every error path exits with status 255.
+standard output. Most legacy conversion failures exit with status 255; mixed
+help/version requests and unknown long options now fail with status 1. Exit
+status normalization remains planned.
 
 ```sh
 iccSpecSepToTiff --help
@@ -85,9 +88,11 @@ single-channel TIFF inputs.
   supports 8-bit unsigned, 16-bit unsigned, and 32-bit float samples. Interleaved
   and separated output preserve every spectral sample; edge-tile padding is zero.
   All concurrently open tiled inputs share a 256 MiB tile-band budget by
-  default. The next input is rejected before its tile band is allocated if it
-  would exceed the remaining budget. The output tile band has a separate budget
-  with the same default; row and stripped-input buffers are outside these
+  default. For a stable input path, the next input is rejected before its tile
+  band is allocated if it would exceed the remaining budget. If a path changes
+  between metadata and pixel opens, the post-open layout check rejects the
+  changed input, but transient allocation may occur first. The output tile band
+  has a separate budget with the same default; row and stripped-input buffers are outside these
   tile-band limits. Set `ICCDEV_TIFF_MAX_DECODE_MIB` to an integer from 1 through
   4095 to opt a trusted large conversion into a larger shared-input and
   per-output budget. These are not total-process memory guarantees or limits on

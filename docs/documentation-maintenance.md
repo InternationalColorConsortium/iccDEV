@@ -19,6 +19,7 @@ point to deeper references.
 | MATLAB IccJSON conversion, PAWG Q1 runtime, native contract, and release support files | `docs/matlab-bindings.md`, `docs/iccjson.md`, and `.github/skills/matlab-bindings-test/SKILL.md` |
 | CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
+| Apply tool and TIFF pipeline diagrams | `docs/iccapply/README.md`, `docs/iccapply/tiff-processing-pipeline.dox`, `docs/iccapply/diagrams/*.dot`, and `docs/tiff/` |
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
 | IccConnect library and `CIccConnectCmm` factory | `docs/icc-connect.md` |

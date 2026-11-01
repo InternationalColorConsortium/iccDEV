@@ -1,0 +1,23 @@
+digraph tiff_pipeline {
+  graph [rankdir=TB, bgcolor="transparent", fontname="Helvetica", nodesep=0.45];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
+  edge [fontname="Helvetica", color="#60758c", fontcolor="#45566a"];
+
+  source [label="TIFF input(s)\nmain IFD chain + optional SubIFDs", fillcolor="#fff2cc"];
+  select [label="select main IFD\n0 default; --ifd N\nApply JSON srcIfd"];
+  inventory [label="bounded main-chain inventory\nselected SubIFD reference count"];
+  omitted [label="other IFDs/SubIFDs\nreported, not copied", fillcolor="#fce5cd"];
+
+  dump [label="iccTiffDump metadata only\n--ifd N: one directory\n--list-directories: bounded inventory", fillcolor="#d9ead3"];
+  dump_result [label="report / JSON / optional ICC\nno pixel validation", fillcolor="#d9ead3"];
+  apply [label="iccApplyProfiles\ndecode selected pixels\nforward or search CMM"];
+  specsep [label="iccSpecSepToTiff\ndecode selected grayscale IFD\nfrom each numbered input"];
+  apply_output [label="one transformed TIFF IFD", fillcolor="#d9ead3"];
+  specsep_output [label="one spectral TIFF IFD", fillcolor="#d9ead3"];
+
+  source -> dump -> dump_result;
+  source -> select -> inventory;
+  inventory -> omitted [style=dashed, label="warn / count"];
+  inventory -> apply -> apply_output;
+  inventory -> specsep -> specsep_output;
+}

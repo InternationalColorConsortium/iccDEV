@@ -102,7 +102,10 @@ public:
 
 	std::string m_srcImgFile;
 	std::string m_dstImgFile;
+  /// Zero-based main-chain TIFF IFD, 0..4095; defaults to 0. SubIFDs are separate.
   unsigned int m_srcIfd;
+  /// True when JSON or CLI explicitly selected an IFD, including IFD 0.
+  /// Preserves explicit zero through toJson() and supplies receipt provenance.
   bool m_srcIfdSpecified;
 	icFloatColorEncoding m_dstEncoding;
 	icDstBool m_dstCompression;
