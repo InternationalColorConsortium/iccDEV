@@ -6,7 +6,7 @@ color profiles. Start with the guides, or choose a reference area below. The
 Namespaces, Classes, and Files tabs provide source-level API indexes.
 
 - \ref curateddocumentation "Get started" - install, use, and build iccDEV.
-- \ref curatedlibraries "Libraries" - C++, JSON, and C API guides.
+- \ref curatedlibraries "Libraries" - four public C++ libraries and their API guides.
 - \ref curatedtools "Tools" - command-line guides and processing diagrams.
 - \ref curatedexamples "Examples" - sample applications.
 - \ref curatedmaintainerqa "Maintainer QA" - workflows, test guides, and reports.
@@ -23,12 +23,60 @@ Namespaces, Classes, and Files tabs provide source-level API indexes.
 /**
 \page curatedlibraries Libraries
 
+Choose a library to find its public headers and related guides. These are the
+four exported C++ libraries; the names in parentheses are their CMake targets.
+`IccXML2` requires `ENABLE_ICCXML`; `IccJSON2` and `IccConnect2` require
+`ENABLE_ICCJSON`.
+
+- \subpage curatedproflib "IccProfLib (IccProfLib2)"
+- \subpage curatedxmllib "IccXML / IccLibXML (IccXML2)"
+- \subpage curatedjsonlib "IccJSON / IccLibJSON (IccJSON2)"
+- \subpage curatedconnectlib "IccConnect / IccLibConnect (IccConnect2)"
+*/
+
+/**
+\page curatedproflib IccProfLib
+
+The core library reads, writes, applies, and validates ICC.1 and ICC.2/iccMAX
+profiles. Link the `IccProfLib2` target. Start with the \ref IccProfile.h
+"profile API", \ref IccCmm.h "color-management API", and \ref IccTag.h
+"tag API".
+
 - \subpage md_docs_2c-api-validation "C validation API"
-- \subpage md_docs_2icc-cmm-threading "CIccThreadedCmm"
-- \subpage md_docs_2icc-connect "IccConnect library"
-- \subpage md_docs_2iccjson "IccJSON guide"
-- \subpage md_docs_2iccjson-tag-types "ICC JSON tag reference"
+- \subpage md_docs_2icc-cmm-threading "Parallel CMM apply"
 - \subpage md_docs_2pcs-adjustment-placement "PCS adjustment placement"
+*/
+
+/**
+\page curatedxmllib IccXML / IccLibXML
+
+The XML library converts profiles and their tags to and from XML. Link the
+`IccXML2` target. See \ref IccProfileXml.h "profile XML",
+\ref IccTagXml.h "tag XML", and \ref IccMpeXml.h "multi-process element XML"
+for the source-level API. The \ref md_IccXML_2CmdLine_2IccToXml_2Readme
+"iccToXml" and \ref md_IccXML_2CmdLine_2IccFromXml_2Readme "iccFromXml"
+guides cover the command-line tools.
+*/
+
+/**
+\page curatedjsonlib IccJSON / IccLibJSON
+
+The JSON library converts profiles and their tags to and from JSON. Link the
+`IccJSON2` target. See \ref IccProfileJson.h "profile JSON" and
+\ref IccTagJson.h "tag JSON" for the source-level API.
+
+- \subpage md_docs_2iccjson "Working with ICC profiles using IccJSON"
+- \subpage md_docs_2iccjson-tag-types "ICC JSON tag types"
+*/
+
+/**
+\page curatedconnectlib IccConnect / IccLibConnect
+
+The Connect library constructs initialized CMMs from JSON-driven
+configuration. Link the `IccConnect2` target. See \ref IccConnect.h
+"CMM factory" and \ref IccCmmConfig.h "configuration API".
+
+- \subpage md_docs_2icc-connect "IccConnect library guide"
 */
 
 /**

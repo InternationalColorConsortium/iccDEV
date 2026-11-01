@@ -25,6 +25,7 @@ when `ENABLE_ICCJSON=ON`, and follows the same `ENABLE_SHARED_LIBS` /
 `ENABLE_STATIC_LIBS` options used by `IccProfLib`. It depends on:
 
 - `IccProfLib2` (or `IccProfLib2-static`)
+- `IccJSON2` (or `IccJSON2-static`)
 - `nlohmann_json::nlohmann_json`
 
 Public headers are installed under
