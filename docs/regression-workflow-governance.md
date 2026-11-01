@@ -34,9 +34,9 @@ new blocker returns the branch to branch-only grooming before another review.
    head SHAs and run IDs in the readiness evidence.
 
 The comprehensive matrix still follows each workflow's declared scope: for
-example, `ci-infrastructure` CTests require their own explicit selection. Keep
-the appropriate specialized security, sanitizer, and packaging gates in the
-screening record when their contracts apply.
+example, `ci-infrastructure` CTests require direct selection or a dedicated
+workflow. Keep the appropriate specialized security, sanitizer, and packaging
+gates in the screening record when their contracts apply.
 
 ## Canonical Locations
 
@@ -94,8 +94,8 @@ selected or when MCP package, Dockerfile, or MCP workflow files change. It
 checks out the exact PR head selected by the caller and contributes to the
 protected `PR Summary` result. Its `mcp-server-` concurrency group is distinct
 from the caller's `ci-pr-` group, so a called job cannot cancel its caller.
-The reusable tool suite passes `instrumentation=core` and excludes
-`ci-infrastructure` CTests.
+The reusable tool suite passes `instrumentation=core` and always excludes
+`ci-infrastructure` and `clusterfuzzlite` CTests.
 Its fast mode runs a fixed core smoke selection plus the requested recent
 registrations; the recent limit is registration order, not change impact.
 Full mode checks the image's spectral-preview Python package pins and decoder

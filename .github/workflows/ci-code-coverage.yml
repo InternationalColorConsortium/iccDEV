@@ -61,7 +61,9 @@ jobs:
           unset GITHUB_TOKEN || true
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
+          bash .github/scripts/ci-ensure-llvm-22.sh \
+            clang-22 llvm-22 libclang-rt-22-dev
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             clang-22 \
@@ -367,7 +369,7 @@ jobs:
 
           ctest_json="coverage-report/ctest/ctest-tests.json"
           ctest_log="coverage-report/ctest/ctest-output.txt"
-          ctest_junit="coverage-report/ctest/ctest-junit.xml"
+          ctest_junit="${WORKSPACE_DIR}/coverage-report/ctest/ctest-junit.xml"
           ctest_report="coverage-report/ctest/ctest-measurement.txt"
           ctest_large="coverage-report/ctest/large-profile-test.txt"
           ctest_filter="iccdev.hybrid-pipeline"
@@ -933,7 +935,7 @@ jobs:
             printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
             printf '%s\n' '<title>iccDEV Coverage Developer Report</title>'
             printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
-            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%;'
             printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
             printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
             printf '%s\n' 'padding:.1rem .25rem}</style>'

@@ -180,7 +180,7 @@ jobs:
             --label-exclude 'known-red|clusterfuzzlite' `
             --output-on-failure `
             --no-tests=error `
-            --output-junit "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
+            --output-junit "Testing\ci\ctest-results.xml"
           if ($LASTEXITCODE -ne 0) {
             throw "CTest execution failed with exit code $LASTEXITCODE"
           }

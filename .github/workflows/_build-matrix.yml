@@ -108,7 +108,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
+          bash .github/scripts/ci-ensure-llvm-22.sh clang-22 libclang-rt-22-dev
           sudo apt-get install -y --no-install-recommends \
             cmake clang-22 libclang-rt-22-dev \
             libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev
@@ -165,7 +166,12 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
+          llvm_packages=(clang-22)
+          if [ "$MATRIX_NAME" = coverage ]; then
+            llvm_packages+=(libclang-rt-22-dev)
+          fi
+          bash .github/scripts/ci-ensure-llvm-22.sh "${llvm_packages[@]}"
           packages=(binutils cmake clang-22 libjpeg-dev libpng-dev libtiff-dev libxml2-dev nlohmann-json3-dev)
           if [ "$MATRIX_NAME" = coverage ]; then
             packages+=(libclang-rt-22-dev)

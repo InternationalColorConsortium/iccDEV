@@ -14720,9 +14720,8 @@ set_tests_properties(iccdev.issue-1982-dual-pcs-selection-regression PROPERTIES
   SKIP_RETURN_CODE 77
 )
 
-# CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
-# the original master heap-buffer-overflow replay with extra signature/register
-# logging and now expects the NaN range to fail closed before CMM/LUT generation.
+# The NaN range regression rejects invalid input before iccApplyToLink loads
+# the SixChanInputRef profile or enters CMM/LUT generation.
 # Keep it out of Release CTest discovery, including the comprehensive gate.
 # Single-config CTest does not pass -C, so configure it unconditionally only
 # in Debug trees; multi-config generators use add_test(CONFIGURATIONS Debug).
@@ -14738,6 +14737,10 @@ if(ICCDEV_IS_MULTI_CONFIG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
     ${_iccdev_debug_script_config_args}
+  )
+  # Report unavailable tools and non-ASan Debug builds as skips, not passes.
+  set_tests_properties(iccdev.applytolink-nan-sixchan-debug PROPERTIES
+    SKIP_RETURN_CODE 77
   )
 endif()
 

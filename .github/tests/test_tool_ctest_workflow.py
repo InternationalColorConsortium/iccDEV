@@ -75,6 +75,15 @@ def test_fast_mode_omits_slow_spectral_setup_and_adds_smoke_tests():
     assert "ICCDEV_SPECTRAL_PREVIEW_PYTHON" not in ctest.get("env", {})
 
 
+def test_developer_report_copies_junit_from_ctest_build_dir():
+    ctest_run = tool_step("Run CTest tool suites")["run"]
+    report_run = tool_step("Package developer report")["run"]
+
+    assert '--test-dir "${BUILD_DIR}"' in ctest_run
+    assert '--output-junit "ctest-results.xml"' in ctest_run
+    assert 'copy_file_if_present "${BUILD_DIR}/ctest-results.xml"' in report_run
+
+
 def test_image_reuse_keeps_pinned_requirements_and_brotli_checks():
     run = tool_step("Install spectral preview Python dependencies")["run"]
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="ascii")

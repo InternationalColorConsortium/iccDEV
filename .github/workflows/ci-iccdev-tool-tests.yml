@@ -597,7 +597,7 @@ jobs:
           ctest_args=(
             --test-dir "${BUILD_DIR}" \
             --parallel "$(nproc)" \
-            --output-junit "${BUILD_DIR}/ctest-results.xml" \
+            --output-junit "ctest-results.xml" \
             --selection-output "${BUILD_DIR}/recent-ctests.txt"
           )
           case "$CTEST_RECENT_LIMIT" in
@@ -835,10 +835,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit build/ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -859,8 +859,6 @@ jobs:
           qa_summary="${qa_dir}/summary.tsv"
           registry_qa_dir="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
           registry_qa_summary="${registry_qa_dir}/summary.md"
-          applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
-          applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev:${REGRESSION_IMAGE_TAG}"
           case "$INSTRUMENTATION" in
             core)
@@ -953,17 +951,6 @@ jobs:
                 sanitize_code_line "$line"
                 echo ""
               done <"$qa_evidence"
-              echo '```'
-            fi
-            if [ -f "$applytolink_stack_report" ]; then
-              echo ""
-              echo "## iccApplyToLink NaN/SixChanInputRef Diagnostic Replay"
-              echo ""
-              echo '```text'
-              sed -n '1,90p' "$applytolink_stack_report" | while IFS= read -r line; do
-                sanitize_code_line "$line"
-                echo ""
-              done
               echo '```'
             fi
             if [ -f "$registry_qa_summary" ]; then
@@ -1074,9 +1061,6 @@ jobs:
             "${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags" \
             "${data_dir}/iccdev-qa-target-flags"
           copy_dir_if_present \
-            "${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug" \
-            "${data_dir}/iccdev-applytolink-nan-sixchan-debug"
-          copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
             "${data_dir}/tool-flamegraphs"
           copy_dir_if_present \
@@ -1101,7 +1085,7 @@ jobs:
             printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
             printf '%s\n' '<title>iccDEV Developer Report</title>'
             printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
-            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%;'
             printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
             printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
             printf '%s' 'padding:.1rem .25rem}.pass{color:#116329}.warn{color:#9a6700}'
@@ -1139,16 +1123,6 @@ jobs:
                   "$(escape_html "$notes")"
               done
               printf '</table>\n'
-            fi
-
-            applytolink_stack="${data_dir}/iccdev-applytolink-nan-sixchan-debug/stack-analysis.txt"
-            if [ -f "$applytolink_stack" ]; then
-              printf '<h2>iccApplyToLink NaN/SixChanInputRef Diagnostic Replay</h2>\n'
-              printf '<pre><code>'
-              sed -n '1,90p' "$applytolink_stack" | while IFS= read -r line; do
-                printf '%s\n' "$(escape_html "$line")"
-              done
-              printf '</code></pre>\n'
             fi
 
             printf '<h2>Included Data</h2><ul>\n'
@@ -1204,35 +1178,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           source .github/scripts/sanitize-sed.sh
           bash .github/scripts/ci-safe-apt-update.sh
-          missing_llvm=0
-          for llvm_package in clang-22 llvm-22; do
-            apt-cache show "$llvm_package" 2>/dev/null |
-              grep -Fx "Package: $llvm_package" >/dev/null || missing_llvm=1
-          done
-          if [ "$missing_llvm" -eq 1 ]; then
-            . /etc/os-release
-            if [ "$ID" != ubuntu ] || [[ ! "${VERSION_CODENAME:-}" =~ ^[a-z]+$ ]]; then
-              echo "Unsupported Ubuntu runner release for LLVM 22" >&2
-              exit 1
-            fi
-            llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
-            llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
-            curl --fail --location --silent --show-error \
-              https://apt.llvm.org/llvm-snapshot.gpg.key \
-              --output "$llvm_key"
-            gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
-            llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
-            if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
-              echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
-              exit 1
-            fi
-            gpg --dearmor --output "$llvm_keyring" "$llvm_key"
-            sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
-            printf 'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/%s/ llvm-toolchain-%s-22 main\n' \
-              "$VERSION_CODENAME" "$VERSION_CODENAME" |
-              sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
-            bash .github/scripts/ci-safe-apt-update.sh
-          fi
+          bash .github/scripts/ci-ensure-llvm-22.sh clang-22 llvm-22
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
             clang-22 llvm-22 \

@@ -210,39 +210,20 @@ jobs:
           unset GITHUB_TOKEN || true
           git config --add safe.directory "$PWD"
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
+          # Runner package lists may be empty; refresh before probing versions.
+          bash .github/scripts/ci-safe-apt-update.sh
           case "$MATRIX_COMPILER" in
             gcc-15)
               if ! apt-cache show gcc-15 2>/dev/null | grep -Fx 'Package: gcc-15' >/dev/null; then
                 sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+                bash .github/scripts/ci-safe-apt-update.sh
               fi
               ;;
             clang-22)
-              if ! apt-cache show clang-22 2>/dev/null | grep -Fx 'Package: clang-22' >/dev/null; then
-                . /etc/os-release
-                if [ "$VERSION_CODENAME" != noble ]; then
-                  echo "clang-22 is unavailable for Ubuntu $VERSION_CODENAME" >&2
-                  exit 1
-                fi
-                llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
-                llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
-                curl --fail --location --silent --show-error \
-                  https://apt.llvm.org/llvm-snapshot.gpg.key \
-                  --output "$llvm_key"
-                gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
-                llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
-                if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
-                  echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
-                  exit 1
-                fi
-                gpg --dearmor --output "$llvm_keyring" "$llvm_key"
-                sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
-                printf '%s\n' \
-                  'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
-                  sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
-              fi
+              bash .github/scripts/ci-ensure-llvm-22.sh \
+                clang-22 clang-tools-22 llvm-22
               ;;
           esac
-          bash .github/scripts/ci-safe-apt-update.sh
           packages=(
             build-essential cmake \
             libpng-dev libxml2-dev libtiff-dev \

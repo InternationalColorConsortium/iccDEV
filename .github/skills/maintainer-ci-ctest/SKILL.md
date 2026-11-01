@@ -90,7 +90,8 @@ when practical.
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, non-sanitized GCC core tool tests, profile builds,
   a representative CTest corpus, and Windows.
-  Its tool-test caller excludes `pr-extended` and `ci-infrastructure` CTests.
+  Its tool-test caller excludes `pr-extended` CTests; the reusable tool
+  workflow always excludes `ci-infrastructure` and `clusterfuzzlite` CTests.
   It does not replace exhaustive pre-PR screening or local preflight.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   and test changes; documentation-only changes use the constrained fast-lane

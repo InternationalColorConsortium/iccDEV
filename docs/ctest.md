@@ -9,9 +9,10 @@ CTest registers tests only for tools enabled by the selected CMake options.
 With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
 runtime-configuration tool regressions are omitted; the legacy script test runs
 with JSON round-trip enforcement disabled.
-The `iccdev.applytolink-nan-sixchan-debug` sanitizer diagnostic registers only
+The `iccdev.applytolink-nan-sixchan-debug` NaN range regression registers only
 for Debug, including when CTest selects a configuration from a multi-config
-generator. Release discovery omits it.
+generator. It reports a skip when the tool or AddressSanitizer is unavailable;
+Release discovery omits it.
 
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.
@@ -386,12 +387,11 @@ full CTest or the hybrid gate explicitly when the slow and calculator suites
 are in scope. The hybrid aggregate reserves up to four CTest processor slots:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
-The normal `ci-pr-action` full lane excludes the `pr-extended` and
-`ci-infrastructure` labels to keep core PR results deterministic. Label
-membership defines the deferred tests; all other slow tests remain in the PR
-lane. The separate sanitizer workflow also excludes infrastructure by default.
-Manual `ci-regression-checks` dispatch can include infrastructure tests
-explicitly. Run any deferred test directly when the change affects it.
+The `ci-pr-action` tool gate excludes `pr-extended` and `ci-infrastructure`
+CTests. All broad normal CI and PR CTest sweeps exclude `clusterfuzzlite`;
+other slow tests remain in the full mode. The manual `ci-regression-checks`
+workflow uses the same tool gate and has no infrastructure opt-in. Run any
+deferred test directly when the change affects it.
 
 ### Elapsed-time review (2026-10-30)
 

@@ -438,7 +438,7 @@ jobs:
             --parallel "$(nproc)" \
             --output-on-failure \
             --no-tests=error \
-            --output-junit Build/build-json/json-focused-ctest-results.xml \
+            --output-junit json-focused-ctest-results.xml \
             -R 'iccdev\.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'
 
           {
