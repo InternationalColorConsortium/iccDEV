@@ -1112,7 +1112,9 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string &parseStr)
         parseStr += "namedColor2 deviceCoords must be an array\n";
         return false;
       }
-      const icUInt32Number nJsonCoords = bHasCoords ? (icUInt32Number)c["deviceCoords"].size() : 0;
+      // Compare the full size_t.  Cast to 32 bits, an array 2^32 entries
+      // longer than countOfDeviceCoords would have matched.
+      const size_t nJsonCoords = bHasCoords ? c["deviceCoords"].size() : 0;
       if ((nDevCoords || bHasCoords) && nJsonCoords != nDevCoords) {
         parseStr += "namedColor2 deviceCoords count differs from countOfDeviceCoords\n";
         return false;
