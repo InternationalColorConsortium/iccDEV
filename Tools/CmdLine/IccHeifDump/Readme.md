@@ -70,7 +70,7 @@ python3 .github/scripts/test_heif_output_safety.py \
   --corpus .github/ci/test-data/heif
 ```
 
-The <a href="../../../.github/ci/test-data/heif/Readme.md">native HEIF fixtures</a>
+The <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/ci/test-data/heif/Readme.md">native HEIF fixtures</a>
 also cover no-ICC and malformed-input behavior in the Python and MATLAB CLI
 tests and staged release bundles.
 

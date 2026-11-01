@@ -41,7 +41,7 @@ in the install documentation tree and are denied by the website.
 
 - [IIS setup and deployment](isapi-instructions.md)
 - [HTTP and native API reference](api.md)
-- [OpenAPI starter spec](iis-isapi.openapi.yaml)
+- \ref iis-isapi.openapi.yaml "OpenAPI starter spec"
 
 ## Local Smoke Test
 

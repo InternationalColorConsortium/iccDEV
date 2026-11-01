@@ -59,7 +59,7 @@ iccApplySearch --telemetry=jsonl --telemetry-file search.jsonl \
 
 ## Search Cost and Metamerism Index
 
-The underlying [`CIccCmmSearch`](../../../IccProfLib/IccCmmSearch.h) class
+The underlying \ref IccCmmSearch.h "CIccCmmSearch" class
 exposes a `GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel)`
 method that returns the residual cost of an inverse-search apply. The cost
 is the weighted average of color differences between the target appearance

@@ -1,0 +1,15 @@
+/**
+\class NSObject
+\brief External Apple Foundation base class used by the iOS examples.
+
+This type is supplied by the Apple SDK, not iccDEV. See the
+<a href="https://developer.apple.com/documentation/objectivec/nsobject-swift.class?language=objc">Apple NSObject reference</a>.
+*/
+
+/**
+\class UIViewController
+\brief External Apple UIKit controller base class used by the iOS examples.
+
+This type is supplied by the Apple SDK, not iccDEV. See the
+<a href="https://developer.apple.com/documentation/uikit/uiviewcontroller">Apple UIViewController reference</a>.
+*/

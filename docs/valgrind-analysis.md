@@ -6,7 +6,7 @@ separate non-sanitized Debug build. Never wrap the sanitizer-instrumented
 binaries shipped in the unified image.
 
 The executable component lives in
-<a href="../.github/ci/valgrind/README.md">`.github/ci/valgrind/`</a>.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/ci/valgrind/README.md">`.github/ci/valgrind/`</a>.
 It records stdout, stderr, analyzer logs, generated files, and `summary.tsv`
 under the ignored `out/valgrind-evidence/` directory.
 
@@ -119,7 +119,7 @@ The command requires zero DRD and Helgrind errors and byte-identical generated
 TIFFs. Choose fresh build and evidence paths when retaining multiple runs.
 
 The historical
-<a href="../.github/scripts/iccdev-valgrind-qa.sh">`iccdev-valgrind-qa.sh`</a>
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/scripts/iccdev-valgrind-qa.sh">`iccdev-valgrind-qa.sh`</a>
 continues to provide the focused before/after expectation contract for the
 `GetNewApplyCmm()` race. Use the registered component for broad tool-path
 analysis and the historical helper for that exact regression.

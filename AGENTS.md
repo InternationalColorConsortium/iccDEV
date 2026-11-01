@@ -13,9 +13,11 @@ shares one source of truth. Update rules here, not in the mirrors.
 
 - Check `git --no-pager status --short --branch` before edits.
 - Prefer focused changes with exact repros and regression coverage.
-- Keep documentation links Doxygen-safe: if a Markdown link points outside the
-  Doxygen INPUT tree, use an explicit HTML anchor instead of a Markdown reference
-  so generated docs stay warning-free. Before handing off documentation changes,
+- Keep documentation links Doxygen-safe: use relative Markdown links for
+  generated Markdown pages and `\ref` for generated source files. Use absolute
+  GitHub HTML anchors for repo-only resources; relative HTML anchors can break
+  in the packaged site even when Doxygen emits no warning. Before handing off
+  documentation changes,
   run the bounded graph-light Doxygen check in
   `docs/documentation-maintenance.md` and require an empty
   `docs/generated/doxygen-warnings.log`. Time is valuable: reserve full graph

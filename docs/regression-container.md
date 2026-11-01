@@ -473,7 +473,7 @@ dependencies over time.
 Dockerfile, and configuration SAST checks, including actionlint, yamllint,
 zizmor, ShellCheck, hadolint, and Trivy configuration scanning. For
 component-partitioned cppcheck and clang-tidy reports, use the exact
-[maintainer static-analysis reproduction](build.md#maintainer-static-analysis).
+maintainer static-analysis reproduction in \ref md_docs_2build "the build guide".
 Path-scoped Trivy exceptions belong in `.trivyignore.yaml` with a concrete
 statement. Keep build-only image exceptions separate from the unified runtime
 image, and treat changes to the exception file as maintainer-owned container

@@ -27,10 +27,10 @@ documentation for accuracy.
    `repo\msvc` build root, MATLAB `setenv`, real `Testing/...` smoke profiles,
    and the PAWG tool, native contract target, and staged support-file list.
 5. Replace repeated detail with links to canonical sources.
-6. Keep Doxygen-friendly links within the scanned INPUT tree; for repo-root or
-   example links that do not exist under Doxygen's configured input, use an
-   explicit HTML anchor (`<a href="...">...</a>`) instead of a Markdown link that
-   triggers warning-only docs failures.
+6. Keep Doxygen-friendly links within the scanned INPUT tree. Use relative
+   Markdown links for generated Markdown pages and `\ref` for generated source
+   files. For repo-only resources outside the package, use an absolute GitHub
+   HTML anchor; relative HTML anchors can silently break in the packaged site.
 7. Delete duplicate files only after moving unique content elsewhere.
 8. Run whitespace, local-link, ASCII, line-ending, and stale-reference checks.
    Run the bounded graph-light Doxygen check in

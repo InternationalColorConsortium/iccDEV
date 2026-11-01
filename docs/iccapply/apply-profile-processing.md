@@ -97,7 +97,7 @@ profile chain and record DeltaE2000 and channel-error baselines for the
 fixture, profile, intent, and encoding.
 
 The checked-in smoke manifest is
-<a href="../../.github/ci/quality-assurance/manifests/iccApplyProfiles-smoke-matrix.json">iccApplyProfiles-smoke-matrix.json</a>.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/ci/quality-assurance/manifests/iccApplyProfiles-smoke-matrix.json">iccApplyProfiles-smoke-matrix.json</a>.
 Run it through `iccApplyProfiles-matrix.sh`; each invocation writes
 `results.jsonl` plus `summary.json` and preserves row-specific logs, telemetry,
 receipts, profile assessments, TIFF dumps, and output artifacts under the
@@ -107,6 +107,6 @@ handling without adding a second binary TIFF fixture.
 
 ## See also
 
-- <a href="../../Tools/CmdLine/IccApplyProfiles/Readme.md">iccApplyProfiles command reference</a>
-- <a href="../../.github/ci/quality-assurance/README.md">Apply tool QA drivers</a>
+- [iccApplyProfiles command reference](../../Tools/CmdLine/IccApplyProfiles/Readme.md)
+- <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/ci/quality-assurance/README.md">Apply tool QA drivers</a>
 - [CLI tool reference](../tools-cli-reference.md)

@@ -2,65 +2,152 @@
 \mainpage iccDEV Documentation
 
 iccDEV provides C++ libraries and command-line tools for ICC.1 and ICC.2/iccMAX
-color profiles. Use the curated sections below to navigate the public release
-documentation; source-level API indexes remain available through the navigation
-tabs.
+color profiles. Start with the guides, or choose a reference area below. The
+Namespaces, Classes, and Files tabs provide source-level API indexes.
 
-\subpage curateddocumentation "Documentation and Reports"
-\subpage curatedlibraries "Libraries"
-\subpage curatedtools "Tools"
-\subpage curatedmaintainerqa "Maintainer QA and Reports"
+- \ref curateddocumentation "Get started" - install, use, and build iccDEV.
+- \ref curatedlibraries "Libraries" - C++, JSON, and C API guides.
+- \ref curatedtools "Tools" - command-line guides and processing diagrams.
+- \ref curatedexamples "Examples" - sample applications.
+- \ref curatedmaintainerqa "Maintainer QA" - workflows, test guides, and reports.
 */
 
 /**
-\page curateddocumentation Documentation and Reports
+\page curateddocumentation Get Started
 
-\subpage md_docs_2using-iccdev "Using iccDEV"
-\subpage md_docs_2install "Install"
-\subpage md_docs_2build "Build"
-\subpage md_docs_2bisect "Bisecting regressions"
-\subpage md_docs_2linear-stack-workflow "Linear stack workflow"
-\subpage md_docs_2pre-pr-security-cycle "Pre-PR security cycle"
-\subpage md_docs_2regression-container "Maintainer regression container"
-\subpage md_docs_2regression-workflow-governance "Regression workflow governance"
-\subpage md_docs_2workflow-security-trust-boundaries "Workflow security trust boundaries"
-\subpage md_docs_2codeql "CodeQL security analysis"
-\subpage md_docs_2documentation-maintenance "Documentation maintenance"
-\subpage md_docs_2label-system "Maintainer label system"
-\subpage md_docs_2label-inventory-audit "Label inventory audit"
-\subpage upstream-pr-readiness "Upstream pull request readiness"
+- \subpage md_docs_2using-iccdev "Using iccDEV"
+- \subpage md_docs_2install "Install"
+- \subpage md_docs_2build "Build"
 */
 
 /**
 \page curatedlibraries Libraries
 
-\subpage md_docs_2c-api-validation "C validation API"
-\subpage md_docs_2icc-cmm-threading "CIccThreadedCmm"
-\subpage md_docs_2icc-connect "IccConnect library"
-\subpage md_docs_2iccjson "IccJSON guide"
-\subpage md_docs_2iccjson-tag-types "ICC JSON tag reference"
-\subpage md_docs_2pcs-adjustment-placement "PCS adjustment placement"
+- \subpage md_docs_2c-api-validation "C validation API"
+- \subpage md_docs_2icc-cmm-threading "CIccThreadedCmm"
+- \subpage md_docs_2icc-connect "IccConnect library"
+- \subpage md_docs_2iccjson "IccJSON guide"
+- \subpage md_docs_2iccjson-tag-types "ICC JSON tag reference"
+- \subpage md_docs_2pcs-adjustment-placement "PCS adjustment placement"
 */
 
 /**
 \page curatedtools Tools
 
-\subpage md_docs_2tools-cli-reference "CLI tool reference"
-\subpage iccapply_overview "iccApply visual lanes"
-\subpage tiff_processing_pipeline "TIFF image processing pipeline"
-\subpage specsep_lane "SpecSepToTiff spectral separation lane"
-\subpage tiffdump_lane "TiffDump metadata inspection lane"
+- \subpage md_docs_2tools-cli-reference "CLI tool reference"
+- \subpage curatedapplytools "Apply and benchmark"
+- \subpage curatedprofiletools "Profile tools"
+- \subpage curatedimagetools "Image tools and TIFF processing"
+- \subpage curatedwindowstools "Windows tools"
 */
 
 /**
-\page curatedmaintainerqa Maintainer QA and Reports
+\page curatedapplytools Apply and Benchmark
 
-\subpage md_docs_2afl-fuzzing "AFL++ smoke fuzzing"
-\subpage md_docs_2maintainer-qa-scans "Maintainer QA scans"
-\subpage md_docs_2matlab-bindings "MATLAB bindings and QA"
-\subpage md_docs_2python-packaging-release "Python packaging release"
-\subpage md_docs_2avx2-clut-diagnostics "AVX2 CLUT diagnostics"
-\subpage md_docs_2avx2-clut-linux-performance "Linux CLUT profiling report"
-\subpage md_docs_2avx2-clut-windows-performance "Windows CLUT performance report"
-\subpage md_docs_2analysis_2image-tool-tiff-qa-2026-11-01 "Image-tool and TIFF QA review"
+- \subpage iccapply_overview "iccApply visual lanes"
+- \subpage md_Tools_2CmdLine_2IccApplyNamedCmm_2Readme "iccApplyNamedCmm"
+- \subpage md_Tools_2CmdLine_2IccApplyProfiles_2Readme "iccApplyProfiles"
+- \subpage md_Tools_2CmdLine_2IccApplySearch_2Readme "iccApplySearch"
+- \subpage md_Tools_2CmdLine_2IccApplyToLink_2Readme "iccApplyToLink"
+- \subpage md_Tools_2CmdLine_2IccBenchApply_2Readme "iccBenchApply"
+- \subpage namedcmm_lane "Named-color apply lane"
+- \subpage profiles_lane "TIFF profile apply lane"
+- \subpage search_lane "Search CMM lane"
+- \subpage tolink_lane "DeviceLink and Cube lane"
+*/
+
+/**
+\page curatedprofiletools Profile Tools
+
+- \subpage md_IccXML_2CmdLine_2IccFromXml_2Readme "iccFromXml"
+- \subpage md_IccXML_2CmdLine_2IccToXml_2Readme "iccToXml"
+- \subpage md_Tools_2CmdLine_2IccDumpProfile_2Readme "iccDumpProfile"
+- \subpage md_Tools_2CmdLine_2IccFromCube_2Readme "iccFromCube"
+- \subpage md_Tools_2CmdLine_2IccPawgReport_2Readme "iccPawgReport"
+- \subpage md_Tools_2CmdLine_2IccProfilePlot_2Readme "iccProfilePlot"
+- \subpage md_Tools_2CmdLine_2IccProfileVisualize_2Readme "iccProfileVisualize"
+- \subpage md_Tools_2CmdLine_2IccRoundTrip_2Readme "iccRoundTrip"
+- \subpage md_Tools_2CmdLine_2IccV5DspObsToV4Dsp_2Readme "iccV5DspObsToV4Dsp"
+*/
+
+/**
+\page curatedimagetools Image Tools and TIFF Processing
+
+- \subpage md_Tools_2CmdLine_2IccHeifDump_2Readme "iccHeifDump"
+- \subpage md_Tools_2CmdLine_2IccJpegDump_2Readme "iccJpegDump"
+- \subpage md_Tools_2CmdLine_2IccPngDump_2Readme "iccPngDump"
+- \subpage md_Tools_2CmdLine_2IccSpecSepToTiff_2Readme "iccSpecSepToTiff"
+- \subpage md_Tools_2CmdLine_2IccTiffDump_2Readme "iccTiffDump"
+- \subpage tiff_processing_pipeline "TIFF image processing pipeline"
+- \subpage specsep_lane "Spectral separation lane"
+- \subpage tiffdump_lane "TIFF metadata inspection lane"
+*/
+
+/**
+\page curatedwindowstools Windows Tools
+
+- \subpage md_Tools_2Winnt_2IccDEVCmm_2README "iccDEVCmm"
+- \subpage md_Tools_2Winnt_2IccIisIsapi_2Readme "iccIisIsapi"
+- \subpage md_Tools_2Winnt_2IccIisIsapi_2api "IIS ISAPI API reference"
+- \subpage md_Tools_2Winnt_2IccIisIsapi_2isapi-instructions "IIS ISAPI setup"
+*/
+
+/**
+\page curatedexamples Examples
+
+- \subpage md_examples_2ios-apply-preview_2README "iOS apply preview"
+- \subpage md_examples_2ios-clut-editor_2README "iOS CLUT editor"
+- \subpage md_examples_2ios-benchapply_2README "iOS apply benchmark"
+*/
+
+/**
+\page curatedmaintainerqa Maintainer QA
+
+- \subpage curatedmaintainerworkflows "Maintainer workflows"
+- \subpage curatedmaintainertesting "Test and validation guides"
+- \subpage curatedmaintainerreports "Analysis and issue reports"
+*/
+
+/**
+\page curatedmaintainerworkflows Maintainer Workflows
+
+- \subpage md_docs_2bisect "Bisecting regressions"
+- \subpage md_docs_2linear-stack-workflow "Linear stack workflow"
+- \subpage md_docs_2pre-pr-security-cycle "Pre-PR security cycle"
+- \subpage md_docs_2regression-container "Maintainer regression container"
+- \subpage md_docs_2regression-workflow-governance "Regression workflow governance"
+- \subpage md_docs_2workflow-security-trust-boundaries "Workflow security trust boundaries"
+- \subpage md_docs_2codeql "CodeQL security analysis"
+- \subpage md_docs_2documentation-maintenance "Documentation maintenance"
+- \subpage md_docs_2label-system "Maintainer label system"
+- \subpage md_docs_2label-inventory-audit "Label inventory audit"
+- \subpage upstream-pr-readiness "Upstream pull request readiness"
+*/
+
+/**
+\page curatedmaintainertesting Test and Validation Guides
+
+- \subpage md_docs_2afl-fuzzing "AFL++ smoke fuzzing"
+- \subpage md_docs_2maintainer-qa-scans "Maintainer QA scans"
+- \subpage md_docs_2matlab-bindings "MATLAB bindings and QA"
+- \subpage md_docs_2python-packaging-release "Python packaging release"
+- \subpage md_docs_2valgrind-analysis "Valgrind-family analysis"
+- \subpage md_docs_2xml-json-roundtrip-qa "XML and JSON round-trip QA"
+- \subpage md_docs_2xml-spec-qa "ICC.2 XML specification QA"
+- \subpage md_docs_2iccapply_2apply-profile-processing "ApplyProfiles processing QA"
+*/
+
+/**
+\page curatedmaintainerreports Analysis and Issue Reports
+
+- \subpage md_docs_2avx2-clut-diagnostics "AVX2 CLUT diagnostics"
+- \subpage md_docs_2avx2-clut-linux-performance "Linux CLUT profiling report"
+- \subpage md_docs_2avx2-clut-windows-performance "Windows CLUT performance report"
+- \subpage md_docs_2analysis_2image-tool-tiff-qa-2026-11-01 "Image-tool and TIFF QA review"
+- \subpage md_docs_2issue-2686-coverage-envelope "Issue 2686 coverage envelope"
+- \subpage md_docs_2issue-2687-msan-runtime "Issue 2687 MSan runtime report"
+- \subpage md_docs_2issue-2688-colorant-table-pcs "Issue 2688 colorant table reproduction"
+- \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2COMPRESSION__PATHS "PAWG compression paths"
+- \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2GOVERNANCE__SUBMISSIONS "PAWG governance submissions"
+- \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2PERMISSIVENESS__DELTAS "PAWG signature validator deltas"
 */

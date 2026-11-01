@@ -37,7 +37,7 @@ arguments and diagnostics.
 ## QA examples
 
 The checked-in QA scripts live in the source repository at
-<a href="../../.github/ci/quality-assurance/scripts/">.github/ci/quality-assurance/scripts/</a>.
+<a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/ci/quality-assurance/scripts">.github/ci/quality-assurance/scripts/</a>.
 For a cross-tool smoke run after
 building the hybrid fixtures:
 

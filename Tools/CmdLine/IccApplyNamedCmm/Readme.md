@@ -127,6 +127,6 @@ ICS look as though no tint had been supplied.
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
-- <a href="../../../Testing/README.md">Testing profiles</a>
+- <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Testing/README.md">Testing profiles</a>
 - [IccConnect library](../../../docs/icc-connect.md) — JSON-driven setup
   used by the `-cfg` form.

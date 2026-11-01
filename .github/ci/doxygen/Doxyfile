@@ -41,8 +41,12 @@ INPUT                  = IccProfLib \
                          examples/ios-benchapply/BenchApplyHost.mm \
                          examples/ios-benchapply/main.mm \
                          docs \
-                         .github/ci/doxygen/curated-navigation.dox
+                         .github/ci/doxygen/curated-navigation.dox \
+                         .github/ci/doxygen/apple-sdk-types.dox
 USE_MDFILE_AS_MAINPAGE =
+# Doxygen 1.13+ otherwise treats subdirectory README.md files as directory
+# descriptions, removing their Related Pages entries and curated \subpage links.
+IMPLICIT_DIR_DOCS      = NO
 FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.mm *.md *.dox *.dot *.sh *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \

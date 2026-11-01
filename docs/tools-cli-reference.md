@@ -286,7 +286,7 @@ NamedColor profile. JSON callers prefer the `transform` field values,
 which combine an output-side stem (`named` / `namedColorimetric` /
 `namedSpectral` / `namedDevice`) with an overprint suffix
 (`OnBlack` / `OnGray`, only meaningful on the spectral path) - see
-[`docs/icc-connect-config.schema.json`](icc-connect-config.schema.json)
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/icc-connect-config.schema.json">docs/icc-connect-config.schema.json</a>
 and <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Tools/CmdLine/IccApplyNamedCmm/Readme.md">Tools/CmdLine/IccApplyNamedCmm/Readme.md</a>.
 
 Tool-specific details remain in each `Tools/CmdLine/*/Readme.md` file.
