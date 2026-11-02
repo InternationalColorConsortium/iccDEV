@@ -196,6 +196,21 @@ temporary `X-GitHub-Stateless-S2S-Token: enabled` and `disabled` request-header
 paths described in GitHub's changelog, then remove the override header after
 both token formats are accepted end-to-end.
 
+## Action Pin Ownership
+
+Workflow files are the sole source of truth for exact GitHub Action commit
+SHAs. Tests and scripts must assert the expected action identity, a lowercase
+40-character commit-pin shape, relevant inputs, and any required equality
+between corresponding steps. Do not copy a workflow's current action SHA into
+a test, script, document, prompt, skill, or agent file.
+
+All workflow references to the same `owner/repository` action must use one SHA
+unless a maintainer records a narrowly scoped exception. Run
+`.github/scripts/check-workflow-action-pins.py` to validate pin shape,
+repository-wide parity, Docker action digests, and the absence of mirrored
+pins. Dependabot updates workflow dependency references; do not add privileged
+write-back automation to modify assertions on Dependabot branches.
+
 ## Automated Scanner
 
 `ci-pr-risk-security-analysis.yml` checks workflow governance, including action
