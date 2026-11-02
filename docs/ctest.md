@@ -438,9 +438,13 @@ arithmetic.
 
 `iccdev.xml-spec-qa` converts canonical ICC.2 spectral, bi-spectral, and MCS
 XML fixtures and pins exact header signatures, ranges, channel relationships,
-XML fidelity, malformed-input rejection, PAWG JSON generation, and the current
-`iccRoundTrip` class boundary. It is a Unix-like bash-backed full-tool test;
-see `docs/xml-spec-qa.md` for the specification matrix and interpretation.
+XML fidelity, required spectral CLUT white vectors, malformed-input rejection,
+PAWG JSON generation, and the current `iccRoundTrip` class boundary. It is a
+Unix-like bash-backed full-tool test; see `docs/xml-spec-qa.md` for the
+specification matrix and interpretation. The cross-platform
+`iccdev.spectral-clut-xml-channel-mismatch` executable independently drives
+both spectral CLUT readers and pins the same omitted-`WhiteData` contract at
+the library boundary.
 
 `iccdev.xml-json-roundtrip-qa` runs the Python 3.9+ corpus runner against one
 tracked valid display profile. It asserts clean validation, byte identity,

@@ -4078,9 +4078,11 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    // The white spectrum is serialized by CIccMpeSpectralCLUT::Write().
-    // Accepting its omission left this malloc()ed buffer uninitialized and
-    // made iccFromXml write those indeterminate bytes into the ICC profile.
+    // ICC.2:2023 11.2.4, Table 114 and Formula (12) require an S-element
+    // reference-white emission vector after the CLUT data. The spectrum is
+    // serialized by CIccMpeSpectralCLUT::Write(); accepting its omission left
+    // this malloc()ed buffer uninitialized and made iccFromXml write those
+    // indeterminate bytes into the ICC profile.
     parseStr += "Missing White Data\n";
     return false;
   }
@@ -4207,8 +4209,10 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    // Keep the reflectance reader aligned with the emission reader above:
-    // m_pWhite is malloc()ed, not value-initialized, and Write() consumes it.
+    // ICC.2:2023 11.2.12, Table 122 and Formula (40) require an S-element
+    // reference-white reflectance vector after the CLUT data. Keep this reader
+    // aligned with the emission reader above: m_pWhite is malloc()ed, not
+    // value-initialized, and Write() consumes it.
     parseStr += "Missing White Data\n";
     return false;
   }

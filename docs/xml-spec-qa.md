@@ -3,12 +3,13 @@ SPDX-FileCopyrightText: 2026 International Color Consortium
 SPDX-License-Identifier: BSD-3-Clause
 -->
 
-# ICC.2 XML header quality assurance
+# ICC.2 XML specification quality assurance
 
 The focused XML specification gate converts native repository XML inputs to
 ICC profiles, validates and dumps them, serializes them back to XML, and checks
-the ICC.2 header relationships for spectral PCS, bi-spectral PCS, and multiplex
-connection space (MCS) data.
+ICC.2 header relationships for spectral PCS, bi-spectral PCS, and multiplex
+connection space (MCS) data. It also requires specification-mandated payloads
+inside spectral multi-processing elements to fail closed when omitted.
 
 Run it against an existing tools build:
 
@@ -32,12 +33,18 @@ Each tool invocation has a 60-second default bound; set
 
 The normative reference is
 <a href="https://www.color.org/specification/ICC.2-2023.pdf">ICC.2:2023</a>.
+The preceding ICC.2:2019 edition defines the same white-vector fields and array
+requirements at the same clause, table, and formula numbers. Its September
+2021 cumulative errata does not amend clauses 11.2.4 or 11.2.12, so the
+fail-closed contract is compatible with both archived editions.
 
 | Surface | ICC.2:2023 relationship | Native input | Required evidence |
 |---------|-------------------------|-----------------|-------------------|
 | Spectral PCS | Header spectral PCS and range fields, clauses 7.2.21 and 7.2.22; the signature channel count must agree with the range steps | `.github/ci/test-data/xml-spec-qa/spectral-reflectance-5.xml` | `rs0005`, 410-690 nm, five steps, no bi-spectral range |
 | Bi-spectral PCS | Header bi-spectral range, clause 7.2.23; the signature represents the product of both axes | `.github/ci/test-data/xml-spec-qa/bispectral-reflectance-2x3.xml` | `bs0006`, two by three samples, reflected 420-680 nm and incident 300-500 nm |
 | MCS | Header multiplex connection space, clause 7.2.24, and the Multiplex Identification profile-class requirements | `.github/ci/test-data/xml-spec-qa/mcs-3-channel-mid.xml` | `mc0003`, three multiplex channel names, `multiplexTypeArrayTag`, valid v5 profile |
+| Emission CLUT white | `emissionCLUTElement`, clause 11.2.4, Table 114 and Formula (12); the reference-white emission vector is an `S`-element field following the CLUT | `.github/ci/test-data/xml-spec-qa/emission-clut-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
+| Reflectance CLUT white | `reflectanceCLUTElement`, clause 11.2.12, Table 122 and Formula (40); the reference-white reflectance vector is an `S`-element field following the CLUT | `.github/ci/test-data/xml-spec-qa/reflectance-clut-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
 
 The binary field layout is represented by `icHeader` in
 `IccProfLib/icProfileHeader.h`. XML parsing and serialization are implemented
@@ -46,11 +53,12 @@ in `IccXML/IccLibXML/IccProfileXml.cpp`; signature channel decoding is in
 `IccProfLib/IccProfile.cpp`. These implementation references complement the
 normative ICC.2 specification; they do not replace it.
 
-The seven checked-in negative XML files reject non-finite wavelength endpoints,
+The nine checked-in negative XML files reject non-finite wavelength endpoints,
 spectral and bi-spectral step counts that do not fit the 16-bit header field,
 signature/range channel mismatches, a bi-spectral range attached to a normal
-spectral PCS, and an MCS/channel-name mismatch. This pins both syntax conversion
-and semantic validation.
+spectral PCS, an MCS/channel-name mismatch, and emission or reflectance CLUTs
+without their mandatory white vectors. This pins syntax conversion, semantic
+validation, and required element payloads.
 
 ## Tool interpretation
 
@@ -106,11 +114,19 @@ would not be proportionate for this focused gate; details are recorded in the
 fixture README.
 
 Sanitizer probes confirmed that non-finite spectral endpoints are rejected and
-missing range children produce invalid-profile exits without a crash. A valid
-MCS profile carrying malformed `ProfileSubClassVersion` text (`1.bad`) is still
-accepted, normalized to `0.00`, and reported valid. This is the already-known
-#2387/#2384 parse-diagnostic suppression identified in `IccProfileXml.cpp`; it
-is not encoded as an accepted regression by this suite.
+missing range children produce invalid-profile exits without a crash. A manual
+reader/writer symmetry audit found that both spectral CLUT readers diagnosed a
+missing `WhiteData` child but continued with a `malloc()`-allocated white
+spectrum; `CIccMpeSpectralCLUT::Write()` then serialized indeterminate values.
+The specification cross-check above establishes that the field is mandatory,
+so the parser now rejects the omission and both native fixtures pin the CLI
+diagnostic. The direct `iccdev.spectral-clut-xml-channel-mismatch` regression
+also checks both reader classes under sanitizers.
+
+A valid MCS profile carrying malformed `ProfileSubClassVersion` text (`1.bad`)
+is still accepted, normalized to `0.00`, and reported valid. This is the
+already-known #2387/#2384 parse-diagnostic suppression identified in
+`IccProfileXml.cpp`; it is not encoded as an accepted regression by this suite.
 
 The coverage workflow reruns the focused matrix before its broad corpus loops,
 and CTest registers it as `iccdev.xml-spec-qa` on Unix-like full-tool builds.

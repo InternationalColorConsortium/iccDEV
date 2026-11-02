@@ -17,10 +17,16 @@ relationships remain reviewable by inspection.
 | `bispectral-channel-mismatch.xml` | `bs0007` conflicts with the declared two-by-three ranges |
 | `nonbispectral-with-bi-range.xml` | Normal `rs0002` spectral PCS illegally carries a bi-spectral range |
 | `mcs-channel-mismatch.xml` | `mc0002` conflicts with six multiplex channel names |
+| `emission-clut-missing-white.xml` | `emissionCLUTElement` omits the required reference-white emission vector |
+| `reflectance-clut-missing-white.xml` | `reflectanceCLUTElement` omits the required reference-white reflectance vector |
 
 The positive profiles correspond to ICC.2:2023 clauses 7.2.21 through 7.2.24
 and Tables 21 and 22. The negative profiles isolate parser-width and
 cross-field validation behavior without duplicating large spectral tables.
+The two spectral CLUT omission fixtures correspond to clauses 11.2.4 and
+11.2.12, Tables 114 and 122, and Formulae (12) and (40): each binary element
+contains an `S`-element reference-white vector after its CLUT data, so XML
+conversion must not invent, zero-fill, or omit that payload.
 
 ## ICS corpus review
 

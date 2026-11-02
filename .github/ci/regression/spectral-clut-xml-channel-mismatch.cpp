@@ -33,8 +33,10 @@
 //
 // Regression: an MPE spectral CLUT element built by the XML parser must not end
 // up declaring more input channels than its CLUT actually has, and the apply
-// path must refuse it if it somehow does. The same readers must also reject a
-// missing WhiteData child rather than serializing an uninitialized spectrum.
+// path must refuse it if it somehow does. ICC.2:2023 11.2.4/Table 114 and
+// 11.2.12/Table 122 require an S-element reference-white spectrum after each
+// spectral CLUT, so the same readers must reject a missing WhiteData child
+// rather than serializing an uninitialized spectrum.
 //
 // This is the companion to spectral-clut-channel-count-bound.cpp, which pins the
 // same invariant on the binary reader. The two exist separately because the
