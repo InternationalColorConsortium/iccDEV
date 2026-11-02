@@ -849,6 +849,10 @@ run_codeql_python_analysis() {
   return "$status"
 }
 
+run_workflow_action_pin_policy() {
+  python3 "$SCRIPT_DIR/check-workflow-action-pins.py" --root "$REPO_ROOT"
+}
+
 run_workflow_risk_subset() {
   local risk_failures=0
   local total_actions=0
@@ -1123,6 +1127,7 @@ PY
 
   run_check "workflow cache policy" run_workflow_cache_policy
   run_check "workflow security canaries" workflow_security_canaries
+  run_check "workflow action pin policy" run_workflow_action_pin_policy
   run_check "GitHub token format canaries" token_format_canaries
   run_check "local ci-risk-analysis subset" run_workflow_risk_subset
   if [ "$FAST_LANE" -eq 1 ]; then
