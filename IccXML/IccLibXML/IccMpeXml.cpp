@@ -4078,7 +4078,11 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    parseStr += "Missing White Data";
+    // The white spectrum is serialized by CIccMpeSpectralCLUT::Write().
+    // Accepting its omission left this malloc()ed buffer uninitialized and
+    // made iccFromXml write those indeterminate bytes into the ICC profile.
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   delete m_pCLUT;
@@ -4203,7 +4207,10 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    parseStr += "Missing WhiteData";
+    // Keep the reflectance reader aligned with the emission reader above:
+    // m_pWhite is malloc()ed, not value-initialized, and Write() consumes it.
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   delete m_pCLUT;

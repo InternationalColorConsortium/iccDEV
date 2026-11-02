@@ -33,7 +33,8 @@
 //
 // Regression: an MPE spectral CLUT element built by the XML parser must not end
 // up declaring more input channels than its CLUT actually has, and the apply
-// path must refuse it if it somehow does.
+// path must refuse it if it somehow does. The same readers must also reject a
+// missing WhiteData child rather than serializing an uninitialized spectrum.
 //
 // This is the companion to spectral-clut-channel-count-bound.cpp, which pins the
 // same invariant on the binary reader. The two exist separately because the
@@ -121,7 +122,8 @@ void check(bool ok, const char *what)
 // (17, 255) Init() refuses before TableData is looked at, so a token table is
 // emitted rather than an astronomically large one.
 std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
-                     unsigned nSteps)
+                     unsigned nSteps, bool bIncludeWhite = true,
+                     const char *elementName = "EmissionCLutElement")
 {
   const unsigned nTruncatedDim = nInputChannels & 0xFFu;
 
@@ -134,7 +136,9 @@ std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
   }
 
   std::string s;
-  s += "<EmissionCLutElement InputChannels=\"";
+  s += "<";
+  s += elementName;
+  s += " InputChannels=\"";
   s += std::to_string(nInputChannels);
   s += "\" OutputChannels=\"3\" StorageType=\"0\" Flags=\"0\" GridGranularity=\"";
   s += std::to_string(nGranularity);
@@ -142,15 +146,19 @@ std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
   s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"";
   s += std::to_string(nSteps);
   s += "\"/>\n";
-  s += "  <WhiteData>\n    ";
-  for (unsigned i = 0; i < nSteps; ++i)
-    s += "1.0 ";
-  s += "\n  </WhiteData>\n";
+  if (bIncludeWhite) {
+    s += "  <WhiteData>\n    ";
+    for (unsigned i = 0; i < nSteps; ++i)
+      s += "1.0 ";
+    s += "\n  </WhiteData>\n";
+  }
   s += "  <TableData>\n    ";
   for (unsigned long long i = 0; i < nTableEntries; ++i)
     s += "0.5 ";
   s += "\n  </TableData>\n";
-  s += "</EmissionCLutElement>\n";
+  s += "</";
+  s += elementName;
+  s += ">\n";
   return s;
 }
 
@@ -173,7 +181,8 @@ struct ParseOutcome {
 // those checks, this test crashes rather than passing quietly, which is the
 // signal we want. A well-formed element gets past them and would then
 // dereference the NULL, so the control below parses only.
-ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
+template <class T>
+ParseOutcome parseAndBeginAs(const std::string &doc, bool bCallBegin)
 {
   ParseOutcome r = { false, false, 0, 0, false };
 
@@ -187,7 +196,7 @@ ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
 
   xmlNode *pRoot = xmlDocGetRootElement(pDoc);
   if (pRoot) {
-    CIccMpeXmlEmissionCLUT elem;
+    T elem;
     std::string parseStr;
     r.bParsed = elem.ParseXml(pRoot, parseStr);
     if (r.bParsed) {
@@ -207,6 +216,11 @@ ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
 
   xmlFreeDoc(pDoc);
   return r;
+}
+
+ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
+{
+  return parseAndBeginAs<CIccMpeXmlEmissionCLUT>(doc, bCallBegin);
 }
 
 // Assert the contract for a declared count that narrows onto a dimensionality a
@@ -239,6 +253,26 @@ void checkTruncating(unsigned nDeclared, unsigned nGranularity, unsigned nSteps)
 
 int main()
 {
+  // ---- Required white spectrum ---------------------------------------------
+  //
+  // Both spectral CLUT readers allocate m_pWhite with malloc(). Before this
+  // regression, omitting WhiteData still returned true, and iccFromXml later
+  // serialized the uninitialized allocation into the output profile.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(/*declared*/3, /*gran*/2, /*steps*/4, /*white*/false),
+      /*bCallBegin*/false);
+    check(!r.bParsed, "EmissionCLutElement without WhiteData -> ParseXml false");
+  }
+  {
+    const std::string doc = buildDoc(
+      /*declared*/3, /*gran*/2, /*steps*/4, /*white*/false,
+      "ReflectanceCLutElement");
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      doc, /*bCallBegin*/false);
+    check(!r.bParsed, "ReflectanceCLutElement without WhiteData -> ParseXml false");
+  }
+
   // ---- The XML route to the mismatch -----------------------------------------
   //
   // 257 narrows to 1, 259 to 3, 272 to 16 -- the last landing exactly on the
