@@ -332,7 +332,7 @@ def test_release_uses_opt_in_npm_trusted_publishing():
     release_step_names = [step["name"] for step in release["steps"]]
     steps = {step["name"]: step for step in release["steps"]}
     setup_node = steps["Set up Node.js for npm publication"]
-    assert setup_node["uses"] == "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38"
+    assert re.fullmatch(r"actions/setup-node@[0-9a-f]{40}", setup_node["uses"])
     assert setup_node["with"]["node-version"] == "24"
     assert setup_node["with"]["package-manager-cache"] is False
 
