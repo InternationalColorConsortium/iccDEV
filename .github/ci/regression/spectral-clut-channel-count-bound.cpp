@@ -28,8 +28,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 // Regression: CIccMpeSpectralCLUT::Read must bound m_nInputChannels before the
-// narrowing cast that constructs its CIccCLUT, and every CIccCLUT::Init() call in
-// IccProfLib must act on the result.
+// narrowing cast that constructs its CIccCLUT, every CIccCLUT::Init() call in
+// IccProfLib must act on the result, and the three spectral MPE binary-reader
+// families must reject a one-step spectral range. ICC.2:2023 clauses 11.2.4,
+// 11.2.5, 11.2.6, 11.2.8, 11.2.12 and 11.2.13 require two or more steps.
 //
 // Read() takes m_nInputChannels as a 16-bit field straight from the profile and
 // validated only "< 1". It then built the CLUT with
@@ -97,6 +99,7 @@
 #include "IccDefs.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -134,10 +137,11 @@ std::vector<icUInt8Number> buildEmissionCLUT(icUInt16Number nInputChannels,
                                              icUInt16Number nOutputChannels,
                                              icUInt8Number nGridPoints,
                                              icUInt16Number nSteps,
-                                             size_t nPayloadBytes)
+                                             size_t nPayloadBytes,
+                                             icElemTypeSignature sig = icSigEmissionCLUTElemType)
 {
   std::vector<icUInt8Number> b;
-  putBE(b, (unsigned long long)icSigEmissionCLUTElemType, 4);
+  putBE(b, (unsigned long long)sig, 4);
   putBE(b, 0u, 4);                                  // reserved
   putBE(b, nInputChannels, 2);
   putBE(b, nOutputChannels, 2);
@@ -182,6 +186,107 @@ ReadResult readEmissionCLUT(std::vector<icUInt8Number> &body)
   return r;
 }
 
+// The spectral matrix and observer element families share the same 20-byte
+// prefix: type, reserved, channels, spectral range, and one final 16-bit field.
+// The payload is zero-filled because only the declared range is under test.
+std::vector<icUInt8Number> buildSpectralArrayElement(icElemTypeSignature sig,
+                                                      icUInt16Number nInputChannels,
+                                                      icUInt16Number nOutputChannels,
+                                                      icUInt16Number nSteps,
+                                                      size_t nPayloadBytes)
+{
+  std::vector<icUInt8Number> b;
+  putBE(b, (unsigned long long)sig, 4);
+  putBE(b, 0u, 4);                                  // reserved
+  putBE(b, nInputChannels, 2);
+  putBE(b, nOutputChannels, 2);
+  putBE(b, 400u, 2);                                // range.start
+  putBE(b, 700u, 2);                                // range.end
+  putBE(b, nSteps, 2);                              // range.steps
+  putBE(b, 0u, 2);                                  // flags or reserved
+  b.insert(b.end(), nPayloadBytes, (icUInt8Number)0);
+  return b;
+}
+
+template <class T>
+bool readElement(std::vector<icUInt8Number> &body)
+{
+  CIccMemIO io;
+  if (!io.Attach(&body[0], body.size()))
+    return false;
+
+  T elem;
+  return elem.Read((icUInt32Number)body.size(), &io);
+}
+
+icSpectralRange makeRange(icUInt16Number nSteps)
+{
+  icSpectralRange range;
+  range.start = icFtoF16(400.0f);
+  range.end = icFtoF16(700.0f);
+  range.steps = nSteps;
+  return range;
+}
+
+template <class T>
+void checkMatrixValidation(icUInt16Number nSteps, bool bShouldReject,
+                           const char *what)
+{
+  T elem;
+  bool bSized = elem.SetSize(3, 3, makeRange(nSteps));
+  check(bSized, "spectral matrix validation fixture initializes");
+  if (!bSized)
+    return;
+
+  std::string report;
+  icValidateStatus status = elem.Validate("", report, NULL, NULL);
+  check((status >= icValidateCriticalError) == bShouldReject, what);
+}
+
+template <class T>
+void checkObserverValidation(icUInt16Number nSteps, bool bShouldReject,
+                             const char *what)
+{
+  T elem;
+  bool bSized = elem.SetSize(nSteps, 3, makeRange(nSteps));
+  check(bSized, "spectral observer validation fixture initializes");
+  if (!bSized)
+    return;
+
+  std::string report;
+  icValidateStatus status = elem.Validate("", report, NULL, NULL);
+  check((status >= icValidateCriticalError) == bShouldReject, what);
+}
+
+template <class T>
+void checkClutValidation(icUInt16Number nSteps, bool bShouldReject,
+                         const char *what)
+{
+  CIccCLUT *pCLUT = new CIccCLUT((icUInt8Number)3, nSteps, 4);
+  bool bInitialized = pCLUT->Init((icUInt8Number)2);
+  check(bInitialized, "spectral CLUT validation fixture initializes");
+  if (!bInitialized) {
+    delete pCLUT;
+    return;
+  }
+
+  icFloatNumber *pWhite =
+    (icFloatNumber *)malloc((size_t)nSteps * sizeof(icFloatNumber));
+  check(pWhite != NULL, "spectral CLUT validation white allocation succeeds");
+  if (!pWhite) {
+    delete pCLUT;
+    return;
+  }
+  for (icUInt16Number i = 0; i < nSteps; ++i)
+    pWhite[i] = 1.0f;
+
+  T elem;
+  elem.SetData(pCLUT, icValueTypeFloat32, makeRange(nSteps), pWhite, 3);
+  std::string report;
+  icValidateStatus status = elem.Validate("", report, NULL, NULL);
+  check((status >= icValidateCriticalError) == bShouldReject, what);
+}
+
 // A generous payload: 16 grid points ^ a few dims, times steps, times 4 bytes.
 const size_t kBigPayload = 4u * 1024u * 1024u;
 
@@ -221,6 +326,81 @@ public:
 
 int main()
 {
+  // ---- ICC.2 spectral ranges require at least two samples ------------------
+  //
+  // All six concrete element types converge on three Read()/Validate() base
+  // implementations. Pin every sibling so a later override cannot reopen one
+  // route, and keep a two-step control for each family.
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigEmissionMatrixElemType, 3, 3, 1, 64);
+    check(!readElement<CIccMpeEmissionMatrix>(b),
+          "one-step emission matrix -> Read() false");
+  }
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigInvEmissionMatrixElemType, 3, 3, 1, 64);
+    check(!readElement<CIccMpeInvEmissionMatrix>(b),
+          "one-step inverse emission matrix -> Read() false");
+  }
+  {
+    std::vector<icUInt8Number> b = buildEmissionCLUT(
+      3, 3, 2, 1, 64, icSigEmissionCLUTElemType);
+    check(!readElement<CIccMpeEmissionCLUT>(b),
+          "one-step emission CLUT -> Read() false");
+  }
+  {
+    std::vector<icUInt8Number> b = buildEmissionCLUT(
+      3, 3, 2, 1, 64, icSigReflectanceCLUTElemType);
+    check(!readElement<CIccMpeReflectanceCLUT>(b),
+          "one-step reflectance CLUT -> Read() false");
+  }
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigEmissionObserverElemType, 1, 3, 1, 16);
+    check(!readElement<CIccMpeEmissionObserver>(b),
+          "one-step emission observer -> Read() false");
+  }
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigReflectanceObserverElemType, 1, 3, 1, 16);
+    check(!readElement<CIccMpeReflectanceObserver>(b),
+          "one-step reflectance observer -> Read() false");
+  }
+
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigEmissionMatrixElemType, 3, 3, 2, 128);
+    check(readElement<CIccMpeEmissionMatrix>(b),
+          "two-step emission matrix -> Read() true");
+  }
+  {
+    std::vector<icUInt8Number> b = buildSpectralArrayElement(
+      icSigEmissionObserverElemType, 2, 3, 2, 32);
+    check(readElement<CIccMpeEmissionObserver>(b),
+          "two-step emission observer -> Read() true");
+  }
+
+  checkMatrixValidation<CIccMpeEmissionMatrix>(
+    1, true, "one-step emission matrix -> Validate() critical");
+  checkMatrixValidation<CIccMpeInvEmissionMatrix>(
+    1, true, "one-step inverse emission matrix -> Validate() critical");
+  checkClutValidation<CIccMpeEmissionCLUT>(
+    1, true, "one-step emission CLUT -> Validate() critical");
+  checkClutValidation<CIccMpeReflectanceCLUT>(
+    1, true, "one-step reflectance CLUT -> Validate() critical");
+  checkObserverValidation<CIccMpeEmissionObserver>(
+    1, true, "one-step emission observer -> Validate() critical");
+  checkObserverValidation<CIccMpeReflectanceObserver>(
+    1, true, "one-step reflectance observer -> Validate() critical");
+
+  checkMatrixValidation<CIccMpeEmissionMatrix>(
+    2, false, "two-step emission matrix -> Validate() non-critical");
+  checkClutValidation<CIccMpeEmissionCLUT>(
+    2, false, "two-step emission CLUT -> Validate() non-critical");
+  checkObserverValidation<CIccMpeEmissionObserver>(
+    2, false, "two-step emission observer -> Validate() non-critical");
+
   // ---- The live defect: a truncating channel count ----------------------------
   //
   // 257 narrows to 1. Before the fix Read() returned true and the element

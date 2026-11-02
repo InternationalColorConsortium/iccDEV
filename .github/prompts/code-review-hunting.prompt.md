@@ -122,6 +122,18 @@ starts at the parent's children rather than scanning the parent and its
 siblings. A successful parse that normalizes an invalid ID or drops nested
 text is a failure even when no sanitizer fires.
 
+Build a required-field manifest from the applicable ICC encoding table and the
+class's `Write()`/`ToXml()` path, then omit each required XML or JSON child in
+turn. Appending a diagnostic is not failure propagation: require the parser to
+return false before any zero-filled or uninitialized allocation can reach the
+serializer. Spectral CLUT `WhiteData` is the uninitialized reference case;
+spectral matrix and observer payloads are the zero-filled reference case
+(ICC.2:2023 11.2.4-11.2.6, 11.2.8, 11.2.12-11.2.13).
+Also compare explicit specification minima with sibling readers: accepting a
+non-zero count is not sufficient when the encoding requires two or more.
+Re-check ordering and equality after narrowing into the encoded field; two
+distinct XML numbers can become one binary value.
+
 ### Category 5: Counted Buffers and Boundary Equality (CWE-121/CWE-122/CWE-787)
 
 Trace allocation count, loop count, and serialized count together. A fixed or

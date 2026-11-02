@@ -33,7 +33,12 @@
 //
 // Regression: an MPE spectral CLUT element built by the XML parser must not end
 // up declaring more input channels than its CLUT actually has, and the apply
-// path must refuse it if it somehow does.
+// path must refuse it if it somehow does. ICC.2:2023 11.2.4/Table 114 and
+// 11.2.12/Table 122 require an S-element reference-white spectrum after each
+// spectral CLUT, so the same readers must reject a missing WhiteData child
+// rather than serializing an uninitialized spectrum. Tables 115, 116, 118 and
+// 123 likewise require the spectral matrix and observer payloads; their XML
+// readers must not replace omitted data with calloc()'s zeros.
 //
 // This is the companion to spectral-clut-channel-count-bound.cpp, which pins the
 // same invariant on the binary reader. The two exist separately because the
@@ -121,7 +126,9 @@ void check(bool ok, const char *what)
 // (17, 255) Init() refuses before TableData is looked at, so a token table is
 // emitted rather than an astronomically large one.
 std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
-                     unsigned nSteps)
+                     unsigned nSteps, bool bIncludeWhite = true,
+                     const char *elementName = "EmissionCLutElement",
+                     const char *endWavelength = "700")
 {
   const unsigned nTruncatedDim = nInputChannels & 0xFFu;
 
@@ -134,23 +141,31 @@ std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
   }
 
   std::string s;
-  s += "<EmissionCLutElement InputChannels=\"";
+  s += "<";
+  s += elementName;
+  s += " InputChannels=\"";
   s += std::to_string(nInputChannels);
   s += "\" OutputChannels=\"3\" StorageType=\"0\" Flags=\"0\" GridGranularity=\"";
   s += std::to_string(nGranularity);
   s += "\">\n";
-  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"";
   s += std::to_string(nSteps);
   s += "\"/>\n";
-  s += "  <WhiteData>\n    ";
-  for (unsigned i = 0; i < nSteps; ++i)
-    s += "1.0 ";
-  s += "\n  </WhiteData>\n";
+  if (bIncludeWhite) {
+    s += "  <WhiteData>\n    ";
+    for (unsigned i = 0; i < nSteps; ++i)
+      s += "1.0 ";
+    s += "\n  </WhiteData>\n";
+  }
   s += "  <TableData>\n    ";
   for (unsigned long long i = 0; i < nTableEntries; ++i)
     s += "0.5 ";
   s += "\n  </TableData>\n";
-  s += "</EmissionCLutElement>\n";
+  s += "</";
+  s += elementName;
+  s += ">\n";
   return s;
 }
 
@@ -173,7 +188,8 @@ struct ParseOutcome {
 // those checks, this test crashes rather than passing quietly, which is the
 // signal we want. A well-formed element gets past them and would then
 // dereference the NULL, so the control below parses only.
-ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
+template <class T>
+ParseOutcome parseAndBeginAs(const std::string &doc, bool bCallBegin)
 {
   ParseOutcome r = { false, false, 0, 0, false };
 
@@ -187,7 +203,7 @@ ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
 
   xmlNode *pRoot = xmlDocGetRootElement(pDoc);
   if (pRoot) {
-    CIccMpeXmlEmissionCLUT elem;
+    T elem;
     std::string parseStr;
     r.bParsed = elem.ParseXml(pRoot, parseStr);
     if (r.bParsed) {
@@ -207,6 +223,77 @@ ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
 
   xmlFreeDoc(pDoc);
   return r;
+}
+
+ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
+{
+  return parseAndBeginAs<CIccMpeXmlEmissionCLUT>(doc, bCallBegin);
+}
+
+template <class T>
+bool parseElement(const std::string &doc)
+{
+  xmlDoc *pDoc = xmlReadMemory(doc.c_str(), (int)doc.size(), "frag.xml", NULL,
+                               XML_PARSE_NOERROR | XML_PARSE_NOWARNING |
+                               XML_PARSE_HUGE);
+  if (!pDoc) {
+    std::fprintf(stderr, "[spectral-clut-xml] test fixture is not valid XML\n");
+    return false;
+  }
+
+  T elem;
+  std::string parseStr;
+  xmlNode *pRoot = xmlDocGetRootElement(pDoc);
+  bool bParsed = pRoot && elem.ParseXml(pRoot, parseStr);
+  xmlFreeDoc(pDoc);
+  return bParsed;
+}
+
+std::string buildMatrixDoc(const char *elementName, bool bIncludeWhite,
+                           bool bIncludeMatrix,
+                           const char *endWavelength = "700")
+{
+  std::string s = "<";
+  s += elementName;
+  s += " InputChannels=\"3\" OutputChannels=\"3\">\n";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"4\"/>\n";
+  if (bIncludeWhite)
+    s += "  <WhiteData>1 1 1 1</WhiteData>\n";
+  if (bIncludeMatrix)
+    s += "  <MatrixData>1 0 0 0 0 1 0 0 0 0 1 0</MatrixData>\n";
+  s += "  <OffsetData>0 0 0 0</OffsetData>\n";
+  s += "</";
+  s += elementName;
+  s += ">\n";
+  return s;
+}
+
+std::string buildObserverDoc(const char *elementName, bool bIncludeWhite,
+                             unsigned nSteps = 3,
+                             const char *endWavelength = "700")
+{
+  std::string s = "<";
+  s += elementName;
+  s += " InputChannels=\"";
+  s += std::to_string(nSteps);
+  s += "\" OutputChannels=\"3\" Flags=\"0\">\n";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"";
+  s += std::to_string(nSteps);
+  s += "\"/>\n";
+  if (bIncludeWhite) {
+    s += "  <WhiteData>";
+    for (unsigned i = 0; i < nSteps; ++i)
+      s += "1 ";
+    s += "</WhiteData>\n";
+  }
+  s += "</";
+  s += elementName;
+  s += ">\n";
+  return s;
 }
 
 // Assert the contract for a declared count that narrows onto a dimensionality a
@@ -239,6 +326,111 @@ void checkTruncating(unsigned nDeclared, unsigned nGranularity, unsigned nSteps)
 
 int main()
 {
+  // ---- Required white spectrum ---------------------------------------------
+  //
+  // Both spectral CLUT readers allocate m_pWhite with malloc(). Before this
+  // regression, omitting WhiteData still returned true, and iccFromXml later
+  // serialized the uninitialized allocation into the output profile.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(/*declared*/3, /*gran*/2, /*steps*/4, /*white*/false),
+      /*bCallBegin*/false);
+    check(!r.bParsed, "EmissionCLutElement without WhiteData -> ParseXml false");
+  }
+  {
+    const std::string doc = buildDoc(
+      /*declared*/3, /*gran*/2, /*steps*/4, /*white*/false,
+      "ReflectanceCLutElement");
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      doc, /*bCallBegin*/false);
+    check(!r.bParsed, "ReflectanceCLutElement without WhiteData -> ParseXml false");
+  }
+
+  // The spectral matrix and observer SetSize() methods use calloc(). Missing
+  // children therefore became invented zero spectra or matrices, and both the
+  // binary writer and ToXml() treated those allocations as real input data.
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", false, true)),
+        "EmissionMatrixElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, false)),
+        "EmissionMatrixElement without MatrixData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", false, true)),
+        "InvEmissionMatrixElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, false)),
+        "InvEmissionMatrixElement without MatrixData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", false)),
+        "EmissionObserverElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", false)),
+        "ReflectanceObserverElement without WhiteData -> ParseXml false");
+
+  check(parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, true)),
+        "complete EmissionMatrixElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, true)),
+        "complete InvEmissionMatrixElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true)),
+        "complete EmissionObserverElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true)),
+        "complete ReflectanceObserverElement -> ParseXml true");
+
+  // ICC.2:2023 requires every one of these spectral ranges to contain at
+  // least two steps. A one-sample range makes the wavelength interval formula
+  // divide by zero and is not a permitted degenerate representation.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(/*declared*/3, /*gran*/2, /*steps*/1),
+      /*bCallBegin*/false);
+    check(!r.bParsed, "EmissionCLutElement with one spectral step -> ParseXml false");
+  }
+  {
+    const std::string doc = buildDoc(
+      /*declared*/3, /*gran*/2, /*steps*/1, /*white*/true,
+      "ReflectanceCLutElement");
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      doc, /*bCallBegin*/false);
+    check(!r.bParsed, "ReflectanceCLutElement with one spectral step -> ParseXml false");
+  }
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true, 1)),
+        "EmissionObserverElement with one spectral step -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true, 1)),
+        "ReflectanceObserverElement with one spectral step -> ParseXml false");
+
+  // Range endpoints are encoded as ICC float16 numbers. Values that compare
+  // as distinct floats can collapse to the same encoded wavelength; accepting
+  // that document makes iccFromXml save a profile Validate() calls invalid.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(3, 2, 4, true, "EmissionCLutElement", "400.0001"), false);
+    check(!r.bParsed, "EmissionCLutElement with collapsed encoded range -> ParseXml false");
+  }
+  {
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      buildDoc(3, 2, 4, true, "ReflectanceCLutElement", "400.0001"), false);
+    check(!r.bParsed, "ReflectanceCLutElement with collapsed encoded range -> ParseXml false");
+  }
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, true, "400.0001")),
+        "EmissionMatrixElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, true, "400.0001")),
+        "InvEmissionMatrixElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true, 3, "400.0001")),
+        "EmissionObserverElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true, 3, "400.0001")),
+        "ReflectanceObserverElement with collapsed encoded range -> ParseXml false");
+
   // ---- The XML route to the mismatch -----------------------------------------
   //
   // 257 narrows to 1, 259 to 3, 272 to 16 -- the last landing exactly on the

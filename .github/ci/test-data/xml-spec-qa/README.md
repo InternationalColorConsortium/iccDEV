@@ -17,10 +17,26 @@ relationships remain reviewable by inspection.
 | `bispectral-channel-mismatch.xml` | `bs0007` conflicts with the declared two-by-three ranges |
 | `nonbispectral-with-bi-range.xml` | Normal `rs0002` spectral PCS illegally carries a bi-spectral range |
 | `mcs-channel-mismatch.xml` | `mc0002` conflicts with six multiplex channel names |
+| `emission-clut-missing-white.xml` | `emissionCLUTElement` omits the required reference-white emission vector |
+| `reflectance-clut-missing-white.xml` | `reflectanceCLUTElement` omits the required reference-white reflectance vector |
+| `emission-matrix-missing-white.xml` | `emissionMatrixElement` omits the required reference-white emission vector |
+| `inverse-emission-matrix-missing-matrix.xml` | `inverseEmissionMatrixElement` omits the required spectral matrix array |
+| `emission-observer-missing-white.xml` | `emissionObserverElement` omits the required reference-white emission vector |
+| `reflectance-observer-missing-white.xml` | `reflectanceObserverElement` omits the required reference-white reflectance vector |
+| `emission-clut-one-spectral-step.xml` | `emissionCLUTElement` declares one spectral step where ICC.2 requires at least two |
+| `emission-clut-collapsed-range.xml` | Distinct decimal endpoints collapse to one ICC float16 wavelength during encoding |
 
 The positive profiles correspond to ICC.2:2023 clauses 7.2.21 through 7.2.24
 and Tables 21 and 22. The negative profiles isolate parser-width and
 cross-field validation behavior without duplicating large spectral tables.
+The spectral element omission fixtures correspond to clauses 11.2.4 through
+11.2.6, 11.2.8, 11.2.12 and 11.2.13 and their encoding tables: each binary
+element contains the listed white vector, CLUT or matrix payload. XML conversion
+must not invent, zero-fill, or omit those fields.
+The one-step CLUT fixture pins the explicit minimum in clause 11.2.4 and
+Formula (11)'s spectral dimension rather than relying on later validation.
+The collapsed-range fixture requires ordering to survive the field's ICC
+float16 encoding, matching the range invariant enforced by profile validation.
 
 ## ICS corpus review
 

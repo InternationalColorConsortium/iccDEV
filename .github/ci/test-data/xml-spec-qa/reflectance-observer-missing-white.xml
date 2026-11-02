@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-01T22:20:00</CreationDateTime>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </PCSIlluminant>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Missing reflectance observer white spectrum</LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B0</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <ReflectanceObserverElement InputChannels="3" OutputChannels="3">
+          <Wavelengths start="400" end="700" steps="3"/>
+        </ReflectanceObserverElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>

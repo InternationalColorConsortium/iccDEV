@@ -1,10 +1,11 @@
 #!/bin/bash
-# Focused ICC.2 XML header, profile validation, and reporting QA.
+# Focused ICC.2 XML parsing, profile validation, and reporting QA.
 #
 # This suite covers the spectral PCS, bi-spectral range, and MCS header
-# branches with canonical upstream XML fixtures. It also verifies XML to ICC
-# to XML fidelity, negative parser/validation cases, iccRoundTrip capability,
-# and iccPawgReport report generation.
+# branches plus required spectral element payloads with canonical
+# upstream XML fixtures. It also verifies XML to ICC to XML fidelity, negative
+# parser/validation cases, iccRoundTrip capability, and iccPawgReport report
+# generation.
 
 #
 # Copyright (c) International Color Consortium.
@@ -173,6 +174,14 @@ BISPECTRAL_NONFINITE_END_XML="$FIXTURE_DIR/bispectral-nonfinite-end.xml"
 BISPECTRAL_CHANNEL_MISMATCH_XML="$FIXTURE_DIR/bispectral-channel-mismatch.xml"
 NONBISPECTRAL_WITH_BI_RANGE_XML="$FIXTURE_DIR/nonbispectral-with-bi-range.xml"
 MCS_CHANNEL_MISMATCH_XML="$FIXTURE_DIR/mcs-channel-mismatch.xml"
+EMISSION_CLUT_MISSING_WHITE_XML="$FIXTURE_DIR/emission-clut-missing-white.xml"
+REFLECTANCE_CLUT_MISSING_WHITE_XML="$FIXTURE_DIR/reflectance-clut-missing-white.xml"
+EMISSION_MATRIX_MISSING_WHITE_XML="$FIXTURE_DIR/emission-matrix-missing-white.xml"
+INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML="$FIXTURE_DIR/inverse-emission-matrix-missing-matrix.xml"
+EMISSION_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/emission-observer-missing-white.xml"
+REFLECTANCE_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/reflectance-observer-missing-white.xml"
+EMISSION_CLUT_ONE_STEP_XML="$FIXTURE_DIR/emission-clut-one-spectral-step.xml"
+EMISSION_CLUT_COLLAPSED_RANGE_XML="$FIXTURE_DIR/emission-clut-collapsed-range.xml"
 ROUNDTRIP_DIR="$ICCDEV_TESTING/Display"
 ROUNDTRIP_XML="$ROUNDTRIP_DIR/sRGB_D65_MAT.xml"
 ROUNDTRIP_CONTROL="$OUTDIR/sRGB_D65_MAT.icc"
@@ -220,8 +229,10 @@ is_timeout_or_signal_status() {
 
 expect_reject() {
   local id="$1" description="$2" xml="$3" expected="$4"
+  local require_no_output="${5:-0}"
   local icc="$OUTDIR/$id.icc" log="$OUTDIR/$id.log" rc=0
 
+  rm -f "$icc"
   run_bounded "$FROMXML" "$xml" "$icc" > "$log" 2>&1 || rc=$?
   if grep -q "ERROR: AddressSanitizer" "$log" 2>/dev/null; then
     ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
@@ -239,6 +250,8 @@ expect_reject() {
     record_fail "$description -- malformed input was accepted"
   elif ! grep -Fq "$expected" "$log"; then
     record_fail "$description -- expected diagnostic not found: $expected"
+  elif [ "$require_no_output" -eq 1 ] && [ -e "$icc" ]; then
+    record_fail "$description -- rejected conversion left an ICC output"
   else
     record_pass "$description"
   fi
@@ -345,7 +358,15 @@ for required in "$SPECTRAL_XML" "$BISPECTRAL_XML" "$MCS_XML" \
                 "$BISPECTRAL_NONFINITE_END_XML" \
                 "$BISPECTRAL_CHANNEL_MISMATCH_XML" \
                 "$NONBISPECTRAL_WITH_BI_RANGE_XML" \
-                "$MCS_CHANNEL_MISMATCH_XML" "$ROUNDTRIP_XML"; do
+                "$MCS_CHANNEL_MISMATCH_XML" \
+                "$EMISSION_CLUT_MISSING_WHITE_XML" \
+                "$REFLECTANCE_CLUT_MISSING_WHITE_XML" \
+                "$EMISSION_MATRIX_MISSING_WHITE_XML" \
+                "$INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML" \
+                "$EMISSION_OBSERVER_MISSING_WHITE_XML" \
+                "$REFLECTANCE_OBSERVER_MISSING_WHITE_XML" \
+                "$EMISSION_CLUT_ONE_STEP_XML" \
+                "$EMISSION_CLUT_COLLAPSED_RANGE_XML" "$ROUNDTRIP_XML"; do
   if [ ! -f "$required" ]; then
     echo "[FAIL] required fixture is missing: $required"
     exit 1
@@ -472,6 +493,38 @@ expect_reject "mcs-channel-mismatch" \
   "Reject MCS signature/multiplex array channel mismatch" \
   "$MCS_CHANNEL_MISMATCH_XML" \
   "Number of multiplex channel names does not match MCS in header"
+expect_reject "emission-clut-missing-white" \
+  "Reject emission CLUT without required white spectrum" \
+  "$EMISSION_CLUT_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "reflectance-clut-missing-white" \
+  "Reject reflectance CLUT without required white spectrum" \
+  "$REFLECTANCE_CLUT_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "emission-matrix-missing-white" \
+  "Reject emission matrix without required white spectrum" \
+  "$EMISSION_MATRIX_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "inverse-emission-matrix-missing-matrix" \
+  "Reject inverse emission matrix without required samples" \
+  "$INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML" \
+  "Missing Matrix Data" 1
+expect_reject "emission-observer-missing-white" \
+  "Reject emission observer without required white spectrum" \
+  "$EMISSION_OBSERVER_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "reflectance-observer-missing-white" \
+  "Reject reflectance observer without required white spectrum" \
+  "$REFLECTANCE_OBSERVER_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "emission-clut-one-spectral-step" \
+  "Reject emission CLUT with fewer than two spectral steps" \
+  "$EMISSION_CLUT_ONE_STEP_XML" \
+  "Invalid Spectral Range" 1
+expect_reject "emission-clut-collapsed-range" \
+  "Reject spectral range whose endpoints collapse when encoded" \
+  "$EMISSION_CLUT_COLLAPSED_RANGE_XML" \
+  "Invalid Spectral Range after float16 encoding" 1
 
 print_summary "ICC.2 XML specification QA"
 exit $((FAIL + CRASH > 0 ? 1 : 0))

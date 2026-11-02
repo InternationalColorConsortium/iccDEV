@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-01T23:20:00</CreationDateTime>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </PCSIlluminant>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Collapsed emission CLUT range</LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <EmissionCLutElement InputChannels="3" OutputChannels="3"
+                             Flags="0" StorageType="0" GridGranularity="2">
+          <Wavelengths start="400" end="400.0001" steps="4"/>
+          <WhiteData>1 1 1 1</WhiteData>
+          <TableData>
+            0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+            0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+            0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+            0.5 0.5 0.5 0.5 0.5 0.5 0.5 0.5
+          </TableData>
+        </EmissionCLutElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>
