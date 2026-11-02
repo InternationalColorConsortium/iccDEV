@@ -57,7 +57,7 @@ print(result.report or "none")
 ```
 
 Use `validate_profile(bytes)` for an in-memory buffer. See
-<a href="../python/README.md"><code>python/README.md</code></a> for installation
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/python/README.md"><code>python/README.md</code></a> for installation
 and package testing.
 
 ## Example and Review

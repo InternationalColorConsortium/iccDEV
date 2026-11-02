@@ -20,6 +20,13 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 | macOS | `libheif libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
 | Windows | MSVC 2022 or 2026 with vcpkg-managed `libheif`, `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
+These are full development environments, not direct dependencies of every
+tool. `iccJpegDump` parses JPEG markers itself; native CMake no longer searches
+for or links libjpeg for that tool. JPEG libraries remain in these recipes and
+the vcpkg manifests for dependency builds, including JPEG-capable libtiff. The
+WebAssembly workflows build libjpeg for libtiff and supply its archive during
+linking; the staged WebAssembly package also includes `IccJpegDump`.
+
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
 Maintainer sanitizer/regression containers add pinned CI-only packages such as
@@ -365,9 +372,9 @@ or Mac Catalyst launch behavior aligned as one surface.
 
 | Example | Purpose | Start here |
 | --- | --- | --- |
-| `ios-benchapply` | On-device `CIccCmm::Apply` timing POC using the desktop benchmark primitives. | <a href="../examples/ios-benchapply/README.md">examples/ios-benchapply/README.md</a> |
-| `ios-apply-preview` | Visual profile-apply preview with source, applied, and delta panels. | <a href="../examples/ios-apply-preview/README.md">examples/ios-apply-preview/README.md</a> |
-| `ios-clut-editor` | Live profile-chain plus editable 3D CLUT preview for a selected or default image. | <a href="../examples/ios-clut-editor/README.md">examples/ios-clut-editor/README.md</a> |
+| `ios-benchapply` | On-device `CIccCmm::Apply` timing POC using the desktop benchmark primitives. | [examples/ios-benchapply/README.md](../examples/ios-benchapply/README.md) |
+| `ios-apply-preview` | Visual profile-apply preview with source, applied, and delta panels. | [examples/ios-apply-preview/README.md](../examples/ios-apply-preview/README.md) |
+| `ios-clut-editor` | Live profile-chain plus editable 3D CLUT preview for a selected or default image. | [examples/ios-clut-editor/README.md](../examples/ios-clut-editor/README.md) |
 
 Use each example helper from the repository root:
 
@@ -1081,7 +1088,7 @@ The canonical `ci-docker` workflow is manual-dispatch only.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. Published tags are native `linux/amd64` and `linux/arm64` manifests; Docker Desktop on Apple Silicon selects `linux/arm64`. | Follow the [container maintainer preflight](regression-container.md#maintainer-preflight-and-security-checks) before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
+| `Dockerfile` | Pinned Ubuntu unified image for runtime, MCP, and maintainer checks, with Clang/LLVM 22 defaults, a Clang 21 pair for the packaged AFL++ LLVM plugin, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. Published tags are native `linux/amd64` and `linux/arm64` manifests; Docker Desktop on Apple Silicon selects `linux/arm64`. | Follow the container maintainer preflight in \ref md_docs_2regression-container "the regression container guide" before publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe. Consumer workflows select `latest`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, an immutable SHA, or a release tag. |
 
 Local development builds may use Docker's build cache to shorten edit and test
 cycles. Run the final pre-push container preflight with `--no-cache` so the

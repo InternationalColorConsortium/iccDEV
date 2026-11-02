@@ -4,7 +4,7 @@ This document covers the externally callable HTTP surface and native IIS ISAPI
 exports for `iccIisIsapi.dll`. Setup and deployment instructions are in
 [isapi-instructions.md](isapi-instructions.md).
 
-Machine-readable starter spec: [iis-isapi.openapi.yaml](iis-isapi.openapi.yaml).
+Machine-readable starter spec: \ref iis-isapi.openapi.yaml "iis-isapi.openapi.yaml".
 
 ## Scope
 

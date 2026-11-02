@@ -341,6 +341,13 @@
           "type": "string",
           "description": "Path to the source image file"
         },
+        "srcIfd": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4095,
+          "default": 0,
+          "description": "Zero-based main-chain TIFF IFD to transform; other IFDs and SubIFDs are not copied"
+        },
         "dstImageFile": {
           "type": "string",
           "description": "Path for the destination image file"

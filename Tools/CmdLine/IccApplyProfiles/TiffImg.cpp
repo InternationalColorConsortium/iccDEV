@@ -160,6 +160,17 @@ static char THIS_FILE[]=__FILE__;
 namespace iccDEV {
 #endif
 
+std::string icTiffRuntimeVersion()
+{
+  const char *version = TIFFGetVersion();
+  if (!version)
+    return "unknown";
+  const char *end = version;
+  while (*end && *end != '\r' && *end != '\n')
+    ++end;
+  return std::string(version, end);
+}
+
 namespace {
 
 const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
@@ -632,7 +643,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   // and refuses before the destination is touched (#2386).  Neither tool caller can
   // reach it -- their depth comes back out of Open() -- so this guards the public API,
   // as the ResolutionUnit check below does.
-  if (!nBPS || nBPS % 8)
+  // The TIFF field is 16 bits. Reject an oversized caller value before the
+  // assignment below can wrap it into a different, apparently valid depth.
+  if (!nBPS || nBPS > std::numeric_limits<icUInt16Number>::max() || nBPS % 8)
     return false;
 
   if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
@@ -698,6 +711,12 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   case PHOTO_ICCLAB:
     m_nPhoto = PHOTOMETRIC_ICCLAB;
     break;
+
+  default:
+    // PHOTO_PALETTE and PHOTO_UNKNOWN are read-side diagnostics, not writable
+    // formats. An unrecognized selector would otherwise keep Close()'s zero
+    // value, silently writing PHOTOMETRIC_MINISWHITE.
+    return false;
   }
 
   // Reject unsupported or oversized tile layouts before opening a destination
@@ -867,18 +886,18 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 
     // TIFFStripSize() returns a signed 64-bit tmsize_t, and the products below are
     // computed from a width that comes straight out of the source image header. Open()
-    // already routes the identical arithmetic through calcBytesPerLine() (:471, :489)
+    // already routes the identical arithmetic through calcBytesPerLine()
     // and checkedUInt32(); Create() did the same sums raw, so the write path had no
     // guard where the read path had one.
     //
     // The wrap is reachable rather than theoretical. Create() runs before any pixel data
-    // is read (iccApplyProfiles.cpp:508), so a source TIFF only has to *declare* a large
+    // is read by iccApplyProfiles, so a source TIFF only has to *declare* a large
     // ImageWidth -- it needs no matching pixel data on disk. A width of 3e8 with a
     // 20-channel separated destination makes m_nBytesPerLine 6e9, which wraps to ~1.7e9,
     // while the strip allocation below asks for the true 6 GB and *succeeds* under Linux
     // overcommit -- so Create() returned true carrying a bytes-per-line far smaller than
     // a row. The caller then sizes its destination row buffer from exactly that value
-    // (iccApplyProfiles.cpp:539) and writes a full row through it. The big allocation is
+    // in iccApplyProfiles and writes a full row through it. The big allocation is
     // therefore not the accidental guard it looks like; measured, unfixed Create()
     // returns true for that shape.
     tmsize_t stripSize = TIFFStripSize(m_hTif);
@@ -976,27 +995,24 @@ bool CTiffImg::Open(const char *szFname, bool bMetadataOnly, unsigned int nDirec
 
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_PLANARCONFIG, &m_nPlanar);
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLESPERPIXEL, &m_nSamples);
-  // Plain Get, and its return is now kept: unlike its neighbours this one must
-  // report what the file STORES, because colour management sizes the image from
-  // it (iccApplyProfiles.cpp:543 lets a profile match sn-sen instead of sn).  A
-  // failed Get leaves the destination untouched, so m_nExtraSamples would silently
-  // keep whatever it held; Close() zeroes it at the top of Open() so that was 0 by
-  // luck rather than by contract.  Assign it explicitly and record whether tag 338
-  // was there at all -- 0 otherwise means "absent", not "stored as zero" (#2386).
+  // Keep the plain Get return to distinguish an absent ExtraSamples tag from
+  // a present one. The value is libtiff's working count, which can already be
+  // repaired in memory when the tag is present; it is not necessarily the
+  // count stored in the file. Colour management uses this working split in
+  // iccApplyProfiles. Assign zero explicitly when the tag is absent (#2386).
   m_bExtraSamplesStored =
     (TIFFGetField(m_hTif, TIFFTAG_EXTRASAMPLES, &m_nExtraSamples, &nSampleInfo) == 1);
   if (!m_bExtraSamplesStored)
     m_nExtraSamples = 0;
 
-  // The reporting-only companion.  When the photometric model plus the stored
-  // ExtraSamples do not add up to SamplesPerPixel, libtiff repairs the directory
-  // in memory and warns ("Defining non-color channels as ExtraSamples"), but it
-  // publishes the repaired count ONLY through the Defaulted getter -- the plain
-  // Get above still fails.  Measured on libtiff 4.5.1 and 4.7.2 against the tracked
-  // 81-band Testing/hybrid/Data/smCows380_5_780.tif: Get returns 0 and writes
-  // nothing, Defaulted returns 1 with 80.  Keep that figure for iccTiffDump to
-  // explain the layout the rest of libtiff is actually using, and keep it away from
-  // m_nExtraSamples, which must stay the stored count (see the header).
+  // The reporting-only companion. When the photometric model and ExtraSamples
+  // do not account for SamplesPerPixel, libtiff may repair the count in memory.
+  // With an absent tag, plain Get above fails while Defaulted can expose the
+  // effective repaired count. This occurs on the tracked 81-band
+  // Testing/hybrid/Data/smCows380_5_780.tif (measured on libtiff 4.5.1 and
+  // 4.7.2: plain Get fails, Defaulted returns 80). With a present tag, even
+  // plain Get may expose a repaired count. Keep the effective figure for
+  // iccTiffDump and use the raw IFD read below for the stored count.
   m_nEffectiveExtraSamples = m_nExtraSamples;
   {
     icUInt16Number nEffective = 0;

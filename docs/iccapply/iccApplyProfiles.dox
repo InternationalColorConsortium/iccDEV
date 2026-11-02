@@ -1,5 +1,5 @@
 /**
-\page profiles_lane iccApplyProfiles: TIFF standard-CMM lane
+\page profiles_lane iccApplyProfiles: TIFF profile application lane
 
 \tableofcontents
 
@@ -10,13 +10,17 @@ profile sequence.
 
 | Form | Token shape |
 |---|---|
-| JSON | `iccApplyProfiles [-threads N] -cfg config_file` |
-| Direct | `iccApplyProfiles [-threads N] [-exportcfg config_file] src_tiff dst_tiff encoding compression planar embed interpolation profile intent ...` |
+| JSON | `iccApplyProfiles [--threads N] [--ifd N] --cfg config_file` |
+| Direct | `iccApplyProfiles [--threads N] [--ifd N] [--exportcfg config_file] src_tiff dst_tiff encoding compression planar embed interpolation profile intent ...` |
 
-`-threads N` is parsed before either form. It accepts 0 through 1024; zero
-requests hardware concurrency and one requests a single worker. The tool then
-advances its local `argv` and reduces `argc` by two, so `-cfg file` must be
-the exactly three remaining tokens: program name, `-cfg`, and file.
+Global options are parsed before either form. `--threads N` accepts 0 through
+`CIccThreadedCmm::GetMaxThreads()` (currently 256); zero requests hardware
+concurrency and one requests a single worker. `--ifd N` accepts 0 through
+4095 and overrides `imageFiles.srcIfd` in a JSON configuration. The tool
+advances its local `argv` and reduces `argc` for consumed options, so
+`--cfg file` must be the exactly three remaining tokens: program name,
+`--cfg`, and file. Legacy single-dash forms remain accepted where provided by
+`Usage()`.
 
 \dotfile profiles-lane.dot "iccApplyProfiles parser and TIFF transform lane"
 
@@ -30,7 +34,8 @@ trailing direct-mode token is rejected rather than ignored.
 
 | Field | Accepted selector | Meaning |
 |---|---|---|
-| `src_tiff`, `dst_tiff` | paths | Input and created output TIFF files. |
+| `src_tiff`, `dst_tiff` | paths | Input and destination TIFF files. |
+| `--ifd N`, `imageFiles.srcIfd` | main-chain TIFF directory 0 through 4095 | Select one source IFD; CLI selection overrides JSON and both default to 0. |
 | `encoding` | 0, 1, 2, 3 | Preserve source, 8-bit, 16-bit, or float output samples. |
 | `compression` | 0, 1 | No compression or LZW compression. |
 | `planar` | 0, 1 | Contiguous or separate TIFF planes. |
@@ -87,11 +92,18 @@ xforms.
 
 \section profiles_runtime Transform and output behavior
 
-The tool opens the source TIFF, accepts source 8-bit, 16-bit, or 32-bit float
-samples, derives or validates the destination bit depth, and obtains any
+Before decoding, the tool inventories the bounded main IFD chain and selects
+the requested directory. It warns when other main IFDs or selected-directory
+SubIFDs are present; the destination contains only the transformed selected
+main IFD. SubIFDs are counted but never traversed. Telemetry-enabled builds
+record the selected index, whether it came from the default, JSON, or CLI,
+and the discovered main-IFD and selected-SubIFD counts.
+
+The tool then opens the selected source IFD, accepts 8-bit, 16-bit, or 32-bit
+float samples, derives or validates the destination bit depth, and obtains any
 embedded source profile. An empty first profile file path requests that
-embedded profile. It then calls `CIccConnectCmm::CreateStandard()` with the
-profile sequence, optional embedded profile, and requested thread count.
+embedded profile. It calls `CIccConnectCmm::CreateStandard()` for a forward
+chain or `CreateSearch()` when JSON `connect.useSearch` is true.
 
 For every image row and pixel group, the tool converts source samples to
 internal representation, applies the CMM, converts to the chosen destination
@@ -102,4 +114,9 @@ representation, and writes the configured TIFF layout.
 `iccApplyProfiles-quick-check.sh` verifies each output encoding selector,
 JSON export/replay, exact `-cfg` and direct-argument rejection, and a
 single-threaded path. It uses checked-in TIFF and ICC fixtures.
+
+\ref md_docs_2iccapply_2apply-profile-processing "ApplyProfiles processing QA"
+defines the output and evidence contract. \ref tiff_processing_pipeline
+"TIFF image processing pipeline" shows how this transform relates to
+SpecSepToTiff and TiffDump.
 */

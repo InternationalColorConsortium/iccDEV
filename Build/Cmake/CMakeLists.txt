@@ -907,16 +907,6 @@ if(ENABLE_TOOLS AND ENABLE_IMAGE_TOOLS)
     message(STATUS "PNG Version            : ${PNG_VERSION}")
   endif()
 
-  # --- JPEG ---
-  if(VERBOSE_CONFIG)
-    message(STATUS "Checking for JPEG...")
-  endif()
-  find_package(JPEG REQUIRED)
-
-  if(VERBOSE_CONFIG)
-    message(STATUS "JPEG Library           : ${JPEG_LIBRARIES}")
-    message(STATUS "JPEG Include Directory : ${JPEG_INCLUDE_DIR}")
-  endif()
 endif()
 
 # ----------------------------------------------------------------------

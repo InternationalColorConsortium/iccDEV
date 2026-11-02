@@ -1994,6 +1994,7 @@ jobs:
           test -f docs/generated/html/curatedlibraries.html
           test -f docs/generated/html/curatedtools.html
           test -f docs/generated/html/curatedmaintainerqa.html
+          python3 .github/scripts/check-doxygen-html.py docs/generated/html
           if grep -q 'superpowers' docs/generated/html/navtreedata.js; then
             echo "::error::Doxygen navigation contains excluded internal documentation"
             exit 1
@@ -2047,8 +2048,10 @@ jobs:
             echo "CLI tools including IccPawgReport and"
             echo "IccProfileVisualize, Winnt tools including"
             echo "IccIisIsapi and its OpenAPI contract,"
-            echo "wxWidget tools, hello-iccdev, docs, Testing notes,"
+            echo "wxWidget tools, hello-iccdev, iOS examples, maintainer docs,"
             echo "and iccApply command-line lane references."
+            echo ""
+            echo "**Navigation QA**: Five curated entry points and no broken packaged links."
             echo ""
             echo "**Visual aids**: Interactive SVG (pan/zoom),"
             echo "class hierarchy browser, call/caller graphs,"

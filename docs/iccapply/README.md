@@ -16,17 +16,19 @@ The generated package provides:
 
 | Tool | Primary input lane | Output |
 |---|---|---|
-| \ref profiles_lane "iccApplyProfiles" | TIFF and standard profile sequence | TIFF |
+| \ref profiles_lane "iccApplyProfiles" | TIFF and forward or inverse-search profile sequence | TIFF |
 | \ref namedcmm_lane "iccApplyNamedCmm" | Named or numeric color data and named CMM | Legacy, JSON, or IT8 data |
 | \ref search_lane "iccApplySearch" | Color data and Search CMM sequence | Legacy, JSON, or IT8 data |
 | \ref tolink_lane "iccApplyToLink" | Positional link parameters and profile sequence | ICC DeviceLink or `.cube` LUT |
 
 ## Navigation
 
-- \ref profiles_lane "iccApplyProfiles: TIFF standard-CMM lane"
+- \ref profiles_lane "iccApplyProfiles: TIFF profile application lane"
 - \ref namedcmm_lane "iccApplyNamedCmm: named-color and numeric-data lane"
 - \ref search_lane "iccApplySearch: constrained Search-CMM lane"
 - \ref tolink_lane "iccApplyToLink: sampled DeviceLink and Cube lane"
+- \ref tiff_processing_pipeline "TIFF image processing pipeline"
+- \ref md_docs_2iccapply_2apply-profile-processing "ApplyProfiles processing QA"
 
 The diagrams describe control flow and argument ownership. The executable
 `Usage()` output and the linked source pages remain authoritative for accepted
@@ -34,8 +36,9 @@ arguments and diagnostics.
 
 ## QA examples
 
-The checked-in QA sources are included in the generated source browser at
-`.github/ci/quality-assurance/scripts/`. For a cross-tool smoke run after
+The checked-in QA scripts live in the source repository at
+<a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/ci/quality-assurance/scripts">.github/ci/quality-assurance/scripts/</a>.
+For a cross-tool smoke run after
 building the hybrid fixtures:
 
 ```sh

@@ -3,7 +3,7 @@
 `CIccThreadedCmm` is a decorator over an existing `CIccCmm` that runs
 multi-pixel `Apply()` calls in parallel by splitting the pixel buffer into
 contiguous strips and processing them through persistent workers. It lives in
-[IccProfLib/IccCmmThread.h](../IccProfLib/IccCmmThread.h) and is part of
+\ref IccCmmThread.h "IccProfLib/IccCmmThread.h" and is part of
 `IccProfLib2`.
 
 It is a drop-in wrapper: callers keep the `CIccCmm*` API; the threading is
@@ -115,7 +115,7 @@ high-entropy float data.
 
 ## CLI Example: `iccApplyProfiles --threads`
 
-[`iccApplyProfiles`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp)
+\ref iccApplyProfiles.cpp "iccApplyProfiles"
 exposes the wrapper through a `-threads` flag. The value is forwarded
 into [`CIccConnectCmm::CreateStandard`](icc-connect.md)'s `nThreads`
 parameter; the connect factory installs the `CIccThreadedCmm` wrapper

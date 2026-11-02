@@ -19,6 +19,7 @@ point to deeper references.
 | MATLAB IccJSON conversion, PAWG Q1 runtime, native contract, and release support files | `docs/matlab-bindings.md`, `docs/iccjson.md`, and `.github/skills/matlab-bindings-test/SKILL.md` |
 | CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
+| Apply tool and TIFF pipeline diagrams | `docs/iccapply/README.md`, `docs/iccapply/tiff-processing-pipeline.dox`, `docs/iccapply/diagrams/*.dot`, and `docs/tiff/` |
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
 | IccConnect library and `CIccConnectCmm` factory | `docs/icc-connect.md` |
@@ -61,15 +62,16 @@ point to deeper references.
 - Remove duplicate explanations after preserving any unique details.
 - Keep prompts operational; move long reference material into a named reference
   file when it is reused by templates or prompts.
-- Keep Doxygen-friendly Markdown links within the documented INPUT tree. When a
-  reference points outside Doxygen's scanned sources (for example a repo-root
-  `python/README.md` or an `examples/.../README.md` page), prefer an explicit
-  HTML anchor like `<a href="../python/README.md">python/README.md</a>` to keep
-  the generated docs warning-free without changing the rendered link target.
+- Keep Doxygen-friendly Markdown links within the documented INPUT tree. Use
+  relative Markdown links for generated Markdown pages and `\ref` for generated
+  source files. When a reference points
+  outside the generated package (for example the repo-root `python/README.md`),
+  use an explicit absolute source link such as
+  `<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/python/README.md">python/README.md</a>`.
 - Keep the Doxygen package focused on libraries, tools, examples, and
   maintainer guidance. CTest implementation, fixtures, QA script sources, and
   `docs/ctest.md` stay outside the generated package. Link to the source CTest
-  guide with an HTML anchor rather than adding it back as a generated page.
+  guide with an absolute GitHub HTML anchor rather than adding it back as a generated page.
 - Time is valuable: validate documentation with Doxygen parsing and warnings
   first, without rendering call/caller/include graphs. The release package
   retains graphs; a prose or input-scope change does not require regenerating
@@ -83,6 +85,7 @@ point to deeper references.
     printf 'CALLER_GRAPH = NO\nGRAPHICAL_HIERARCHY = NO\nDIRECTORY_GRAPH = NO\n'
   } | doxygen -
   test ! -s docs/generated/doxygen-warnings.log
+  python3 .github/scripts/check-doxygen-html.py docs/generated/html
   ```
 
   Bound the command with an external timeout when a wall-clock budget applies.

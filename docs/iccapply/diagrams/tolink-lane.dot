@@ -2,7 +2,9 @@ digraph tolink_lane {
   graph [rankdir=LR, bgcolor="transparent", fontname="Helvetica"];
   node [shape=box, style="rounded,filled", fontname="Helvetica", fillcolor="#e8f1fb"];
   edge [fontname="Helvetica"];
-  entry [label="Fixed positional argv\nplus pair-shaped profile remainder", fillcolor="#fff2cc"];
+  entry [label="argc / argv", fillcolor="#fff2cc"];
+  global [label="strip telemetry/evidence options\nin any order (when enabled)"];
+  positional [label="fixed positional fields\nplus pair-shaped profile remainder"];
   validate [label="Validate type, grid,\nrange, transform, interpolation"];
   writer [label="Choose V4/V5 ICC\nor Cube writer"];
   cmm [label="Add profiles\nthen CIccCmm::Begin"];
@@ -10,7 +12,7 @@ digraph tolink_lane {
   grid [label="Sample n-dimensional grid\nacross input range"];
   output [label="Write ICC link\nor Cube LUT", fillcolor="#d9ead3"];
   reject [label="reject before allocation", fillcolor="#f4cccc"];
-  entry -> validate -> writer -> cmm -> capacity -> grid -> output;
+  entry -> global -> positional -> validate -> writer -> cmm -> capacity -> grid -> output;
   validate -> reject [label="bad field/range"];
   capacity -> reject [label="grid too large"];
 }

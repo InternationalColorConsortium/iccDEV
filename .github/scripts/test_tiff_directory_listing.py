@@ -155,6 +155,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dump", required=True)
     args = parser.parse_args()
+    bare = subprocess.run([args.dump], capture_output=True, timeout=60)
+    assert bare.returncode == 0 and b"Usage: iccTiffDump" in bare.stdout
+    assert not bare.stderr
+    malformed = subprocess.run(
+        [args.dump, "input.tif", "extracted.icc", "extra"],
+        capture_output=True, timeout=60,
+    )
+    assert malformed.returncode == 1 and not malformed.stdout
+    assert b"Usage: iccTiffDump" in malformed.stderr
+    assert b"--list-directories tiff_file" in malformed.stderr
     with tempfile.TemporaryDirectory(prefix="iccdev-tiff-ifd-list-") as temp:
         root = pathlib.Path(temp)
         check_metadata_reporting(args.dump, root)

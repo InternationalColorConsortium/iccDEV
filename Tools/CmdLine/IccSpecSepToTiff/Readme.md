@@ -1,20 +1,28 @@
 # IccSpecSepToTiff
 
+`--help` starts with the ICC library and linked runtime libtiff versions;
+`--version` prints those versions without opening an input.
+
 `iccSpecSepToTiff` combines separate TIFF images for spectral wavelengths into a
 single multi-sample TIFF image. It can optionally validate and embed an ICC
 profile whose channel model matches the generated TIFF.
 
 ## Usage
 
-Use `-h` or `--help` for the command syntax and `--version` for the build
-version. Both exit with status 0 and print to standard output. Running without
+Use `-h` or `--help` for the command syntax and `--version` for the build and
+linked libtiff runtime version. Both exit with status 0 and print to standard output. Running without
 arguments, or with an incomplete or over-long command, names the problem and
 prints the syntax to standard error, then exits with status 255. A conversion is
-`argc=8` without a profile or `argc=9` with one:
+the normalized `argc=8` without a profile or `argc=9` with one:
 
-Optional `--tiles WIDTH HEIGHT` and `--bigtiff` switches are removed before
-the positional arguments below are parsed. Tile dimensions must be positive
+Optional `--ifd N`, `--tiles WIDTH HEIGHT`, and `--bigtiff` switches are removed
+from any argument position before the positional arguments below are parsed.
+Tile dimensions must be positive
 multiples of 16. Without these switches, output stays classic stripped TIFF.
+`--ifd` takes a zero-based main-chain index from 0 through 4095 and selects
+that same directory in every separation input; the default is 0. It may appear
+before or after the positional arguments. A duplicate, malformed, or unavailable
+index is an error.
 
 ```sh
 iccSpecSepToTiff --tiles 256 256 --bigtiff out.tif 1 1 spectral/spec_ 1 10 1
@@ -54,7 +62,9 @@ The command fails before creating output when these checks fail. This prevents
 TIFF files from carrying mislabeled `ICC Profile` tag data or profiles that
 cannot describe the image samples. Diagnostics for every rejection go to
 standard error; the accepted-profile line and the conversion summary go to
-standard output. Every error path exits with status 255.
+standard output. Most legacy conversion failures exit with status 255; mixed
+help/version requests and unknown long options now fail with status 1. Exit
+status normalization remains planned.
 
 ```sh
 iccSpecSepToTiff --help
@@ -78,15 +88,24 @@ single-channel TIFF inputs.
   supports 8-bit unsigned, 16-bit unsigned, and 32-bit float samples. Interleaved
   and separated output preserve every spectral sample; edge-tile padding is zero.
   All concurrently open tiled inputs share a 256 MiB tile-band budget by
-  default. The next input is rejected before its tile band is allocated if it
-  would exceed the remaining budget. The output tile band has a separate budget
-  with the same default; row and stripped-input buffers are outside these
+  default. For a stable input path, the next input is rejected before its tile
+  band is allocated if it would exceed the remaining budget. If a path changes
+  between metadata and pixel opens, the post-open layout check rejects the
+  changed input, but transient allocation may occur first. The output tile band
+  has a separate budget with the same default; row and stripped-input buffers are outside these
   tile-band limits. Set `ICCDEV_TIFF_MAX_DECODE_MIB` to an integer from 1 through
   4095 to opt a trusted large conversion into a larger shared-input and
   per-output budget. These are not total-process memory guarantees or limits on
   file size, total pixels, total decoded image bytes, or embedded ICC profile
   size. Leave headroom for row buffers, profile parsing, libtiff, and other
   process allocations when raising the value.
+- Each input's main IFD chain is inventoried without decoding pixels, up to
+  4096 directories. A malformed chain, an over-limit chain, or an input missing
+  the selected `--ifd` fails before output creation. Only the selected main IFD
+  supplies pixels, resolution metadata, and format checks. Other main IFDs and
+  SubIFDs are not transformed or copied into the one-IFD output. Warnings on
+  standard error summarize inputs with ignored main IFDs and SubIFDs linked
+  from selected directories; SubIFD offsets are not followed.
 - Tiled output preserves the existing unspecified-extra-sample policy, profile
   checks, resolution metadata, and partial-output cleanup. It does not generate
   pyramids or vendor-specific SVS files.
@@ -156,6 +175,8 @@ single-channel TIFF inputs.
 - All input TIFFs remain open during conversion. The operating system's
   per-process open-file limit can therefore impose a lower practical channel
   cap than the TIFF field.
+- Each input main IFD chain is limited to 4096 directories for inventory and
+  selection. SubIFDs are not traversed.
 - Concurrent tiled inputs share a 256 MiB decoded tile-band budget by default.
   A channel set that exceeds it fails before output creation unless a trusted
   run explicitly raises `ICCDEV_TIFF_MAX_DECODE_MIB`.
@@ -193,6 +214,13 @@ counts successful source-row reads across all channels; `rows_written` counts
 completed output rows. Phase times aggregate open/profile, read, pack, write,
 and finalization work; there are no per-pixel timers. Throughput is null when
 the measured read/pack/write interval is zero.
+`input_ifd` and `input_ifd_provenance` identify the selected main-chain index
+and whether it came from the default or an explicit option. The inventory
+fields report the common `input_main_ifd_count` when all inputs agree (otherwise
+`null`), its minimum and maximum, the sum `main_ifds_discovered`, the number of
+inputs with additional main IFDs, and selected-directory SubIFD references.
+`directories_visited` retains its v1 meaning of one selected processing IFD
+per input; it does not count the separate metadata-only inventory traversal.
 
 After building the tools, run the complete checked-in QA surface from any
 directory:

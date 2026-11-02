@@ -55,6 +55,7 @@
 
 #include "IccFileUtil.h"
 #include "IccProfile.h"
+#include "IccProfLibVer.h"
 #include "HeifIccProperties.h"
 #include <libheif/heif.h>
 
@@ -137,16 +138,34 @@ namespace
     return "ok";
   }
 
-  void printUsage(const char* executable)
+  void printVersions(std::ostream& output)
   {
-    std::cerr << "Usage: " << executable << " input.heic [existing-output-directory]" << std::endl;
+    output << "iccHeifDump IccProfLib_build=" ICCPROFLIBVER
+           << " libheif_build=" LIBHEIF_VERSION
+           << " libheif_runtime=" << heif_get_version() << std::endl;
+  }
+
+  void printUsage(std::ostream& output)
+  {
+    printVersions(output);
+    output << "Usage: iccHeifDump input.heic [existing-output-directory]" << std::endl;
+    output << "       iccHeifDump --version | --help" << std::endl;
   }
 }
 
 int main(int argc, char* argv[])
 {
+  if (argc == 2 && std::string(argv[1]) == "--version") {
+    printVersions(std::cout);
+    return 0;
+  }
+  if (argc == 2 && (std::string(argv[1]) == "--help" ||
+                    std::string(argv[1]) == "-h")) {
+    printUsage(std::cout);
+    return 0;
+  }
   if (argc < 2 || argc > 3) {
-    printUsage(argv[0]);
+    printUsage(std::cerr);
     return 3;
   }
 
@@ -180,7 +199,8 @@ int main(int argc, char* argv[])
 
   const heif_error readResult = heif_context_read_from_file(context, argv[1], nullptr);
   if (readResult.code != heif_error_Ok) {
-    std::cerr << "Error: unable to read HEIF file: " << readResult.message << std::endl;
+    std::cerr << "Error: unable to read HEIF file: "
+              << icSanitizeConsoleText(readResult.message) << std::endl;
     heif_context_free(context);
     return 2;
   }
@@ -198,12 +218,14 @@ int main(int argc, char* argv[])
     if (argc == 3) {
       const std::string path = outputPath(argv[2], property.itemId,
                                           property.propertyIndex, property.colourType);
+      const std::string displayPath = icSanitizeConsoleText(path);
       if (!writeProfile(path, profile, property.profileSize)) {
-        std::cerr << "Error: unable to create extracted ICC profile: " << path << std::endl;
+        std::cerr << "Error: unable to create extracted ICC profile: "
+                  << displayPath << std::endl;
         heif_context_free(context);
         return 2;
       }
-      std::cout << " output=" << path;
+      std::cout << " output=" << displayPath;
     }
 
     std::cout << " proflib_parse=" << parseProfile(profile, property.profileSize)

@@ -43,8 +43,11 @@ For documentation edits, run the bounded graph-light Doxygen check in
 graph generation belongs to release packaging or graph changes. Keep
 `HAVE_DOT=YES` for checked-in diagrams; exclude CTest implementation and
 fixtures from the generated package. Keep
-Markdown links inside the Doxygen INPUT tree; use explicit HTML anchors for
-outside-tree references. Never commit generated Doxygen output or warning logs.
+Markdown links inside the Doxygen INPUT tree; use relative Markdown links for
+generated Markdown pages, `\ref` for generated source files, and absolute GitHub
+HTML anchors for repo-only resources. Relative HTML anchors can break in the
+packaged site without a Doxygen warning. Never commit
+generated Doxygen output or warning logs.
 
 Copilot code review reads repository-wide instructions, the nearest applicable
 `AGENTS.md`, path-specific instructions, and relevant skills from the PR head

@@ -860,7 +860,7 @@ header. Four formats are accepted:
 
 ### Standalone C++ example
 
-The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
+The <a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/examples/hello-iccdev">examples/hello-iccdev/</a> directory contains a
 minimal standalone project that links IccProfLib2, IccXML2, and IccJSON2. When
 built with `USE_ICCJSON=1` it demonstrates JSON round-tripping via the
 `CIccProfileJson::ToJson()` and `ParseJson()` APIs, factory registration, and

@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -62,6 +63,26 @@ def main():
         image = root / "input.heic"
         shutil.copyfile(source, image)
 
+        version_result = subprocess.run(
+            [str(tool), "--version"], capture_output=True,
+            text=True, errors="replace", timeout=30,
+        )
+        check_result(version_result, 0)
+        if not re.fullmatch(
+            r"iccHeifDump IccProfLib_build=\S+ libheif_build=\S+ "
+            r"libheif_runtime=\S+\n", version_result.stdout,
+        ):
+            raise RuntimeError(f"incomplete HEIF version banner: {version_result.stdout!r}")
+        help_result = subprocess.run(
+            [str(tool), "--help"], capture_output=True,
+            text=True, errors="replace", timeout=30,
+        )
+        check_result(help_result, 0)
+        if (version_result.stdout.strip() not in help_result.stdout or
+                "Usage: iccHeifDump input.heic" not in help_result.stdout):
+            raise RuntimeError(f"incomplete HEIF help: {help_result.stdout!r}")
+        passed_case("build/runtime version and help")
+
         missing = root / "missing.heic"
         result = subprocess.run(
             [str(tool), str(missing)], capture_output=True,
@@ -81,6 +102,19 @@ def main():
             if result.stderr != f"{INPUT_ERROR} {safe_name}\n":
                 raise RuntimeError(f"unsafe input diagnostic was not sanitized: {result.stderr!r}")
             passed_case("missing input diagnostic sanitizes console controls")
+
+            unsafe_directory = root / "output\n\x1b[31m"
+            unsafe_directory.mkdir()
+            unsafe_output = unsafe_directory / PROFILE_NAME
+            safe_output = str(unsafe_output).replace("\n", "\\n").replace("\x1b", "\\x1B")
+            output = run(image, unsafe_directory)
+            if (f" output={safe_output} proflib_parse=ok" not in output or
+                    "\x1b" in output):
+                raise RuntimeError(f"unsafe output path was not sanitized: {output!r}")
+            failure = run(image, unsafe_directory, 2)
+            if safe_output not in failure or "\x1b" in failure:
+                raise RuntimeError(f"unsafe output error was not sanitized: {failure!r}")
+            passed_case("output paths sanitize console controls")
 
         malformed = root / "malformed.heic"
         malformed.write_bytes(b"not a HEIF file")

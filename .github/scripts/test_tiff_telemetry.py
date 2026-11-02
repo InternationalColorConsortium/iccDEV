@@ -59,6 +59,23 @@ def main():
         binary = pathlib.Path(tool).read_bytes()
         assert (b"iccdev-tiff-telemetry/v1" in binary) == enabled
         help_text = run(tool, "--help").stdout
+        tool_name = pathlib.Path(tool).stem.encode("ascii")
+        assert help_text.startswith(tool_name + b" built with IccProfLib version ")
+        assert b"libtiff: LIBTIFF, Version " in help_text.splitlines()[1]
+        version_text = run(tool, "--version").stdout
+        if tool == args.specsep:
+            icc_version = help_text.split(b"IccProfLib version ", 1)[1].splitlines()[0]
+            # Windows CRT text output uses CRLF; compare the complete line.
+            expected = tool_name + b" " + icc_version
+            assert version_text.splitlines()[0] == expected, (version_text, expected)
+        else:
+            assert version_text.startswith(tool_name + b" IccProfLib=")
+        assert b"libtiff: LIBTIFF, Version " in version_text.splitlines()[1]
+        assert b"Copyright" not in version_text
+        if tool == args.dump:
+            mixed_version = run(tool, "--version", "ignored.tif", success=False)
+            assert b"--version must be used alone" in mixed_version.stderr
+            assert not mixed_version.stdout
         assert (b"--telemetry=" in help_text) == enabled
         if not enabled:
             for option in ("--telemetry=human", "--telemetry-file"):
@@ -82,6 +99,8 @@ def main():
         assert output.read_bytes() == original
         events = receipt(log)
         values = fields(events)
+        assert values["library_versions"]["libtiff"].startswith("LIBTIFF, Version ")
+        assert values["library_versions"]["IccProfLib"]
         width, height = values["width"], values["height"]
         assert width > 0 and height > 0
         assert values["samples_per_pixel"] == 10
@@ -132,6 +151,9 @@ def main():
                         "--evidence-json", "--list-directories", multi)
         assert (ordinary.stdout, ordinary.stderr) == (diagnosed.stdout, diagnosed.stderr)
         assert fields(receipt(listing))["directories_visited"] == 2
+        assert fields(receipt(listing))["library_versions"]["libtiff"].startswith(
+            "LIBTIFF, Version "
+        )
 
         for tool in (args.dump, args.specsep):
             for switches in (

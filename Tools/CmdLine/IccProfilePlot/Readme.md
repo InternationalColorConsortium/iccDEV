@@ -1,7 +1,7 @@
 # IccProfilePlot / IccVizModel  -  data-first profile visualization
 
 `IccVizModel` turns an ICC profile's plottable content into **data** instead of a
-finished picture. Where [`IccProfileVisualize`](../IccProfileVisualize) renders a
+finished picture. Where [IccProfileVisualize](../IccProfileVisualize/Readme.md) renders a
 profile into a single PDF (tone curves, chromaticity, named-colour scatters) plus
 per-tag TIFFs, `IccVizModel` lets a caller **enumerate** the available
 visualizations and **render each one individually**:

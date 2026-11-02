@@ -1,7 +1,8 @@
 # IccApplyNamedCmm
 
 `iccApplyNamedCmm` applies one or more ICC/iccMAX profiles to text-based sample
-data and writes transformed values to stdout.
+data. It writes transformed values to stdout unless a configured destination
+file is selected.
 
 ## Usage
 
@@ -126,6 +127,6 @@ ICS look as though no tint had been supplied.
 ## See Also
 
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
-- [Testing profiles](https://github.com/InternationalColorConsortium/iccDEV/blob/master/Testing/README.md)
+- <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Testing/README.md">Testing profiles</a>
 - [IccConnect library](../../../docs/icc-connect.md) — JSON-driven setup
   used by the `-cfg` form.

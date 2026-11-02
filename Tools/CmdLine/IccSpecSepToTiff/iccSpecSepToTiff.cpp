@@ -50,10 +50,12 @@
 #include <cstdlib>
 #include <cerrno>
 #include <climits>
+#include <cstdint>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include <iostream>
 #include <vector>
 #include <memory>
@@ -88,10 +90,13 @@ static void Usage(FILE *stream, const char *name)
   // gets the same escaping the sibling TIFF tool applies before echoing a name.
   std::string safeName = icSanitizeConsoleText(strippedName);
 
+  fprintf(stream, "iccSpecSepToTiff built with IccProfLib version " ICCPROFLIBVER "\n");
+  fprintf(stream, "libtiff: %s\n\n", icTiffRuntimeVersion().c_str());
   fprintf(stream, "Usage:\n");
-  fprintf(stream, "  %s {--tiles WIDTH HEIGHT} {--bigtiff} output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
+  fprintf(stream, "  %s {--ifd N} {--tiles WIDTH HEIGHT} {--bigtiff} output compress sep infile_prefix start end incr [profile]\n", safeName.c_str());
   fprintf(stream, "  %s -h | --help\n", safeName.c_str());
   fprintf(stream, "  %s --version\n\n", safeName.c_str());
+  fprintf(stream, "  Conversion options may appear before or after positional arguments; help/version must be used alone.\n");
   fprintf(stream, "Combine single-channel spectral TIFF files into one multi-sample TIFF.\n\n");
 
   fprintf(stream, "Arguments:\n");
@@ -113,6 +118,8 @@ static void Usage(FILE *stream, const char *name)
   fprintf(stream, "  Inputs may be stripped or tiled; tiled samples support 8, 16, or 32 bits.\n");
   fprintf(stream, "  --tiles dimensions must be positive multiples of 16; default output is stripped.\n");
   fprintf(stream, "  --bigtiff selects BigTIFF output; default output is classic TIFF.\n");
+  fprintf(stream, "  --ifd N selects one main-chain IFD (0..4095) in every input; default is 0.\n");
+  fprintf(stream, "  Other main IFDs and SubIFDs are not included in the output.\n");
   fprintf(stream, "  An optional profile must be conformant and match SamplesPerPixel.\n\n");
 
   fprintf(stream, "Limits:\n");
@@ -124,7 +131,6 @@ static void Usage(FILE *stream, const char *name)
 #ifdef ICCDEV_TELEMETRY
   CIccTiffTelemetry::Help(stream);
 #endif
-  fprintf(stream, "Built with IccProfLib version " ICCPROFLIBVER "\n");
 }
 
 //===================================================
@@ -132,6 +138,7 @@ static void Usage(FILE *stream, const char *name)
 static void PrintVersion()
 {
   printf("iccSpecSepToTiff " ICCPROFLIBVER "\n");
+  printf("libtiff: %s\n", icTiffRuntimeVersion().c_str());
 }
 
 //===================================================
@@ -177,6 +184,23 @@ static bool parseBoolArg(const char *text, bool &value)
   }
 
   return false;
+}
+
+static bool parseIfdArg(const char *text, unsigned int &value)
+{
+  if (!text || !*text)
+    return false;
+  for (const char *p = text; *p; ++p) {
+    if (*p < '0' || *p > '9')
+      return false;
+  }
+  char *end = NULL;
+  errno = 0;
+  const unsigned long parsed = strtoul(text, &end, 10);
+  if (errno || !end || *end || parsed > 4095)
+    return false;
+  value = static_cast<unsigned int>(parsed);
+  return true;
 }
 
 static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
@@ -459,6 +483,8 @@ int main(int argc, char* argv[]) {
     return 0;
   }
   unsigned int tileWidth = 0, tileHeight = 0;
+  unsigned int inputIfd = 0;
+  bool hasIfdOption = false;
   bool bigTiff = false;
   std::vector<char*> positional;
   if (argc)
@@ -474,7 +500,16 @@ int main(int argc, char* argv[]) {
       continue;
     }
 #endif
-    if (!strcmp(argv[arg], "--tiles")) {
+    if (!strcmp(argv[arg], "--ifd")) {
+      if (hasIfdOption || arg + 1 >= argc ||
+          !parseIfdArg(argv[arg + 1], inputIfd)) {
+        fprintf(stderr, "Invalid --ifd index (expected 0..4095)\n");
+        return -1;
+      }
+      hasIfdOption = true;
+      ++arg;
+    }
+    else if (!strcmp(argv[arg], "--tiles")) {
       int w = 0, h = 0;
       if (tileWidth || arg + 2 >= argc ||
           !parseIntArg(argv[arg + 1], w) || !parseIntArg(argv[arg + 2], h) ||
@@ -493,6 +528,16 @@ int main(int argc, char* argv[]) {
       }
       bigTiff = true;
     }
+    else if (!strcmp(argv[arg], "--help") || !strcmp(argv[arg], "-h") ||
+             !strcmp(argv[arg], "--version")) {
+      fprintf(stderr, "%s must be used alone\n", argv[arg]);
+      return EXIT_FAILURE;
+    }
+    else if (argv[arg][0] == '-' && argv[arg][1] == '-') {
+      fprintf(stderr, "Unknown option: %s\n",
+              icSanitizeConsoleText(argv[arg]).c_str());
+      return EXIT_FAILURE;
+    }
     else
       positional.push_back(argv[arg]);
     arg++;
@@ -504,8 +549,8 @@ int main(int argc, char* argv[]) {
     // Say which way the invocation is malformed before the syntax block: a bare
     // Usage() dump left the caller to diff their command against it.  The
     // diagnostic and the usage both go to stderr because this path is a failure;
-    // -h/--help above is the only route to Usage() on stdout.  Fail like every
-    // other error exit in main(), all of which return -1 (process status 255).
+    // -h/--help above is the only route to Usage() on stdout.  Preserve the
+    // legacy -1 return (process status 255) for this positional-error path.
     if (argc < minargs)
       fprintf(stderr, "Missing arguments: expected 7 or 8, received %d.\n",
               argc > 0 ? argc - 1 : 0);
@@ -574,6 +619,15 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
+  size_t inputsWithAdditionalMainIfds = 0;
+  size_t selectedSubIfdInputs = 0;
+  unsigned long long selectedSubIfdCount = 0;
+#ifdef ICCDEV_TELEMETRY
+  unsigned long long mainIfdsDiscovered = 0;
+  unsigned int minMainIfds = std::numeric_limits<unsigned int>::max();
+  unsigned int maxMainIfds = 0;
+#endif
+
 #ifdef ICCDEV_TELEMETRY
   std::vector<std::string> protectedPaths;
   if (telemetry.Active()) {
@@ -592,7 +646,16 @@ int main(int argc, char* argv[]) {
       return -1;
     }
   }
-  if (!telemetry.Start("iccSpecSepToTiff", protectedPaths))
+  if (!telemetry.Start("iccSpecSepToTiff", protectedPaths,
+                       std::string("\"tool_version\":") +
+                       CIccTiffTelemetry::JsonString(ICCPROFLIBVER) +
+                       ",\"library_versions\":{\"IccProfLib\":" +
+                       CIccTiffTelemetry::JsonString(ICCPROFLIBVER) +
+                       ",\"libtiff\":" +
+                       CIccTiffTelemetry::JsonString(icTiffRuntimeVersion()) + "}" +
+                       ",\"input_ifd\":" + std::to_string(inputIfd) +
+                       ",\"input_ifd_provenance\":\"" +
+                       (hasIfdOption ? "explicit" : "default") + "\""))
     return -1;
   if (telemetry.Active())
     telemetry.SetStage("open_inputs");
@@ -622,6 +685,13 @@ int main(int argc, char* argv[]) {
       "\"status\":\"tool_failure\",\"reason\":" +
       CIccTiffTelemetry::JsonString(reason) +
       ",\"stage\":" + CIccTiffTelemetry::JsonString(stage) +
+      ",\"input_ifd\":" + std::to_string(inputIfd) +
+      ",\"input_ifd_provenance\":\"" +
+      (hasIfdOption ? "explicit" : "default") + "\"" +
+      ",\"main_ifds_discovered\":" + std::to_string(mainIfdsDiscovered) +
+      ",\"inputs_with_additional_main_ifds\":" +
+      std::to_string(inputsWithAdditionalMainIfds) +
+      ",\"selected_subifd_count\":" + std::to_string(selectedSubIfdCount) +
       ",\"channel_rows_read\":" +
       (telemetryCountersValid ? std::to_string(successfulChannelRows) : "null") +
       ",\"logical_bytes_read\":" +
@@ -643,9 +713,11 @@ int main(int argc, char* argv[]) {
 #endif
 
   // Each tiled input keeps one decoded tile band until the conversion ends.
-  // Give Open() the remaining budget so the aggregate cannot grow by one full
-  // allowance for every channel, and reject before allocating the band that
-  // exceeds it. The default remains 256 MiB; trusted large conversions can
+  // Give Open() the remaining budget for a stable input path and reject a band
+  // that exceeds it. A path replaced between metadata and pixel opens can
+  // briefly allocate against stale layout information before the post-open
+  // layout check rejects it; same-handle preflight is follow-up work.
+  // The default remains 256 MiB; trusted large conversions can
   // deliberately raise the shared budget with ICCDEV_TIFF_MAX_DECODE_MIB.
   unsigned int maxInputTileBandBytes = 0;
   if (!CTiffImg::GetDefaultDecodeBufferLimit(maxInputTileBandBytes)) {
@@ -674,17 +746,57 @@ int main(int argc, char* argv[]) {
     if (icOutputIsInput(argv[1], filename.c_str()))
       return -1;
 
-    // The aggregate allowance applies only to decoded tile bands. Strip
-    // buffers have their own per-image decode limit, as documented, so inspect
-    // storage without allocating pixels and choose the appropriate budget.
-    // This also keeps zero remaining bytes from being mistaken for Open()'s
-    // "use the default" sentinel.
+    // Select the requested main IFD directly, then inventory the bounded main
+    // chain. A valid later IFD must not depend on IFD 0 passing this helper's
+    // metadata requirements. The output has one IFD, so other pyramid levels
+    // or associated images are not copied.
     CTiffImg metadata;
-    if (!metadata.Open(filename.c_str(), true)) {
-      fprintf(stderr, "Cannot open input %s\n",
-              icSanitizeConsoleText(filename).c_str());
+    if (!metadata.Open(filename.c_str(), true, inputIfd)) {
+      fprintf(stderr, "Cannot open input %s at main IFD %u (missing or invalid metadata)\n",
+              icSanitizeConsoleText(filename).c_str(), inputIfd);
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("input_metadata_open_failed", "inventory_input_ifds");
+#endif
       return -1;
     }
+    const unsigned int mainIfdCount = metadata.GetDirectoryCount();
+    if (!mainIfdCount) {
+      fprintf(stderr,
+              "Cannot inventory main TIFF IFDs in %s (malformed chain or more than 4096 IFDs)\n",
+              icSanitizeConsoleText(filename).c_str());
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("input_ifd_inventory_failed", "inventory_input_ifds");
+#endif
+      return -1;
+    }
+#ifdef ICCDEV_TELEMETRY
+    mainIfdsDiscovered += mainIfdCount;
+    minMainIfds = std::min(minMainIfds, mainIfdCount);
+    maxMainIfds = std::max(maxMainIfds, mainIfdCount);
+#endif
+    if (mainIfdCount > 1)
+      ++inputsWithAdditionalMainIfds;
+    if (inputIfd >= mainIfdCount) {
+      fprintf(stderr, "Input %s has %u main IFDs; --ifd %u is unavailable\n",
+              icSanitizeConsoleText(filename).c_str(), mainIfdCount, inputIfd);
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("input_ifd_missing", "select_input_ifd");
+#endif
+      return -1;
+    }
+    uint16_t subIfdCount = 0;
+    toff_t *subIfdOffsets = NULL;
+    if (TIFFGetField(metadata.GetTiffHandle(), TIFFTAG_SUBIFD,
+                     &subIfdCount, &subIfdOffsets) == 1 && subIfdCount) {
+      ++selectedSubIfdInputs;
+      selectedSubIfdCount += subIfdCount;
+    }
+
+    // The aggregate allowance applies only to decoded tile bands. Strip
+    // buffers have their own per-image decode limit, as documented, so inspect
+    // selected-IFD storage without allocating pixels and choose its budget.
+    // This also keeps zero remaining bytes from being mistaken for Open()'s
+    // "use the default" sentinel.
     const bool inputIsTiled = metadata.IsTiled();
     metadata.Close();
     if (inputIsTiled && !remainingInputTileBandBytes) {
@@ -694,13 +806,26 @@ int main(int argc, char* argv[]) {
     }
     const unsigned int inputDecodeBufferBytes =
       inputIsTiled ? remainingInputTileBandBytes : maxInputTileBandBytes;
-    if (!infile[i].Open(filename.c_str(), false, 0,
+    if (!infile[i].Open(filename.c_str(), false, inputIfd,
                         inputDecodeBufferBytes)) {
-      fprintf(stderr, "Cannot open input %s\n",
-              icSanitizeConsoleText(filename).c_str());
+      fprintf(stderr, "Cannot open input %s at main IFD %u for pixels\n",
+              icSanitizeConsoleText(filename).c_str(), inputIfd);
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("input_ifd_pixel_open_failed", "open_input_pixels");
+#endif
       return -1;
     }
-    remainingInputTileBandBytes -= infile[i].GetTileBandSize();
+    const unsigned int tileBandSize = infile[i].GetTileBandSize();
+    if (infile[i].IsTiled() != inputIsTiled ||
+        tileBandSize > remainingInputTileBandBytes) {
+      fprintf(stderr, "Input %s changed TIFF storage layout during open\n",
+              icSanitizeConsoleText(filename).c_str());
+#ifdef ICCDEV_TELEMETRY
+      failTelemetry("input_layout_changed", "open_input_pixels");
+#endif
+      return -1;
+    }
+    remainingInputTileBandBytes -= tileBandSize;
 #ifdef ICCDEV_TELEMETRY
     if (telemetryActive) {
       telemetryCountersValid =
@@ -752,6 +877,31 @@ int main(int argc, char* argv[]) {
         return -1;
     }
   }
+
+  if (inputsWithAdditionalMainIfds)
+    fprintf(stderr,
+            "Warning: %zu input TIFFs have additional main IFDs; main IFD %u selected from each input and other main IFDs will be ignored\n",
+            inputsWithAdditionalMainIfds, inputIfd);
+  if (selectedSubIfdInputs)
+    fprintf(stderr,
+            "Warning: %zu selected main IFDs reference %llu SubIFDs; SubIFDs were ignored\n",
+            selectedSubIfdInputs, selectedSubIfdCount);
+#ifdef ICCDEV_TELEMETRY
+  const std::string ifdTelemetryFields =
+    ",\"input_ifd\":" + std::to_string(inputIfd) +
+    ",\"input_ifd_provenance\":\"" +
+    (hasIfdOption ? "explicit" : "default") + "\"" +
+    ",\"input_main_ifd_count\":" +
+    (minMainIfds == maxMainIfds ? std::to_string(minMainIfds) : "null") +
+    ",\"input_main_ifd_count_min\":" + std::to_string(minMainIfds) +
+    ",\"input_main_ifd_count_max\":" + std::to_string(maxMainIfds) +
+    ",\"main_ifds_discovered\":" + std::to_string(mainIfdsDiscovered) +
+    ",\"inputs_with_additional_main_ifds\":" +
+    std::to_string(inputsWithAdditionalMainIfds) +
+    ",\"selected_subifd_inputs\":" + std::to_string(selectedSubIfdInputs) +
+    ",\"selected_subifd_count\":" + std::to_string(selectedSubIfdCount) +
+    ",\"directory_visit_scope\":\"selected_processing_ifds\"";
+#endif
   
   // all inputs are open now
   
@@ -821,6 +971,7 @@ int main(int argc, char* argv[]) {
       ",\"height\":" + std::to_string(f->GetHeight()) +
       ",\"bits_per_sample\":" + std::to_string(f->GetBitsPerSample()) +
       ",\"samples_per_pixel\":" + std::to_string(nSamples) +
+      ifdTelemetryFields +
       ",\"directories_visited\":" + std::to_string(nSamples) +
       ",\"planar\":\"" + (bSep ? "separate" : "interleaved") +
       "\",\"compression\":\"" + (bCompress ? "lzw" : "none") +
@@ -1044,6 +1195,7 @@ int main(int argc, char* argv[]) {
       ",\"compression\":" + CIccTiffTelemetry::JsonString(bCompress ? "lzw" : "none") +
       ",\"output_tiled\":" + (tileWidth ? "true" : "false") +
       ",\"output_bigtiff\":" + (bigTiff ? "true" : "false") +
+      ifdTelemetryFields +
       ",\"directories_visited\":" + std::to_string(nSamples) +
       ",\"rows_written\":" +
       (telemetryCountersValid ? std::to_string(completedOutputRows) : "null") +

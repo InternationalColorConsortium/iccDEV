@@ -5,11 +5,14 @@
 
 \section tolink_contract Positional argv contract
 
-This tool has one direct positional form:
+After global options are removed, this tool has one positional form:
 
 `iccApplyToLink dst_link link_type lut_size option title range_min range_max first_transform interp profile intent ...`
 
-The first ten process tokens include the executable and the nine fixed fields.
+Telemetry-enabled builds remove `--telemetry=off|human|jsonl`,
+`--telemetry-file FILE`, and `--evidence-file FILE` in any order before
+positional validation. The first ten remaining process tokens include the
+executable and the nine fixed fields.
 Every remaining token belongs to profile/intent pairs, with `-ENV:sig value`
 and `-PCC file` participating in that pair-shaped sequence. An odd remainder
 is rejected before a writer or CMM is created.

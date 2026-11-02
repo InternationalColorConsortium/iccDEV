@@ -9,11 +9,15 @@
 
 | Form | Token shape |
 |---|---|
-| JSON | `iccApplySearch -cfg config_file` |
-| Direct | `iccApplySearch [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation search-sequence` |
+| JSON | `iccApplySearch [--threads N] [telemetry options] --cfg config_file` |
+| Direct | `iccApplySearch [--threads N] [telemetry options] [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation search-sequence` |
 
-The JSON lane requires exactly `-cfg file`; surplus tokens fail rather than
-silently disappear. The direct lane removes `argv[0]`, consumes optional
+The tool first removes `--threads N` and, in telemetry-enabled builds,
+`--telemetry=off|human|jsonl`, `--telemetry-file FILE`, and
+`--evidence-file FILE` in any order. `N` is 0 through
+`CIccThreadedCmm::GetMaxThreads()`; zero requests hardware concurrency.
+The JSON lane then requires exactly `--cfg file`; surplus tokens fail rather
+than silently disappear. The direct lane removes `argv[0]`, consumes optional
 export and debugging prefixes, then uses `CIccCfgDataApply::fromArgs()` followed
 by `CIccCfgSearchApply::fromArgs()`. After either lane, the sequence must
 contain exactly two or three profiles.

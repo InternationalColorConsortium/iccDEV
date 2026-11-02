@@ -5,26 +5,27 @@ small library that builds fully initialized `CIccCmm` transform objects from
 JSON-driven configuration. It exists so command-line tools and embedders
 share one path for profile loading, hint setup, Profile Connection Conditions
 (PCC) lifetime, and `Begin()`. Sources live in
-[IccConnect/IccLibConnect](../IccConnect/IccLibConnect).
+<a href="https://github.com/InternationalColorConsortium/iccDEV/tree/master/IccConnect/IccLibConnect">IccConnect/IccLibConnect</a>.
 
 The library is intentionally narrow:
 
 | Header | Purpose |
 |--------|---------|
-| [IccCmmConfig.h](../IccConnect/IccLibConnect/IccCmmConfig.h) | C++ config objects (`CIccCfgProfile`, `CIccCfgProfileSequence`, `CIccCfgSearchApply`, ...) and JSON / argv loaders. |
-| [IccJsonUtil.h](../IccConnect/IccLibConnect/IccJsonUtil.h) | nlohmann/json helpers shared by the config objects. |
-| [IccConnect.h](../IccConnect/IccLibConnect/IccConnect.h) | `CIccConnectCmm` factory that turns a config into a `Begin()`-ed CMM. |
+| \ref IccCmmConfig.h "IccCmmConfig.h" | C++ config objects (`CIccCfgProfile`, `CIccCfgProfileSequence`, `CIccCfgSearchApply`, ...) and JSON / argv loaders. |
+| \ref IccJsonUtil.h "IccJsonUtil.h" | nlohmann/json helpers shared by the config objects. |
+| \ref IccConnect.h "IccConnect.h" | `CIccConnectCmm` factory that turns a config into a `Begin()`-ed CMM. |
 
 The JSON shape consumed by `IccCmmConfig` is described by
-[icc-connect-config.schema.json](icc-connect-config.schema.json).
+<a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/icc-connect-config.schema.json">icc-connect-config.schema.json</a>.
 
 ## Build and Linkage
 
-`IccConnect2` is built from [Build/Cmake/IccConnect/CMakeLists.txt](../Build/Cmake/IccConnect/CMakeLists.txt)
+`IccConnect2` is built from <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/Build/Cmake/IccConnect/CMakeLists.txt">Build/Cmake/IccConnect/CMakeLists.txt</a>
 when `ENABLE_ICCJSON=ON`, and follows the same `ENABLE_SHARED_LIBS` /
 `ENABLE_STATIC_LIBS` options used by `IccProfLib`. It depends on:
 
 - `IccProfLib2` (or `IccProfLib2-static`)
+- `IccJSON2` (or `IccJSON2-static`)
 - `nlohmann_json::nlohmann_json`
 
 Public headers are installed under
@@ -107,7 +108,7 @@ A threaded wrapper hides a named-color CMM, so `GetNamedCmm()` returns
 `GetThreadedCmm()` and `IsThreaded()` expose the wrapper directly.
 
 For a worked example, see
-[`Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp),
+\ref iccApplyProfiles.cpp "Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp",
 which calls `CreateStandard(cfgProfiles, pEmbedded, nEmbeddedLen,
 cfgConnect.m_nThreads, &sConnectError)` and drives row-batched
 `Apply(dst, src, nPixels)` calls. The `-threads` CLI flag maps straight
@@ -177,7 +178,7 @@ If the profile lacks the requested array member for any named color
 encountered during apply (output-side stem or overprint suffix), `Apply`
 fails with `icCmmStatBadTintXform` rather than silently falling back to
 another member. This surfaces misconfigurations.
-See [the iccApplyNamedCmm Readme](../Tools/CmdLine/IccApplyNamedCmm/Readme.md#named-color-overprint-variants)
+See [the iccApplyNamedCmm Readme](../Tools/CmdLine/IccApplyNamedCmm/Readme.md)
 for end-to-end usage examples.
 
 ## JSON Configuration
@@ -187,9 +188,9 @@ a config object (typically `CIccCfgApply`, `CIccCfgImageApply`, or
 `CIccCfgSearchApply`) from JSON or argv, then hand its profile sequence to
 the appropriate factory. See:
 
-- [icc-connect-config.schema.json](icc-connect-config.schema.json) -- full
+- <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/icc-connect-config.schema.json">icc-connect-config.schema.json</a> -- full
   schema for the config objects in `IccCmmConfig.h`.
-- [Tools/CmdLine/IccApplyNamedCmm](../Tools/CmdLine/IccApplyNamedCmm) and
+- [Tools/CmdLine/IccApplyNamedCmm](../Tools/CmdLine/IccApplyNamedCmm/Readme.md) and
   the other `iccApply*` tools -- concrete usage of `-cfg config.json` plus
   argv-based fallback.
 
@@ -225,7 +226,7 @@ decorator and the ownership pattern used by `iccApplyProfiles`.
 
 ## See Also
 
-- [icc-connect-config.schema.json](icc-connect-config.schema.json) -- JSON
+- <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/icc-connect-config.schema.json">icc-connect-config.schema.json</a> -- JSON
   Schema for IccConnect configuration objects.
 - [CIccThreadedCmm](icc-cmm-threading.md) -- parallel apply over a
   `Begin()`-ed CMM.

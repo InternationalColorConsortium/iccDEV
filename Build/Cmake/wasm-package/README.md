@@ -29,6 +29,12 @@ const { IccDumpProfile } = require('iccdev');
 `IccApplySearch`, `IccApplyToLink`, `IccTiffDump`, `IccJpegDump`,
 `IccPngDump`, `IccSpecSepToTiff`, `IccV5DspObsToV4Dsp`.
 
+`IccJpegDump` parses JPEG markers directly and has no direct libjpeg link.
+The maintainer WebAssembly workflows still build libjpeg for libtiff's JPEG
+codec, pass it to the libtiff build, and supply `libjpeg.a` to the Emscripten
+linker. The archive is included in the link command; this does not establish
+that every module contains JPEG codec code.
+
 Tool reference: ../../../docs/tools-cli-reference.md
 
 ## Test

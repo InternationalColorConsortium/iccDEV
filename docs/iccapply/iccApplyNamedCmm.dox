@@ -9,15 +9,21 @@ This tool applies a named-color CMM to legacy, JSON, or IT8 color data.
 
 | Form | Token shape |
 |---|---|
-| JSON | `iccApplyNamedCmm -cfg config_file` |
-| Direct | `iccApplyNamedCmm [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation profile intent ...` |
+| JSON | `iccApplyNamedCmm [--evidence-json] [telemetry options] --cfg config_file` |
+| Direct | `iccApplyNamedCmm [telemetry options] [-exportcfg file|-exportcfganddata file] [-debugcalc] data encoding interpolation profile intent ...` |
 
-The JSON lane uses the entry array unchanged and accepts exactly three tokens.
-The direct lane removes the executable token, then consumes export and
+The tool first removes leading `--evidence-json` and, in telemetry-enabled
+builds, `--telemetry=off|human|jsonl`, `--telemetry-file FILE`, and
+`--evidence-file FILE`. The JSON lane then accepts exactly three remaining
+tokens. The direct lane removes the executable token, then consumes export and
 debugging prefixes before `CIccCfgDataApply::fromArgs()` owns the data group.
 `CIccCfgProfileSequence::fromArgs()` owns the transform group. Its consumed
 count must equal the remaining `argc`; a surplus direct token is a failure,
 not a successful partial command.
+
+`--evidence-json` is limited to JSON configuration mode with a configured
+destination file. Direct mode rejects it; telemetry-enabled builds can use
+`--evidence-file FILE` for a separate receipt.
 
 \dotfile namedcmm-lane.dot "iccApplyNamedCmm data, named-color, and CMM lanes"
 
