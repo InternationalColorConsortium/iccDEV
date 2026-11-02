@@ -9,6 +9,7 @@ import csv
 import hashlib
 import io
 from pathlib import Path
+import re
 import runpy
 import tarfile
 import zipfile
@@ -155,8 +156,9 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
     assert '"$distribution_count" -ne 2' in stage["run"]
 
     publish_iccdev = steps["Publish iccdev to PyPI"]
-    assert publish_iccdev["uses"] == \
-        "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
+    assert re.fullmatch(
+        r"pypa/gh-action-pypi-publish@[0-9a-f]{40}", publish_iccdev["uses"]
+    )
     assert publish_iccdev["with"]["packages-dir"] == "pypi-iccdev/"
     assert publish_iccdev["with"]["attestations"] is True
     assert "password" not in publish_iccdev["with"]

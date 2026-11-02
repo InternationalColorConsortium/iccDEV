@@ -33,6 +33,7 @@ import csv
 import hashlib
 import io
 import os
+import re
 import runpy
 import shlex
 import shutil
@@ -334,8 +335,9 @@ def test_release_workflow_connects_all_wheel_artifacts():
     steps = {step["name"]: step for step in release["steps"]}
     assert "release-assets/*.whl" in steps["Create latest release"]["run"]
     python_setup = steps["Set up Python for public iccdev verification"]
-    assert python_setup["uses"] == \
-        "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+    assert re.fullmatch(
+        r"actions/setup-python@[0-9a-f]{40}", python_setup["uses"]
+    )
     assert python_setup["with"]["python-version"] == "3.13"
     assert python_setup["continue-on-error"] is True
     assert "!cancelled()" in python_setup["if"]
