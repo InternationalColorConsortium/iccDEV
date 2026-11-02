@@ -25,6 +25,7 @@ concurrency:
 
 env:
   BASH_ENV: /dev/null
+  ICCDEV_BUILD_JOBS: 4
   TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
   WORKSPACE_DIR: ${{ github.workspace }}
 
@@ -93,7 +94,24 @@ jobs:
           printf 'llvm-profdata: %s\n' "$(llvm-profdata-22 show --version 2>&1 | head -1 || printf unknown)"
           printf 'cmake: %s\n' "$(cmake --version | head -1)"
           printf 'runner: %s\n' "$(uname -srm)"
+          printf 'cpu: %s\n' "$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)"
+          printf 'logical CPUs: %s\n' "$(nproc)"
+          printf 'build jobs: %s\n' "$ICCDEV_BUILD_JOBS"
           echo "::endgroup::"
+
+          mkdir -p coverage-report/timing
+          {
+            printf 'phase\tmilliseconds\n'
+          } > coverage-report/timing/phases.tsv
+          {
+            printf 'commit=%s\n' "$(git rev-parse HEAD)"
+            printf 'runner_image=%s\n' "${ImageOS:-unknown}"
+            printf 'kernel=%s\n' "$(uname -srm)"
+            printf 'cpu=%s\n' "$(lscpu | sed -n 's/^Model name:[[:space:]]*//p' | head -1)"
+            printf 'logical_cpus=%s\n' "$(nproc)"
+            printf 'build_jobs=%s\n' "$ICCDEV_BUILD_JOBS"
+            printf 'memory_kib=%s\n' "$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+          } > coverage-report/timing/environment.txt
 
       - name: "Generate code statistics"
         run: |
@@ -104,36 +122,9 @@ jobs:
 
           stats_dir="coverage-report/code-stats"
           mkdir -p "$stats_dir"
+          stats_start_ns="$(date +%s%N)"
 
           exclude_dirs="trusted,build-coverage,profraw,coverage-report,opencv,demo-rit,issue-711"
-          scc_version="3.7.0"
-          scc_archive="scc_Linux_x86_64.tar.gz"
-          scc_sha256="3d9d65b00ca874c2b29151abe7e1480736f5229edc3ce8e4b2791460cdfabf5a"
-          scc_dir="${RUNNER_TEMP:-/tmp}/iccdev-scc"
-          scc_url="https://github.com/boyter/scc/releases/download/v${scc_version}/${scc_archive}"
-
-          rm -rf "$scc_dir"
-          mkdir -p "$scc_dir"
-          if curl -fsSL --retry 3 -o "${scc_dir}/${scc_archive}" "$scc_url"; then
-            printf '%s  %s\n' "$scc_sha256" "${scc_dir}/${scc_archive}" | sha256sum -c -
-            tar -xzf "${scc_dir}/${scc_archive}" -C "$scc_dir"
-            chmod +x "${scc_dir}/scc"
-            export PATH="${scc_dir}:${PATH}"
-          else
-            echo "[WARN] scc download failed; continuing with cloc-only statistics"
-          fi
-
-          if command -v scc >/dev/null 2>&1; then
-            scc --version > "${stats_dir}/scc-version.txt"
-            scc --ci --no-cocomo --exclude-dir "$exclude_dirs" --format tabular . \
-              > "${stats_dir}/scc.txt"
-            scc --ci --no-cocomo --exclude-dir "$exclude_dirs" --format json . \
-              > "${stats_dir}/scc.json"
-          else
-            printf 'scc unavailable\n' > "${stats_dir}/scc.txt"
-            printf '[]\n' > "${stats_dir}/scc.json"
-          fi
-
           cloc --quiet --exclude-dir="$exclude_dirs" --json --out="${stats_dir}/cloc.json" .
           cloc --quiet --exclude-dir="$exclude_dirs" . > "${stats_dir}/cloc.txt"
 
@@ -145,6 +136,10 @@ jobs:
             jq -r '[keys[] | select(. != "header" and . != "SUM")] | length' "${stats_dir}/cloc.json"
           )"
           code_stats_total="$((code_stats_blank + code_stats_comment + code_stats_code))"
+          stats_end_ns="$(date +%s%N)"
+          stats_elapsed_ms="$(( (stats_end_ns - stats_start_ns) / 1000000 ))"
+          printf 'code-statistics\t%s\n' "$stats_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
 
           jq -r '
             "| Language | Files | Code | Comments | Blanks |",
@@ -181,6 +176,7 @@ jobs:
           mkdir -p "$BUILD_DIR"
 
           echo "::group::CMake configure"
+          configure_start_ns="$(date +%s%N)"
           cmake "${WORKSPACE_DIR}/Build/Cmake" \
             -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Debug \
@@ -191,11 +187,21 @@ jobs:
             -DENABLE_TESTS=ON \
             -DENABLE_TOOLS=ON \
             -Wno-dev
+          configure_end_ns="$(date +%s%N)"
+          configure_ms="$(( (configure_end_ns - configure_start_ns) / 1000000 ))"
           echo "::endgroup::"
 
           echo "::group::Compile"
-          cmake --build "$BUILD_DIR" --parallel "$(nproc)"
+          compile_start_ns="$(date +%s%N)"
+          cmake --build "$BUILD_DIR" --parallel "$ICCDEV_BUILD_JOBS"
+          compile_end_ns="$(date +%s%N)"
+          compile_ms="$(( (compile_end_ns - compile_start_ns) / 1000000 ))"
           echo "::endgroup::"
+
+          {
+            printf 'configure\t%s\n' "$configure_ms"
+            printf 'compile\t%s\n' "$compile_ms"
+          } >> coverage-report/timing/phases.tsv
 
           tool="$(find "$BUILD_DIR" -name iccDumpProfile -type f -executable -print -quit)"
           if [ -z "$tool" ]; then
@@ -211,10 +217,12 @@ jobs:
           fi
 
           real_proflib="$(readlink -f "$proflib")"
-          if readelf -S "$real_proflib" 2>/dev/null | grep -q "__llvm_covmap"; then
+          readelf -S "$real_proflib" > coverage-report/timing/proflib-sections.txt
+          if grep -q "__llvm_covmap" coverage-report/timing/proflib-sections.txt; then
             printf 'Coverage instrumentation confirmed in %s\n' "$(basename "$proflib")"
           else
-            echo "::warning title=Coverage symbols::__llvm_covmap section not found in shared library"
+            echo "::error title=Coverage symbols::__llvm_covmap section not found in shared library"
+            exit 1
           fi
 
           tool_path_dirs=""
@@ -237,6 +245,8 @@ jobs:
             printf 'tool_path_dirs=%s\n' "$tool_path_dirs"
             printf 'library_path_dirs=%s\n' "$library_path_dirs"
             printf 'tool_count=%s\n' "$tool_count"
+            printf 'configure_ms=%s\n' "$configure_ms"
+            printf 'compile_ms=%s\n' "$compile_ms"
           } >> "$GITHUB_ENV"
 
           build_notice="${tool_count} tools, libIccProfLib2=${proflib_kb}KB, libIccXML2=${xmllib_kb}KB"
@@ -249,7 +259,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
-          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/ci-stub-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/ci-stub-%4m.profraw"
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
           export ICCDEV_TOOLS_DIR="${build_dir}/Tools"
           export ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing"
@@ -269,34 +279,31 @@ jobs:
           : > "$stub_report"
           stub_pass=0
           stub_fail=0
-          stub_start="$(date +%s)"
-          stub_hybrid_seconds="n/a"
+          stub_start_ns="$(date +%s%N)"
 
           run_stub_script() {
             local name="$1"
             local log
             shift
-            local start_seconds
-            local end_seconds
-            local elapsed_seconds
+            local start_ns
+            local end_ns
+            local elapsed_ms
             local rc
 
             log="${WORKSPACE_DIR}/coverage-report/ci-inside-stub/${name}.log"
-            start_seconds="$(date +%s)"
+            start_ns="$(date +%s%N)"
             set +e
             "$@" > "$log" 2>&1
             rc="$?"
             set -e
-            end_seconds="$(date +%s)"
-            elapsed_seconds="$((end_seconds - start_seconds))"
+            end_ns="$(date +%s%N)"
+            elapsed_ms="$(( (end_ns - start_ns) / 1000000 ))"
 
-            if [ "$name" = "hybrid-build-and-test" ]; then
-              stub_hybrid_seconds="$elapsed_seconds"
-            fi
-
-            printf '%s exit=%s seconds=%s log=%s\n' \
-              "$name" "$rc" "$elapsed_seconds" "$(basename "$log")" \
+            printf '%s exit=%s milliseconds=%s log=%s\n' \
+              "$name" "$rc" "$elapsed_ms" "$(basename "$log")" \
               >> "$stub_report"
+            printf 'stub-%s\t%s\n' "$name" "$elapsed_ms" \
+              >> "${WORKSPACE_DIR}/coverage-report/timing/phases.tsv"
 
             if [ "$rc" -eq 0 ]; then
               stub_pass=$((stub_pass + 1))
@@ -314,14 +321,13 @@ jobs:
           run_stub_script create-all-profiles sh CreateAllProfiles.sh
           run_stub_script run-tests sh RunTests.sh
           run_stub_script hdr-mkprofiles sh -c 'cd HDR && sh mkprofiles.sh'
-          run_stub_script hybrid-build-and-test sh -c 'cd hybrid && sh BuildAndTest.sh'
           run_stub_script calc-tests sh -c 'cd CalcTest && sh runtests.sh'
           run_stub_script mcs-updateprev sh -c 'cd mcs && sh updateprev.sh'
           run_stub_script mcs-updateprev-bkgd sh -c 'cd mcs && sh updateprevWithBkgd.sh'
 
           profile_count="$(find . -name '*.icc' -type f | wc -l)"
-          stub_end="$(date +%s)"
-          stub_elapsed="$((stub_end - stub_start))"
+          stub_end_ns="$(date +%s%N)"
+          stub_elapsed_ms="$(( (stub_end_ns - stub_start_ns) / 1000000 ))"
           stub_exit=0
           if [ "$stub_fail" -gt 0 ]; then
             stub_exit=1
@@ -329,9 +335,9 @@ jobs:
           stub_total="$((stub_pass + stub_fail))"
 
           {
-            printf '\nTotals: pass=%s fail=%s seconds=%s\n' \
-              "$stub_pass" "$stub_fail" "$stub_elapsed"
-            printf 'Large profile hybrid seconds: %s\n' "$stub_hybrid_seconds"
+            printf '\nTotals: pass=%s fail=%s milliseconds=%s\n' \
+              "$stub_pass" "$stub_fail" "$stub_elapsed_ms"
+            printf 'Hybrid pipeline: owned by the registered CTest gate\n'
           } >> "$stub_report"
 
           {
@@ -339,8 +345,7 @@ jobs:
             printf 'ci_stub_pass=%s\n' "$stub_pass"
             printf 'ci_stub_fail=%s\n' "$stub_fail"
             printf 'ci_stub_total=%s\n' "$stub_total"
-            printf 'ci_stub_elapsed_seconds=%s\n' "$stub_elapsed"
-            printf 'ci_stub_hybrid_seconds=%s\n' "$stub_hybrid_seconds"
+            printf 'ci_stub_elapsed_ms=%s\n' "$stub_elapsed_ms"
             printf 'profile_count=%s\n' "$profile_count"
           } >> "$GITHUB_ENV"
 
@@ -353,10 +358,11 @@ jobs:
           echo "::endgroup::"
 
           if [ "$stub_fail" -gt 0 ]; then
-            echo "::warning title=ci-inside-stub::${stub_fail} script(s) exited non-zero"
+            echo "::error title=ci-inside-stub::${stub_fail} required script(s) exited non-zero"
+            exit 1
           fi
 
-      - name: "Run CTest large-profile measurement"
+      - name: "Run CTest large-profile coverage gate"
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -365,6 +371,7 @@ jobs:
 
           export PATH="${tool_path_dirs}${PATH}"
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/ctest-%4m.profraw"
           mkdir -p coverage-report/ctest
 
           ctest_json="coverage-report/ctest/ctest-tests.json"
@@ -372,7 +379,7 @@ jobs:
           ctest_junit="${WORKSPACE_DIR}/coverage-report/ctest/ctest-junit.xml"
           ctest_report="coverage-report/ctest/ctest-measurement.txt"
           ctest_large="coverage-report/ctest/large-profile-test.txt"
-          ctest_filter="iccdev.hybrid-pipeline"
+          ctest_filter='^iccdev\.hybrid-pipeline$'
 
           if ctest --test-dir "$build_dir" -R "$ctest_filter" --show-only=json-v1 \
               > "$ctest_json" 2>/dev/null; then
@@ -382,7 +389,7 @@ jobs:
             printf '{}\n' > "$ctest_json"
           fi
 
-          start_seconds="$(date +%s)"
+          ctest_start_ns="$(date +%s%N)"
           set +e
           ctest --test-dir "$build_dir" \
             -R "$ctest_filter" \
@@ -392,8 +399,10 @@ jobs:
             > "$ctest_log" 2>&1
           ctest_rc="$?"
           set -e
-          end_seconds="$(date +%s)"
-          ctest_elapsed="$((end_seconds - start_seconds))"
+          ctest_end_ns="$(date +%s%N)"
+          ctest_elapsed_ms="$(( (ctest_end_ns - ctest_start_ns) / 1000000 ))"
+          printf 'ctest-hybrid\t%s\n' "$ctest_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
 
           ctest_total_line="$(grep -E 'tests failed out of [0-9]+|No tests were found' "$ctest_log" | tail -1 || true)"
           ctest_time_line="$(grep -E '^Total Test time' "$ctest_log" | tail -1 || true)"
@@ -424,21 +433,21 @@ jobs:
             printf '=================================\n\n'
             printf 'Registered tests: %s\n' "$ctest_test_count"
             printf 'CTest exit code: %s\n' "$ctest_rc"
-            printf 'Elapsed wall time: %s seconds\n' "$ctest_elapsed"
+            printf 'Elapsed wall time: %s milliseconds\n' "$ctest_elapsed_ms"
             printf 'CTest filter: %s\n' "$ctest_filter"
             printf 'CTest summary: %s\n' "${ctest_total_line:-n/a}"
             printf 'CTest timing: %s\n' "${ctest_time_line:-n/a}"
             printf 'Large profile CTest: %s\n' "${large_profile_line:-n/a}"
             printf '\n'
             printf 'Notes:\n'
-            printf '%s\n' '- CTest records timing for the registered hybrid large-profile run.'
-            printf '%s\n' '- ci-inside-stub collects LLVM profraw for the same patching path.'
+            printf '%s\n' '- CTest owns the registered hybrid large-profile run.'
+            printf '%s\n' '- The run is required and contributes LLVM coverage data.'
           } > "$ctest_report"
 
           {
             printf 'ctest_exit_code=%s\n' "$ctest_rc"
             printf 'ctest_test_count=%s\n' "$ctest_test_count"
-            printf 'ctest_elapsed_seconds=%s\n' "$ctest_elapsed"
+            printf 'ctest_elapsed_ms=%s\n' "$ctest_elapsed_ms"
             printf 'ctest_large_profile_seconds=%s\n' "$large_profile_seconds"
           } >> "$GITHUB_ENV"
 
@@ -450,7 +459,8 @@ jobs:
           echo "::endgroup::"
 
           if [ "$ctest_rc" -ne 0 ]; then
-            echo "::warning title=CTest::CTest exited with code ${ctest_rc}; coverage report still generated"
+            echo "::error title=CTest::Required coverage test exited with code ${ctest_rc}"
+            exit "$ctest_rc"
           fi
 
       - name: "Exercise profiles with iccDumpProfile"
@@ -460,7 +470,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
-          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/dump-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/dump-%4m.profraw"
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
 
           tool="${tool_path}"
@@ -470,6 +480,7 @@ jobs:
           mkdir -p coverage-report
           fail_log="coverage-report/dump-failures.txt"
           : > "$fail_log"
+          dump_start_ns="$(date +%s%N)"
 
           while IFS= read -r -d '' icc; do
             total=$((total + 1))
@@ -482,10 +493,16 @@ jobs:
             fi
           done < <(find Testing -name '*.icc' -type f -print0 | sort -z)
 
+          dump_end_ns="$(date +%s%N)"
+          dump_elapsed_ms="$(( (dump_end_ns - dump_start_ns) / 1000000 ))"
+          printf 'dump-profiles\t%s\n' "$dump_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
+
           {
             printf 'dump_total=%s\n' "$total"
             printf 'dump_pass=%s\n' "$pass_count"
             printf 'dump_fail=%s\n' "$fail_count"
+            printf 'dump_elapsed_ms=%s\n' "$dump_elapsed_ms"
           } >> "$GITHUB_ENV"
 
           printf 'IccDumpProfile: %s tested, %s pass, %s fail\n' "$total" "$pass_count" "$fail_count"
@@ -506,7 +523,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
-          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/xml-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/xml-%4m.profraw"
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
 
           to_xml="$(find "$build_dir" -name iccToXml -type f -executable -print -quit)"
@@ -517,11 +534,21 @@ jobs:
           printf 'iccFromXml: %s\n' "${from_xml:-NOT FOUND}"
           printf 'iccRoundTrip: %s\n' "${roundtrip:-NOT FOUND}"
 
+          if [ -z "$to_xml" ] || [ -z "$from_xml" ] || [ -z "$roundtrip" ]; then
+            echo "::error title=Coverage tools::Required XML or round-trip tool is missing"
+            exit 1
+          fi
+
           mkdir -p coverage-report
+          xml_spec_start_ns="$(date +%s%N)"
           ICCDEV_TOOLS_DIR="$build_dir/Tools" \
           ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
           ICCDEV_TEST_OUTDIR="$WORKSPACE_DIR/coverage-report/xml-spec-qa" \
             "$GITHUB_WORKSPACE/.github/scripts/iccdev-xml-spec-qa.sh"
+          xml_spec_end_ns="$(date +%s%N)"
+          xml_spec_elapsed_ms="$(( (xml_spec_end_ns - xml_spec_start_ns) / 1000000 ))"
+          printf 'xml-spec-qa\t%s\n' "$xml_spec_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
           printf 'xml_spec_qa=pass\n' >> "$GITHUB_ENV"
 
           xml_fail_log="coverage-report/xml-roundtrip-failures.txt"
@@ -536,6 +563,7 @@ jobs:
           from_xml_fail=0
           mapfile -d '' -t icc_files < <(find Testing -name '*.icc' -type f -print0 | sort -z)
           printf 'XML round-trip: testing %s profiles\n' "${#icc_files[@]}"
+          xml_roundtrip_start_ns="$(date +%s%N)"
 
           for icc in "${icc_files[@]}"; do
             base="$(sanitize_filename "$(basename "$icc" .icc)")"
@@ -567,6 +595,10 @@ jobs:
             fi
             rm -f "$xml_out" "$icc_out"
           done
+          xml_roundtrip_end_ns="$(date +%s%N)"
+          xml_roundtrip_elapsed_ms="$(( (xml_roundtrip_end_ns - xml_roundtrip_start_ns) / 1000000 ))"
+          printf 'xml-roundtrip\t%s\n' "$xml_roundtrip_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
 
           printf 'XML round-trip: %s converted, %s iccToXml failures, %s non-blocking iccFromXml exits\n' \
             "$converted" "$xml_fail" "$from_xml_fail"
@@ -591,6 +623,7 @@ jobs:
           roundtrip_classes="mntr prtr scnr"
 
           if [ -n "$roundtrip" ]; then
+            icc_roundtrip_start_ns="$(date +%s%N)"
             for icc in "${icc_files[@]}"; do
               rt_total=$((rt_total + 1))
               profile_class=""
@@ -624,6 +657,10 @@ jobs:
                 rt_exercised=$((rt_exercised + 1))
               fi
             done
+            icc_roundtrip_end_ns="$(date +%s%N)"
+            icc_roundtrip_elapsed_ms="$(( (icc_roundtrip_end_ns - icc_roundtrip_start_ns) / 1000000 ))"
+            printf 'icc-roundtrip\t%s\n' "$icc_roundtrip_elapsed_ms" \
+              >> coverage-report/timing/phases.tsv
           fi
 
           {
@@ -683,139 +720,38 @@ jobs:
             exit 1
           fi
 
-          printf 'Merging %s profraw files...\n' "$profraw_count"
-          find "${WORKSPACE_DIR}/profraw" -name '*.profraw' -print0 \
-            | xargs -0 --no-run-if-empty llvm-profdata-22 merge -sparse \
-              -o coverage-report/merged.profdata
+          printf 'Matching and merging %s profraw files...\n' "$profraw_count"
+          merge_start_ns="$(date +%s%N)"
+          LLVM_COV=llvm-cov-22 \
+          LLVM_PROFDATA=llvm-profdata-22 \
+            Build/Cmake/Testing/iccdev-matched-coverage-report.sh \
+              "$build_dir" "${WORKSPACE_DIR}/profraw" coverage-report
+          merge_end_ns="$(date +%s%N)"
+          merge_elapsed_ms="$(( (merge_end_ns - merge_start_ns) / 1000000 ))"
+          printf 'matched-coverage-report\t%s\n' "$merge_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
 
-          profdata_kb="$(( $(stat -c%s coverage-report/merged.profdata) / 1024 ))"
+          while IFS='=' read -r key value; do
+            case "$key" in
+              mismatch_count|html_mismatch_count|matched_object_count|\
+              profile_signature_count|html_count|lcov_records|profdata_kb|\
+              region_pct|func_pct|line_pct|branch_pct)
+                printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+                printf -v "$key" '%s' "$value"
+                ;;
+              *)
+                echo "::error title=Coverage metadata::Unexpected key ${key}"
+                exit 1
+                ;;
+            esac
+          done < coverage-report/coverage-env.txt
           printf 'profraw_count=%s\n' "$profraw_count" >> "$GITHUB_ENV"
-          echo "::notice title=Profdata::Merged ${profdata_kb}KB from ${profraw_count} profraw files"
+          printf 'merge_elapsed_ms=%s\n' "$merge_elapsed_ms" >> "$GITHUB_ENV"
 
-          main_bin="${tool_path}"
-          object_args=()
-          while IFS= read -r -d '' bin; do
-            if [ "$bin" != "$main_bin" ]; then
-              object_args+=("--object=$bin")
-            fi
-          done < <(find "$build_dir" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui -print0 | sort -z)
-          while IFS= read -r -d '' lib; do
-            object_args+=("--object=$lib")
-          done < <(find "$build_dir" -name 'lib*.so' \( -type f -o -type l \) -print0 2>/dev/null | sort -z)
-
-          echo "::group::llvm-cov object list"
-          printf 'Primary binary: %s\n' "$main_bin"
-          printf '%s\n' "${object_args[@]}" | sed 's/^--object=/  /'
-          echo "::endgroup::"
-
-          echo "::group::llvm-cov report"
-          llvm-cov-22 report \
-            "$main_bin" "${object_args[@]}" \
-            --instr-profile=coverage-report/merged.profdata \
-            --ignore-filename-regex='(third_party|/usr/|test)' \
-            2>coverage-report/llvm-cov-stderr.txt \
-            | tee coverage-report/coverage-summary.txt
-          echo "::endgroup::"
-
-          mismatch="$(
-            grep -oE '[0-9]+ functions have mismatched data' coverage-report/llvm-cov-stderr.txt 2>/dev/null \
-              | awk '{print $1}' \
-              | head -1
-          )"
-          mismatch="${mismatch:-0}"
-          if [ "$mismatch" -gt 0 ]; then
-            echo "::notice title=Mismatched functions::${mismatch} template-instantiation duplicates"
-          fi
-          printf 'mismatch_count=%s\n' "$mismatch" >> "$GITHUB_ENV"
-
-          total_line="$(grep '^TOTAL' coverage-report/coverage-summary.txt | head -1 || true)"
-          region_pct="n/a"
-          func_pct="n/a"
-          line_pct="n/a"
-          branch_pct="n/a"
-          if [ -n "$total_line" ]; then
-            coverage_pct() {
-              local index="$1"
-              awk -v wanted="$index" '
-                {
-                  count = 0
-                  for (i = 1; i <= NF; i++) {
-                    if ($i ~ /%$/) {
-                      count++
-                      if (count == wanted) {
-                        print $i
-                        exit
-                      }
-                    }
-                  }
-                }
-              ' <<< "$total_line"
-            }
-            region_pct="$(coverage_pct 1)"
-            func_pct="$(coverage_pct 2)"
-            line_pct="$(coverage_pct 3)"
-            branch_pct="$(coverage_pct 4)"
-          fi
-          {
-            printf 'region_pct=%s\n' "$region_pct"
-            printf 'func_pct=%s\n' "$func_pct"
-            printf 'line_pct=%s\n' "$line_pct"
-            printf 'branch_pct=%s\n' "$branch_pct"
-          } >> "$GITHUB_ENV"
-
+          matched_notice="${matched_object_count} objects, ${mismatch_count} mismatches"
+          echo "::notice title=Matched coverage::${matched_notice}, ${profdata_kb}KB profdata"
           printf 'Coverage: regions=%s functions=%s lines=%s branches=%s\n' \
             "$region_pct" "$func_pct" "$line_pct" "$branch_pct"
-
-          echo "Generating HTML report..."
-          set +e
-          llvm-cov-22 show \
-            "$main_bin" "${object_args[@]}" \
-            --instr-profile=coverage-report/merged.profdata \
-            --format=html \
-            --output-dir=coverage-report/html \
-            --show-line-counts-or-regions \
-            --show-expansions \
-            --show-branches=count \
-            --ignore-filename-regex='(third_party|/usr/|test)' \
-            > coverage-report/html-stdout.txt \
-            2> coverage-report/html-stderr.txt
-          html_rc="$?"
-          set -e
-          if [ "$html_rc" -ne 0 ]; then
-            echo "::warning title=HTML report::llvm-cov show failed with exit code ${html_rc}"
-          fi
-          html_mismatch="$(
-            grep -oE '[0-9]+ functions have mismatched data' coverage-report/html-stderr.txt 2>/dev/null \
-              | awk '{print $1}' \
-              | head -1
-          )"
-          html_mismatch="${html_mismatch:-0}"
-          if [ "$html_mismatch" -gt 0 ]; then
-            echo "::notice title=HTML mismatched functions::${html_mismatch} template-instantiation duplicates"
-          fi
-
-          html_count="$(find coverage-report/html -name '*.html' 2>/dev/null | wc -l)"
-          printf 'html_count=%s\n' "$html_count" >> "$GITHUB_ENV"
-          echo "::notice title=HTML report::${html_count} pages generated"
-
-          set +e
-          llvm-cov-22 export \
-            "$main_bin" "${object_args[@]}" \
-            --instr-profile=coverage-report/merged.profdata \
-            --format=lcov \
-            --ignore-filename-regex='(third_party|/usr/|test)' \
-            > coverage-report/lcov.info \
-            2>coverage-report/lcov-stderr.txt
-          lcov_rc="$?"
-          set -e
-          if [ "$lcov_rc" -ne 0 ]; then
-            : > coverage-report/lcov.info
-            echo "::warning title=LCOV export::llvm-cov export failed with exit code ${lcov_rc}"
-          fi
-
-          lcov_records="$(grep -c '^SF:' coverage-report/lcov.info 2>/dev/null || printf 0)"
-          printf 'lcov_records=%s\n' "$lcov_records" >> "$GITHUB_ENV"
-          printf 'LCOV export: %s source file records\n' "$lcov_records"
 
       - name: "Write workflow summary"
         if: always()
@@ -845,18 +781,17 @@ jobs:
           summary_line "| Lines | ${line_pct:-n/a} |"
           summary_line "| Branches | ${branch_pct:-n/a} |"
           summary_line ""
-          summary_line "Mismatched function records: ${mismatch_count:-0}"
+          summary_line "Module-matched aggregate; use this run as the baseline for future comparisons."
+          summary_line "Mismatched function records: ${mismatch_count:-n/a}"
           summary_line ""
           summary_line "### Test Execution"
           summary_line "| Step | Result | Details |"
           summary_line "|------|--------|---------|"
           summary_line "| ICC profiles created | ${profile_count:-n/a} | ci-inside-stub |"
           summary_line \
-            "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_seconds:-0}s |"
+            "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_ms:-n/a} ms |"
           summary_line \
-            "| Stub hybrid | ${ci_stub_hybrid_seconds:-n/a}s | Testing/hybrid/BuildAndTest.sh |"
-          summary_line \
-            "| CTest | exit ${ctest_exit_code:-n/a} | ${ctest_test_count:-0} tests, ${ctest_elapsed_seconds:-0}s |"
+            "| CTest | exit ${ctest_exit_code:-n/a} | ${ctest_test_count:-0} tests, ${ctest_elapsed_ms:-n/a} ms |"
           summary_line \
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
@@ -871,8 +806,13 @@ jobs:
           summary_line "| Component | Value |"
           summary_line "|-----------|-------|"
           summary_line "| Compiler | clang-22 source-based coverage |"
+          summary_line "| Configure | ${configure_ms:-n/a} ms |"
+          summary_line "| Compile | ${compile_ms:-n/a} ms |"
+          summary_line "| Matched report | ${merge_elapsed_ms:-n/a} ms |"
           summary_line "| Tools built | ${tool_count:-n/a} |"
           summary_line "| Profraw files | ${profraw_count:-n/a} |"
+          summary_line "| Profile signatures | ${profile_signature_count:-n/a} |"
+          summary_line "| Matched objects | ${matched_object_count:-n/a} |"
           summary_line "| HTML pages | ${html_count:-n/a} |"
           summary_line "| LCOV source records | ${lcov_records:-n/a} |"
           summary_line ""
@@ -894,7 +834,7 @@ jobs:
           fi
           summary_line "### Developer Report Artifact"
           summary_line "Coverage HTML, lcov, CTest data, code stats, review data, and failure logs"
-          summary_line "are packaged in the sanitized developer report artifact after a successful run."
+          summary_line "are packaged in the sanitized developer report artifact, including partial failure evidence."
           summary_line ""
           summary_line "### llvm-cov Text Report"
           printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -908,7 +848,7 @@ jobs:
           printf '</pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: "Package developer coverage report"
-        if: ${{ success() }}
+        if: always()
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -925,8 +865,8 @@ jobs:
             printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
             printf 'Open developer-report/index.html for the presentation view.\n'
             printf 'Coverage HTML is under html/, lcov data is in lcov.info, '
-            printf 'and supporting data is in ctest/, code-stats/, module-reports/, '
-            printf 'and profdata/.\n'
+            printf 'and supporting data is in ctest/, code-stats/, matched/, '
+            printf 'profdata/, and timing/.\n'
           } > "${report_dir}/README.txt"
 
           html="${report_dir}/index.html"
@@ -948,7 +888,9 @@ jobs:
             printf '<tr><td>Functions</td><td>%s</td></tr>\n' "$(escape_html "${func_pct:-n/a}")"
             printf '<tr><td>Lines</td><td>%s</td></tr>\n' "$(escape_html "${line_pct:-n/a}")"
             printf '<tr><td>Branches</td><td>%s</td></tr>\n' "$(escape_html "${branch_pct:-n/a}")"
-            printf '<tr><td>Mismatched function records</td><td>%s</td></tr>\n' "$(escape_html "${mismatch_count:-0}")"
+            mismatch_html="$(escape_html "${mismatch_count:-n/a}")"
+            printf '<tr><td>Mismatched function records</td><td>%s</td></tr>\n' \
+              "$mismatch_html"
             printf '</table>\n'
 
             if [ -f coverage-report/coverage-summary.txt ]; then
@@ -970,12 +912,16 @@ jobs:
             fi
 
             printf '<h2>Coverage HTML</h2><ul>\n'
-            find coverage-report/html -name index.html -type f 2>/dev/null | sort | while IFS= read -r file; do
-              rel="${file#coverage-report/}"
-              printf '<li><a href="../%s">%s</a></li>\n' \
-                "$(escape_html "$rel")" \
-                "$(escape_html "$rel")"
-            done
+            if [ -d coverage-report/html ]; then
+              find coverage-report/html -name index.html -type f | sort | while IFS= read -r file; do
+                rel="${file#coverage-report/}"
+                printf '<li><a href="../%s">%s</a></li>\n' \
+                  "$(escape_html "$rel")" \
+                  "$(escape_html "$rel")"
+              done
+            else
+              printf '<li>Coverage HTML was not generated.</li>\n'
+            fi
             printf '</ul>\n'
 
             printf '<h2>Included Data</h2><ul>\n'
@@ -991,7 +937,7 @@ jobs:
           } > "$html"
 
       - name: "Upload developer coverage report"
-        if: ${{ success() }}
+        if: always()
         # preflight: allow-untrusted-artifact reason=sanitized-developer-report
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:

@@ -131,10 +131,18 @@ See `ports/iccdev/portfile.cmake` for the full build configuration.
 ## Coverage Report
 
 ```bash
-cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
-make -j"$(nproc)"
-LLVM_PROFILE_FILE=iccdev_%m.profraw Testing/RunTests.sh
-llvm-profdata merge -sparse *.profraw -o merged.profdata
-llvm-cov report ./Tools/IccDumpProfile/iccDumpProfile -instr-profile=merged.profdata
+CC=clang-22 CXX=clang++-22 cmake -S Build/Cmake -B out/coverage \
+  -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \
+  -DENABLE_COVERAGE=ON
+cmake --build out/coverage --parallel 4
+mkdir -p out/coverage-profraw
+LLVM_PROFILE_FILE="$PWD/out/coverage-profraw/ctest-%4m.profraw" \
+  ctest --test-dir out/coverage -R '^iccdev\.hybrid-pipeline$' \
+    --output-on-failure --no-tests=error
+LLVM_COV=llvm-cov-22 LLVM_PROFDATA=llvm-profdata-22 \
+  Build/Cmake/Testing/iccdev-matched-coverage-report.sh \
+    out/coverage out/coverage-profraw out/coverage-report
 ```
+
+For the complete workflow and interpretation rules, use
+`docs/code-coverage.md`.

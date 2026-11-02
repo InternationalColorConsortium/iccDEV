@@ -20,6 +20,7 @@ long command references.
 | `iis-isapi-qa` | Building, deploying, and validating the Windows IIS ISAPI HTTP and browser assessment surface. |
 | `icc2-xml-spec-qa` | Validating ICC.2 spectral XML payload and header contracts with the profile tools. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
+| `code-coverage-analysis` | Reviewing deterministic LLVM coverage, coverage workflow signal, or local build-configuration timing variance. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `matlab-bindings-test` | Building and validating the MATLAB MEX gateway, IccJSON conversion, profiles, examples, dependencies, and lifecycle tests. |
 | `python-bindings-test` | Building and validating the Python/Cython bindings and package-facing tests. |

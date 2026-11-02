@@ -1,6 +1,7 @@
 # Testing and CTest
 
 - [CTest tool suites](ctest.md)
+- [Code coverage and timing analysis](code-coverage.md)
 - [AFL++ smoke fuzzing](afl-fuzzing.md)
 - [Maintainer QA scans](maintainer-qa-scans.md)
 - [MATLAB bindings and QA](matlab-bindings.md)

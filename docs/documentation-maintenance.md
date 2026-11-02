@@ -36,6 +36,7 @@ point to deeper references.
 | Agent routing | `.github/copilot-instructions.md` |
 | Agent instructions | `AGENTS.md` (canonical); root `CLAUDE.md` and `GEMINI.md` mirror it |
 | Build and sanitizer policy | `.github/instructions/build-system.instructions.md` |
+| Source coverage and configuration timing | `docs/code-coverage.md` and `.github/skills/code-coverage-analysis/SKILL.md` |
 | Test and regression policy | `.github/instructions/testing.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
 | vcpkg port policy | `.github/instructions/vcpkg-port.instructions.md` |

@@ -120,6 +120,24 @@ grep -q 'pattern' "$filepath"
 [[ "$value" =~ pattern ]]
 ```
 
+## Fixed-Output Batching
+
+Do not use `xargs` to invoke a report generator repeatedly when every child
+writes the same `-o` or `--output` path. GNU `xargs` may split one input stream
+into multiple commands below the operating-system argument limit, so the last
+child silently overwrites earlier output. Do not replace it with an unbounded
+shell glob, which can exceed the argument limit.
+
+For `llvm-profdata merge`, write a sorted input list and pass
+`--input-files=<path>`, or use unique staged outputs followed by one final
+merge. Apply the same reasoning to gcovr, lcov, genhtml, and other single-report
+producers. Streaming tools such as checksums remain safe when child stdout is
+collected by one outer redirection.
+
+The local preflight runs
+`.github/scripts/check-workflow-fixed-output-batching.py` across affected
+workflows.
+
 ## Output Sanitization
 
 Sanitize every write to `GITHUB_STEP_SUMMARY` or `GITHUB_OUTPUT`.

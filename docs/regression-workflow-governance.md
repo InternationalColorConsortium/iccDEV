@@ -53,6 +53,7 @@ gates in the screening record when their contracts apply.
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
+| Coverage process guide | `docs/code-coverage.md` | Deterministic profraw merging, module matching, and configuration timing. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
@@ -201,6 +202,8 @@ Every edited workflow `run:` block must keep these properties:
 - `unset GITHUB_TOKEN || true`.
 - No direct `${{ }}` expressions inside shell code; pass values through `env:`.
 - Sanitized writes to `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT`.
+- No unbounded glob or `xargs` batching into repeated writes to one fixed report
+  output; use an input list or unique staged outputs.
 - Least-privilege permissions.
 - `pull_request_target` and `workflow_run` automation must not checkout or run
   PR-controlled code before mutating trusted state such as labels or checks.
@@ -420,6 +423,8 @@ file .github/scripts/<regression-script>.sh
 Run the focused regression and capture the command plus result in the handoff.
 For workflow edits, also inspect the changed `run:` blocks for the governance
 rules above.
+Run `.github/scripts/check-workflow-fixed-output-batching.py` for any workflow
+that enumerates inputs for coverage, report, archive, or checksum generation.
 For updates to `.github/scripts/iccdev-tool-coverage-baseline.sh`, run both the
 direct script invocation and `ctest -R '^iccdev\.tool-coverage$'` so CI wrapper
 behavior is covered.

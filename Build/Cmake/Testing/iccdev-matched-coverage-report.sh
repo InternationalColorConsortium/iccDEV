@@ -23,7 +23,7 @@ REPORT_DIR="$3"
 
 LLVM_COV="${LLVM_COV:-llvm-cov-18}"
 LLVM_PROFDATA="${LLVM_PROFDATA:-llvm-profdata-18}"
-IGNORE_REGEX="${IGNORE_FILENAME_REGEX:-(third_party|/usr/|test)}"
+IGNORE_REGEX="${IGNORE_FILENAME_REGEX:-(^|/)(third_party|test|tests)(/|$)|^/usr/}"
 FIND="${FIND:-$(command -v gfind || command -v find)}"
 SORT="${SORT:-$(command -v gsort || command -v sort)}"
 
@@ -64,7 +64,7 @@ lcov_file="$REPORT_DIR/lcov.info"
 "$SORT" -u -o "$candidates_file" "$candidates_file"
 
 "$FIND" "$PROFRAW_DIR" -name '*.profraw' -printf '%f\n' \
-  | sed -nE 's/.*-([0-9]+(_[0-9]+)?)\.profraw$/\1/p' \
+  | sed -nE 's/.*-([0-9]+)(_[0-9]+)?\.profraw$/\1/p' \
   | "$SORT" -u > "$signatures_file"
 
 if [ ! -s "$candidates_file" ]; then
@@ -145,20 +145,31 @@ sum_missed_branches=0
 matched_count=0
 unmatched_count=0
 max_html_mismatch=0
+html_failure_count=0
+lcov_failure_count=0
 
 printf 'signature\tobject\tprofraw_files\tcovered_score\n' > "$mapping_file"
 
 while IFS= read -r signature; do
   profdata="$REPORT_DIR/profdata/${signature}.profdata"
+  profraw_inputs="$REPORT_DIR/profdata/${signature}.inputs.txt"
   mapfile -d '' -t profraw_files < <(
-    "$FIND" "$PROFRAW_DIR" -name "*-${signature}.profraw" -print0 | "$SORT" -z
+    "$FIND" "$PROFRAW_DIR" \
+      \( -name "*-${signature}.profraw" -o -name "*-${signature}_[0-9]*.profraw" \) \
+      -print0 | "$SORT" -z
   )
   if [ "${#profraw_files[@]}" -eq 0 ]; then
     unmatched_count=$((unmatched_count + 1))
     continue
   fi
 
-  "$LLVM_PROFDATA" merge -sparse "${profraw_files[@]}" -o "$profdata"
+  printf '%s\n' "${profraw_files[@]}" > "$profraw_inputs"
+  "$LLVM_PROFDATA" merge \
+    -sparse \
+    --failure-mode=any \
+    --num-threads=1 \
+    --input-files="$profraw_inputs" \
+    -o "$profdata"
 
   best_object=""
   best_report=""
@@ -238,6 +249,7 @@ while IFS= read -r signature; do
   set -e
   if [ "$html_rc" -ne 0 ]; then
     echo "llvm-cov show failed for $best_object (exit $html_rc)" >&2
+    html_failure_count=$((html_failure_count + 1))
   fi
   html_mismatch="$(
     grep -oE '[0-9]+ functions have mismatched data' \
@@ -262,6 +274,7 @@ while IFS= read -r signature; do
   if [ "$lcov_rc" -ne 0 ]; then
     : > "$lcov_part"
     echo "llvm-cov export failed for $best_object (exit $lcov_rc)" >&2
+    lcov_failure_count=$((lcov_failure_count + 1))
   fi
   cat "$lcov_part" >> "$lcov_file"
 done < "$signatures_file"
@@ -273,6 +286,12 @@ fi
 
 if [ "$max_html_mismatch" -ne 0 ]; then
   echo "matched reports still produced llvm-cov mismatch diagnostics" >&2
+  exit 1
+fi
+
+if [ "$html_failure_count" -ne 0 ] || [ "$lcov_failure_count" -ne 0 ]; then
+  printf '%s HTML report(s) and %s LCOV export(s) failed\n' \
+    "$html_failure_count" "$lcov_failure_count" >&2
   exit 1
 fi
 
@@ -303,11 +322,22 @@ branch_pct="$(percent_covered "$sum_branches" "$sum_missed_branches")"
 } > "$summary_file"
 
 html_count="$(find "$REPORT_DIR/html" -name '*.html' 2>/dev/null | wc -l)"
-lcov_records="$(grep -c '^SF:' "$lcov_file" 2>/dev/null || printf 0)"
+lcov_records="$(grep -c '^SF:' "$lcov_file" 2>/dev/null || true)"
+lcov_records="${lcov_records:-0}"
 profdata_kb="$(
   find "$REPORT_DIR/profdata" -name '*.profdata' -printf '%s\n' \
     | awk '{sum += $1} END {printf "%d", sum / 1024}'
 )"
+
+if [ "$html_count" -eq 0 ]; then
+  echo "matched coverage report produced no HTML pages" >&2
+  exit 1
+fi
+
+if [ "$lcov_records" -eq 0 ]; then
+  echo "matched coverage report produced no LCOV source records" >&2
+  exit 1
+fi
 
 {
   printf 'mismatch_count=0\n'

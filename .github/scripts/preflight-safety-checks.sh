@@ -136,6 +136,11 @@ run_workflow_bash_prologue_policy() {
   fi
 }
 
+run_workflow_fixed_output_batching_policy() {
+  python3 .github/scripts/check-workflow-fixed-output-batching.py \
+    "${workflow_files[@]}"
+}
+
 workflow_trigger_names() {
   local wf="$1"
   python3 - "$wf" <<'PY'
@@ -1095,6 +1100,8 @@ for path in sys.argv[1:]:
 PY
 
   run_check "workflow Bash prologue policy" run_workflow_bash_prologue_policy
+  run_check "workflow fixed-output batching policy" \
+    run_workflow_fixed_output_batching_policy
 
   if command -v actionlint >/dev/null 2>&1; then
     run_check "actionlint" actionlint -no-color "${workflow_files[@]}"
@@ -1136,6 +1143,13 @@ if [ -f .github/scripts/check-workflow-bash-prologue.py ]; then
     python3 .github/scripts/check-workflow-bash-prologue.py --self-test
 else
   skip_or_fail "check-workflow-bash-prologue.py"
+fi
+
+if [ -f .github/scripts/check-workflow-fixed-output-batching.py ]; then
+  run_check "workflow fixed-output batching checker fixtures" \
+    python3 .github/scripts/check-workflow-fixed-output-batching.py --self-test
+else
+  skip_or_fail "check-workflow-fixed-output-batching.py"
 fi
 
 if [ -f .github/scripts/check-license-notices.py ]; then

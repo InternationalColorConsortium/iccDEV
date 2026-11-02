@@ -129,6 +129,11 @@ cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake
 cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_PROFILING=ON
 ```
 
+Use `docs/code-coverage.md` for pooled profraw naming, deterministic
+module-matched merging, and local build-configuration timing. Never pass an
+unbounded profile glob or an `xargs` batch to one fixed `llvm-profdata -o`
+output.
+
 Build after configure with:
 
 ```bash
