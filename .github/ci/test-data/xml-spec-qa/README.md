@@ -23,6 +23,7 @@ relationships remain reviewable by inspection.
 | `inverse-emission-matrix-missing-matrix.xml` | `inverseEmissionMatrixElement` omits the required spectral matrix array |
 | `emission-observer-missing-white.xml` | `emissionObserverElement` omits the required reference-white emission vector |
 | `reflectance-observer-missing-white.xml` | `reflectanceObserverElement` omits the required reference-white reflectance vector |
+| `emission-clut-one-spectral-step.xml` | `emissionCLUTElement` declares one spectral step where ICC.2 requires at least two |
 
 The positive profiles correspond to ICC.2:2023 clauses 7.2.21 through 7.2.24
 and Tables 21 and 22. The negative profiles isolate parser-width and
@@ -31,6 +32,8 @@ The spectral element omission fixtures correspond to clauses 11.2.4 through
 11.2.6, 11.2.8, 11.2.12 and 11.2.13 and their encoding tables: each binary
 element contains the listed white vector, CLUT or matrix payload. XML conversion
 must not invent, zero-fill, or omit those fields.
+The one-step CLUT fixture pins the explicit minimum in clause 11.2.4 and
+Formula (11)'s spectral dimension rather than relying on later validation.
 
 ## ICS corpus review
 

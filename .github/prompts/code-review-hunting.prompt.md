@@ -129,6 +129,8 @@ return false before any zero-filled or uninitialized allocation can reach the
 serializer. Spectral CLUT `WhiteData` is the uninitialized reference case;
 spectral matrix and observer payloads are the zero-filled reference case
 (ICC.2:2023 11.2.4-11.2.6, 11.2.8, 11.2.12-11.2.13).
+Also compare explicit specification minima with sibling readers: accepting a
+non-zero count is not sufficient when the encoding requires two or more.
 
 ### Category 5: Counted Buffers and Boundary Equality (CWE-121/CWE-122/CWE-787)
 

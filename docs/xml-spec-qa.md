@@ -50,6 +50,7 @@ processing-element encodings, so the fail-closed contract applies throughout.
 | Inverse emission matrix data | `inverseEmissionMatrixElement`, clause 11.2.8, Table 118 and Formula (29); the spectral matrix is an `S × Q`-element field | `.github/ci/test-data/xml-spec-qa/inverse-emission-matrix-missing-matrix.xml` | `iccFromXml` rejects the omitted `MatrixData` with `Missing Matrix Data` and writes no profile |
 | Emission observer white | `emissionObserverElement`, clause 11.2.6, Table 116 and Formula (23); the reference-white emission vector is an `S`-element field | `.github/ci/test-data/xml-spec-qa/emission-observer-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
 | Reflectance observer white | `reflectanceObserverElement`, clause 11.2.13, Table 123 and Formula (47); the reference-white reflectance vector is an `S`-element field | `.github/ci/test-data/xml-spec-qa/reflectance-observer-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
+| Spectral MPE range minimum | Clauses 11.2.4-11.2.6 and 11.2.12-11.2.13 require the spectral range step count to be two or greater | `.github/ci/test-data/xml-spec-qa/emission-clut-one-spectral-step.xml` | `iccFromXml` rejects `steps="1"` with `Invalid Spectral Range` and writes no profile; the direct regression covers both CLUT and both observer readers |
 
 The binary field layout is represented by `icHeader` in
 `IccProfLib/icProfileHeader.h`. XML parsing and serialization are implemented
@@ -58,13 +59,14 @@ in `IccXML/IccLibXML/IccProfileXml.cpp`; signature channel decoding is in
 `IccProfLib/IccProfile.cpp`. These implementation references complement the
 normative ICC.2 specification; they do not replace it.
 
-The thirteen checked-in negative XML files reject non-finite wavelength endpoints,
+The fourteen checked-in negative XML files reject non-finite wavelength endpoints,
 spectral and bi-spectral step counts that do not fit the 16-bit header field,
 signature/range channel mismatches, a bi-spectral range attached to a normal
 spectral PCS, an MCS/channel-name mismatch, and emission or reflectance CLUTs
 without their mandatory white vectors. They also reject spectral matrix and
-observer elements missing a required white or matrix array. This pins syntax
-conversion, semantic validation, and required element payloads.
+observer elements missing a required white or matrix array, and spectral MPE
+ranges containing fewer than two steps. This pins syntax conversion, semantic
+validation, and required element payloads.
 
 ## Tool interpretation
 

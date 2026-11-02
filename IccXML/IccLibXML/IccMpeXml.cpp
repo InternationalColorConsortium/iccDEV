@@ -4054,7 +4054,7 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
         !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
-        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || nSteps < 2) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -4185,7 +4185,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
         !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
-        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || nSteps < 2) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -4260,7 +4260,7 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
         !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
-        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || nSteps < 2 ||
         nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;
@@ -4348,7 +4348,7 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
 
     if (!icXmlParseFloat(icXmlAttrValue(pData, "start"), dStart) ||
         !icXmlParseFloat(icXmlAttrValue(pData, "end"), dEnd) || dStart >= dEnd ||
-        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+        !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || nSteps < 2 ||
         nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;

@@ -264,14 +264,23 @@ std::string buildMatrixDoc(const char *elementName, bool bIncludeWhite,
   return s;
 }
 
-std::string buildObserverDoc(const char *elementName, bool bIncludeWhite)
+std::string buildObserverDoc(const char *elementName, bool bIncludeWhite,
+                             unsigned nSteps = 3)
 {
   std::string s = "<";
   s += elementName;
-  s += " InputChannels=\"3\" OutputChannels=\"3\" Flags=\"0\">\n";
-  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"3\"/>\n";
-  if (bIncludeWhite)
-    s += "  <WhiteData>1 1 1</WhiteData>\n";
+  s += " InputChannels=\"";
+  s += std::to_string(nSteps);
+  s += "\" OutputChannels=\"3\" Flags=\"0\">\n";
+  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"";
+  s += std::to_string(nSteps);
+  s += "\"/>\n";
+  if (bIncludeWhite) {
+    s += "  <WhiteData>";
+    for (unsigned i = 0; i < nSteps; ++i)
+      s += "1 ";
+    s += "</WhiteData>\n";
+  }
   s += "</";
   s += elementName;
   s += ">\n";
@@ -362,6 +371,30 @@ int main()
   check(parseElement<CIccMpeXmlReflectanceObserver>(
           buildObserverDoc("ReflectanceObserverElement", true)),
         "complete ReflectanceObserverElement -> ParseXml true");
+
+  // ICC.2:2023 requires every one of these spectral ranges to contain at
+  // least two steps. A one-sample range makes the wavelength interval formula
+  // divide by zero and is not a permitted degenerate representation.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(/*declared*/3, /*gran*/2, /*steps*/1),
+      /*bCallBegin*/false);
+    check(!r.bParsed, "EmissionCLutElement with one spectral step -> ParseXml false");
+  }
+  {
+    const std::string doc = buildDoc(
+      /*declared*/3, /*gran*/2, /*steps*/1, /*white*/true,
+      "ReflectanceCLutElement");
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      doc, /*bCallBegin*/false);
+    check(!r.bParsed, "ReflectanceCLutElement with one spectral step -> ParseXml false");
+  }
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true, 1)),
+        "EmissionObserverElement with one spectral step -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true, 1)),
+        "ReflectanceObserverElement with one spectral step -> ParseXml false");
 
   // ---- The XML route to the mismatch -----------------------------------------
   //
