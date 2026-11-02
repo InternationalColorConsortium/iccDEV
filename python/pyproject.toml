@@ -33,7 +33,7 @@ classifiers = [
 numpy = ["numpy>=1.23,<3"]
 dev = [
     "build>=1.2,<1.7",
-    "cibuildwheel>=3.4,<4",
+    "cibuildwheel>=3.4,<5",
     "cython>=3.0,<3.4",
     "numpy>=1.23,<3",
     "pytest>=9.0.3,<10",
