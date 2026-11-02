@@ -131,6 +131,8 @@ spectral matrix and observer payloads are the zero-filled reference case
 (ICC.2:2023 11.2.4-11.2.6, 11.2.8, 11.2.12-11.2.13).
 Also compare explicit specification minima with sibling readers: accepting a
 non-zero count is not sufficient when the encoding requires two or more.
+Re-check ordering and equality after narrowing into the encoded field; two
+distinct XML numbers can become one binary value.
 
 ### Category 5: Counted Buffers and Boundary Equality (CWE-121/CWE-122/CWE-787)
 

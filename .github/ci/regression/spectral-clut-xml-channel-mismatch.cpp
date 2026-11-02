@@ -127,7 +127,8 @@ void check(bool ok, const char *what)
 // emitted rather than an astronomically large one.
 std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
                      unsigned nSteps, bool bIncludeWhite = true,
-                     const char *elementName = "EmissionCLutElement")
+                     const char *elementName = "EmissionCLutElement",
+                     const char *endWavelength = "700")
 {
   const unsigned nTruncatedDim = nInputChannels & 0xFFu;
 
@@ -147,7 +148,9 @@ std::string buildDoc(unsigned nInputChannels, unsigned nGranularity,
   s += "\" OutputChannels=\"3\" StorageType=\"0\" Flags=\"0\" GridGranularity=\"";
   s += std::to_string(nGranularity);
   s += "\">\n";
-  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"";
   s += std::to_string(nSteps);
   s += "\"/>\n";
   if (bIncludeWhite) {
@@ -247,12 +250,15 @@ bool parseElement(const std::string &doc)
 }
 
 std::string buildMatrixDoc(const char *elementName, bool bIncludeWhite,
-                           bool bIncludeMatrix)
+                           bool bIncludeMatrix,
+                           const char *endWavelength = "700")
 {
   std::string s = "<";
   s += elementName;
   s += " InputChannels=\"3\" OutputChannels=\"3\">\n";
-  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"4\"/>\n";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"4\"/>\n";
   if (bIncludeWhite)
     s += "  <WhiteData>1 1 1 1</WhiteData>\n";
   if (bIncludeMatrix)
@@ -265,14 +271,17 @@ std::string buildMatrixDoc(const char *elementName, bool bIncludeWhite,
 }
 
 std::string buildObserverDoc(const char *elementName, bool bIncludeWhite,
-                             unsigned nSteps = 3)
+                             unsigned nSteps = 3,
+                             const char *endWavelength = "700")
 {
   std::string s = "<";
   s += elementName;
   s += " InputChannels=\"";
   s += std::to_string(nSteps);
   s += "\" OutputChannels=\"3\" Flags=\"0\">\n";
-  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"";
+  s += "  <Wavelengths start=\"400\" end=\"";
+  s += endWavelength;
+  s += "\" steps=\"";
   s += std::to_string(nSteps);
   s += "\"/>\n";
   if (bIncludeWhite) {
@@ -395,6 +404,32 @@ int main()
   check(!parseElement<CIccMpeXmlReflectanceObserver>(
           buildObserverDoc("ReflectanceObserverElement", true, 1)),
         "ReflectanceObserverElement with one spectral step -> ParseXml false");
+
+  // Range endpoints are encoded as ICC float16 numbers. Values that compare
+  // as distinct floats can collapse to the same encoded wavelength; accepting
+  // that document makes iccFromXml save a profile Validate() calls invalid.
+  {
+    ParseOutcome r = parseAndBegin(
+      buildDoc(3, 2, 4, true, "EmissionCLutElement", "400.0001"), false);
+    check(!r.bParsed, "EmissionCLutElement with collapsed encoded range -> ParseXml false");
+  }
+  {
+    ParseOutcome r = parseAndBeginAs<CIccMpeXmlReflectanceCLUT>(
+      buildDoc(3, 2, 4, true, "ReflectanceCLutElement", "400.0001"), false);
+    check(!r.bParsed, "ReflectanceCLutElement with collapsed encoded range -> ParseXml false");
+  }
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, true, "400.0001")),
+        "EmissionMatrixElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, true, "400.0001")),
+        "InvEmissionMatrixElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true, 3, "400.0001")),
+        "EmissionObserverElement with collapsed encoded range -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true, 3, "400.0001")),
+        "ReflectanceObserverElement with collapsed encoded range -> ParseXml false");
 
   // ---- The XML route to the mismatch -----------------------------------------
   //

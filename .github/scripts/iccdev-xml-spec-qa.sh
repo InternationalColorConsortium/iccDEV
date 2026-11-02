@@ -181,6 +181,7 @@ INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML="$FIXTURE_DIR/inverse-emission-matrix
 EMISSION_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/emission-observer-missing-white.xml"
 REFLECTANCE_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/reflectance-observer-missing-white.xml"
 EMISSION_CLUT_ONE_STEP_XML="$FIXTURE_DIR/emission-clut-one-spectral-step.xml"
+EMISSION_CLUT_COLLAPSED_RANGE_XML="$FIXTURE_DIR/emission-clut-collapsed-range.xml"
 ROUNDTRIP_DIR="$ICCDEV_TESTING/Display"
 ROUNDTRIP_XML="$ROUNDTRIP_DIR/sRGB_D65_MAT.xml"
 ROUNDTRIP_CONTROL="$OUTDIR/sRGB_D65_MAT.icc"
@@ -364,7 +365,8 @@ for required in "$SPECTRAL_XML" "$BISPECTRAL_XML" "$MCS_XML" \
                 "$INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML" \
                 "$EMISSION_OBSERVER_MISSING_WHITE_XML" \
                 "$REFLECTANCE_OBSERVER_MISSING_WHITE_XML" \
-                "$EMISSION_CLUT_ONE_STEP_XML" "$ROUNDTRIP_XML"; do
+                "$EMISSION_CLUT_ONE_STEP_XML" \
+                "$EMISSION_CLUT_COLLAPSED_RANGE_XML" "$ROUNDTRIP_XML"; do
   if [ ! -f "$required" ]; then
     echo "[FAIL] required fixture is missing: $required"
     exit 1
@@ -519,6 +521,10 @@ expect_reject "emission-clut-one-spectral-step" \
   "Reject emission CLUT with fewer than two spectral steps" \
   "$EMISSION_CLUT_ONE_STEP_XML" \
   "Invalid Spectral Range" 1
+expect_reject "emission-clut-collapsed-range" \
+  "Reject spectral range whose endpoints collapse when encoded" \
+  "$EMISSION_CLUT_COLLAPSED_RANGE_XML" \
+  "Invalid Spectral Range after float16 encoding" 1
 
 print_summary "ICC.2 XML specification QA"
 exit $((FAIL + CRASH > 0 ? 1 : 0))

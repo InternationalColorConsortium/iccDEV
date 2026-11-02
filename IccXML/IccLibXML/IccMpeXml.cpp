@@ -121,6 +121,10 @@ static bool icXmlParseSpectralRange(xmlNode *pNode, icSpectralRange &range,
 
   range.start = icFtoF16(dStart);
   range.end = icFtoF16(dEnd);
+  if (range.start >= range.end) {
+    parseStr += "Invalid Spectral Range after float16 encoding\n";
+    return false;
+  }
   range.steps = nSteps;
   return true;
 }
@@ -4060,6 +4064,10 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     }
     m_Range.start = icFtoF16(dStart);
     m_Range.end = icFtoF16(dEnd);
+    if (m_Range.start >= m_Range.end) {
+      parseStr += "Invalid Spectral Range after float16 encoding\n";
+      return false;
+    }
     m_Range.steps = nSteps;
   }
   else {
@@ -4191,6 +4199,10 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     }
     m_Range.start = icFtoF16(dStart);
     m_Range.end = icFtoF16(dEnd);
+    if (m_Range.start >= m_Range.end) {
+      parseStr += "Invalid Spectral Range after float16 encoding\n";
+      return false;
+    }
     m_Range.steps = nSteps;
   }
   else {
@@ -4267,6 +4279,10 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
     }
     m_Range.start = icFtoF16(dStart);
     m_Range.end = icFtoF16(dEnd);
+    if (m_Range.start >= m_Range.end) {
+      parseStr += "Invalid Spectral Range after float16 encoding\n";
+      return false;
+    }
     m_Range.steps = nSteps;
   }
 
@@ -4355,6 +4371,10 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
     }
     m_Range.start = icFtoF16(dStart);
     m_Range.end = icFtoF16(dEnd);
+    if (m_Range.start >= m_Range.end) {
+      parseStr += "Invalid Spectral Range after float16 encoding\n";
+      return false;
+    }
     m_Range.steps = nSteps;
   }
 

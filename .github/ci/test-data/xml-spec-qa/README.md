@@ -24,6 +24,7 @@ relationships remain reviewable by inspection.
 | `emission-observer-missing-white.xml` | `emissionObserverElement` omits the required reference-white emission vector |
 | `reflectance-observer-missing-white.xml` | `reflectanceObserverElement` omits the required reference-white reflectance vector |
 | `emission-clut-one-spectral-step.xml` | `emissionCLUTElement` declares one spectral step where ICC.2 requires at least two |
+| `emission-clut-collapsed-range.xml` | Distinct decimal endpoints collapse to one ICC float16 wavelength during encoding |
 
 The positive profiles correspond to ICC.2:2023 clauses 7.2.21 through 7.2.24
 and Tables 21 and 22. The negative profiles isolate parser-width and
@@ -34,6 +35,8 @@ element contains the listed white vector, CLUT or matrix payload. XML conversion
 must not invent, zero-fill, or omit those fields.
 The one-step CLUT fixture pins the explicit minimum in clause 11.2.4 and
 Formula (11)'s spectral dimension rather than relying on later validation.
+The collapsed-range fixture requires ordering to survive the field's ICC
+float16 encoding, matching the range invariant enforced by profile validation.
 
 ## ICS corpus review
 
