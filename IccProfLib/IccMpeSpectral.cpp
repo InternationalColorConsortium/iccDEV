@@ -421,6 +421,9 @@ bool CIccMpeSpectralMatrix::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&range.steps))
     return false;
 
+  if (range.steps < 2)
+    return false;
+
   if (!pIO->Read16(&m_nReserved2))
     return false;
 
@@ -531,13 +534,13 @@ icValidateStatus CIccMpeSpectralMatrix::Validate(std::string sigPath, std::strin
   std::string mpeSigPath = sigPath + icGetSigPath(GetType());
   icValidateStatus rv = CIccMultiProcessElement::Validate(sigPath, sReport, pMPE, pProfile);
   
-  if (!m_Range.steps) {
+  if (m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
-    sReport += " - Cannot have zero spectral range steps!\n";
+    sReport += " - Cannot have fewer than two spectral range steps!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -591,7 +594,7 @@ icValidateStatus CIccMpeSpectralMatrix::Validate(std::string sigPath, std::strin
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
-  if (m_Range.start>= m_Range.end || !m_Range.steps) {
+  if (m_Range.start>= m_Range.end || m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
@@ -1074,6 +1077,9 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&m_Range.steps))
     return false;
 
+  if (m_Range.steps < 2)
+    return false;
+
   if (!pIO->Read16(&m_nStorageType))
     return false;
 
@@ -1412,17 +1418,17 @@ icValidateStatus CIccMpeSpectralCLUT::Validate(std::string sigPath, std::string 
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
-  if (!m_Range.steps) {
+  if (m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
-    sReport += " - Cannot have zero spectral range steps!\n";
+    sReport += " - Cannot have fewer than two spectral range steps!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
-  if (m_Range.start>= m_Range.end || !m_Range.steps) {
+  if (m_Range.start>= m_Range.end || m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
@@ -2028,6 +2034,9 @@ bool CIccMpeSpectralObserver::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&range.steps))
     return false;
 
+  if (range.steps < 2)
+    return false;
+
   if (!pIO->Read16(&m_flags))
     return false;
 
@@ -2144,13 +2153,13 @@ icValidateStatus CIccMpeSpectralObserver::Validate(std::string sigPath, std::str
   std::string mpeSigPath = sigPath + icGetSigPath(GetType());
   icValidateStatus rv = CIccMultiProcessElement::Validate(sigPath, sReport, pMPE, pProfile);
   
-  if (!m_Range.steps) {
+  if (m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
-    sReport += " - Cannot have zero spectral range steps!\n";
+    sReport += " - Cannot have fewer than two spectral range steps!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -2185,7 +2194,7 @@ icValidateStatus CIccMpeSpectralObserver::Validate(std::string sigPath, std::str
   }
 
 
-  if (m_Range.start>= m_Range.end || !m_Range.steps) {
+  if (m_Range.start>= m_Range.end || m_Range.steps < 2) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
 
