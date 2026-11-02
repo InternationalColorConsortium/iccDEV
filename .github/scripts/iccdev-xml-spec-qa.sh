@@ -2,7 +2,7 @@
 # Focused ICC.2 XML parsing, profile validation, and reporting QA.
 #
 # This suite covers the spectral PCS, bi-spectral range, and MCS header
-# branches plus required spectral CLUT white-vector payloads with canonical
+# branches plus required spectral element payloads with canonical
 # upstream XML fixtures. It also verifies XML to ICC to XML fidelity, negative
 # parser/validation cases, iccRoundTrip capability, and iccPawgReport report
 # generation.
@@ -176,6 +176,10 @@ NONBISPECTRAL_WITH_BI_RANGE_XML="$FIXTURE_DIR/nonbispectral-with-bi-range.xml"
 MCS_CHANNEL_MISMATCH_XML="$FIXTURE_DIR/mcs-channel-mismatch.xml"
 EMISSION_CLUT_MISSING_WHITE_XML="$FIXTURE_DIR/emission-clut-missing-white.xml"
 REFLECTANCE_CLUT_MISSING_WHITE_XML="$FIXTURE_DIR/reflectance-clut-missing-white.xml"
+EMISSION_MATRIX_MISSING_WHITE_XML="$FIXTURE_DIR/emission-matrix-missing-white.xml"
+INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML="$FIXTURE_DIR/inverse-emission-matrix-missing-matrix.xml"
+EMISSION_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/emission-observer-missing-white.xml"
+REFLECTANCE_OBSERVER_MISSING_WHITE_XML="$FIXTURE_DIR/reflectance-observer-missing-white.xml"
 ROUNDTRIP_DIR="$ICCDEV_TESTING/Display"
 ROUNDTRIP_XML="$ROUNDTRIP_DIR/sRGB_D65_MAT.xml"
 ROUNDTRIP_CONTROL="$OUTDIR/sRGB_D65_MAT.icc"
@@ -354,7 +358,11 @@ for required in "$SPECTRAL_XML" "$BISPECTRAL_XML" "$MCS_XML" \
                 "$NONBISPECTRAL_WITH_BI_RANGE_XML" \
                 "$MCS_CHANNEL_MISMATCH_XML" \
                 "$EMISSION_CLUT_MISSING_WHITE_XML" \
-                "$REFLECTANCE_CLUT_MISSING_WHITE_XML" "$ROUNDTRIP_XML"; do
+                "$REFLECTANCE_CLUT_MISSING_WHITE_XML" \
+                "$EMISSION_MATRIX_MISSING_WHITE_XML" \
+                "$INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML" \
+                "$EMISSION_OBSERVER_MISSING_WHITE_XML" \
+                "$REFLECTANCE_OBSERVER_MISSING_WHITE_XML" "$ROUNDTRIP_XML"; do
   if [ ! -f "$required" ]; then
     echo "[FAIL] required fixture is missing: $required"
     exit 1
@@ -488,6 +496,22 @@ expect_reject "emission-clut-missing-white" \
 expect_reject "reflectance-clut-missing-white" \
   "Reject reflectance CLUT without required white spectrum" \
   "$REFLECTANCE_CLUT_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "emission-matrix-missing-white" \
+  "Reject emission matrix without required white spectrum" \
+  "$EMISSION_MATRIX_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "inverse-emission-matrix-missing-matrix" \
+  "Reject inverse emission matrix without required samples" \
+  "$INVERSE_EMISSION_MATRIX_MISSING_MATRIX_XML" \
+  "Missing Matrix Data" 1
+expect_reject "emission-observer-missing-white" \
+  "Reject emission observer without required white spectrum" \
+  "$EMISSION_OBSERVER_MISSING_WHITE_XML" \
+  "Missing White Data" 1
+expect_reject "reflectance-observer-missing-white" \
+  "Reject reflectance observer without required white spectrum" \
+  "$REFLECTANCE_OBSERVER_MISSING_WHITE_XML" \
   "Missing White Data" 1
 
 print_summary "ICC.2 XML specification QA"

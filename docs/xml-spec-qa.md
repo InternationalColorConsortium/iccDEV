@@ -33,10 +33,11 @@ Each tool invocation has a 60-second default bound; set
 
 The normative reference is
 <a href="https://www.color.org/specification/ICC.2-2023.pdf">ICC.2:2023</a>.
-The preceding ICC.2:2019 edition defines the same white-vector fields and array
-requirements at the same clause, table, and formula numbers. Its September
-2021 cumulative errata does not amend clauses 11.2.4 or 11.2.12, so the
-fail-closed contract is compatible with both archived editions.
+The preceding ICC.2:2019 edition defines the same white-vector and matrix-array
+fields at the same clause, table, and formula numbers. Its September 2021
+cumulative errata does not amend clauses 11.2.4 through 11.2.13. The current
+public CICP and extended Device Colour Space amendments do not change these
+processing-element encodings, so the fail-closed contract applies throughout.
 
 | Surface | ICC.2:2023 relationship | Native input | Required evidence |
 |---------|-------------------------|-----------------|-------------------|
@@ -45,6 +46,10 @@ fail-closed contract is compatible with both archived editions.
 | MCS | Header multiplex connection space, clause 7.2.24, and the Multiplex Identification profile-class requirements | `.github/ci/test-data/xml-spec-qa/mcs-3-channel-mid.xml` | `mc0003`, three multiplex channel names, `multiplexTypeArrayTag`, valid v5 profile |
 | Emission CLUT white | `emissionCLUTElement`, clause 11.2.4, Table 114 and Formula (12); the reference-white emission vector is an `S`-element field following the CLUT | `.github/ci/test-data/xml-spec-qa/emission-clut-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
 | Reflectance CLUT white | `reflectanceCLUTElement`, clause 11.2.12, Table 122 and Formula (40); the reference-white reflectance vector is an `S`-element field following the CLUT | `.github/ci/test-data/xml-spec-qa/reflectance-clut-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
+| Emission matrix white | `emissionMatrixElement`, clause 11.2.5, Table 115 and Formula (16); the reference-white emission vector is an `S`-element field | `.github/ci/test-data/xml-spec-qa/emission-matrix-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
+| Inverse emission matrix data | `inverseEmissionMatrixElement`, clause 11.2.8, Table 118 and Formula (29); the spectral matrix is an `S × Q`-element field | `.github/ci/test-data/xml-spec-qa/inverse-emission-matrix-missing-matrix.xml` | `iccFromXml` rejects the omitted `MatrixData` with `Missing Matrix Data` and writes no profile |
+| Emission observer white | `emissionObserverElement`, clause 11.2.6, Table 116 and Formula (23); the reference-white emission vector is an `S`-element field | `.github/ci/test-data/xml-spec-qa/emission-observer-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
+| Reflectance observer white | `reflectanceObserverElement`, clause 11.2.13, Table 123 and Formula (47); the reference-white reflectance vector is an `S`-element field | `.github/ci/test-data/xml-spec-qa/reflectance-observer-missing-white.xml` | `iccFromXml` rejects the omitted `WhiteData` with `Missing White Data` and writes no profile |
 
 The binary field layout is represented by `icHeader` in
 `IccProfLib/icProfileHeader.h`. XML parsing and serialization are implemented
@@ -53,12 +58,13 @@ in `IccXML/IccLibXML/IccProfileXml.cpp`; signature channel decoding is in
 `IccProfLib/IccProfile.cpp`. These implementation references complement the
 normative ICC.2 specification; they do not replace it.
 
-The nine checked-in negative XML files reject non-finite wavelength endpoints,
+The thirteen checked-in negative XML files reject non-finite wavelength endpoints,
 spectral and bi-spectral step counts that do not fit the 16-bit header field,
 signature/range channel mismatches, a bi-spectral range attached to a normal
 spectral PCS, an MCS/channel-name mismatch, and emission or reflectance CLUTs
-without their mandatory white vectors. This pins syntax conversion, semantic
-validation, and required element payloads.
+without their mandatory white vectors. They also reject spectral matrix and
+observer elements missing a required white or matrix array. This pins syntax
+conversion, semantic validation, and required element payloads.
 
 ## Tool interpretation
 
@@ -122,6 +128,18 @@ The specification cross-check above establishes that the field is mandatory,
 so the parser now rejects the omission and both native fixtures pin the CLI
 diagnostic. The direct `iccdev.spectral-clut-xml-channel-mismatch` regression
 also checks both reader classes under sanitizers.
+
+The #2960 follow-up audit found that the adjacent spectral matrix and observer
+readers had the same failure-
+propagation defect with a different memory consequence. Their `SetSize()`
+methods use `calloc()`, so an omitted required `WhiteData` or `MatrixData`
+child was reported in the parser log but returned success and became an
+authored all-zero array. Unpatched `iccFromXml` reported all four minimal
+profiles as successfully parsed and saved, and `iccToXml` then emitted the
+invented arrays. The parser now rejects both matrix siblings and both observer
+siblings, with complete-element controls retained by the direct regression.
+The combined ASan, UBSan, integer, and float sanitizer build stayed clean, as
+expected for this specification-invalid but memory-safe zero-substitution.
 
 A valid MCS profile carrying malformed `ProfileSubClassVersion` text (`1.bad`)
 is still accepted, normalized to `0.00`, and reported valid. This is the

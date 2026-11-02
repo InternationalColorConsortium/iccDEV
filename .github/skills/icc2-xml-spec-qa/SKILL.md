@@ -26,7 +26,7 @@ signatures and ranges, MCS handling, or the related command-line QA surface.
 6. Treat `iccRoundTrip` unsupported-profile results as capability evidence, not
    successful transforms. Treat ICC.2 PAWG assessment failures as review data
    until its rule set is ICC.2-aware; require JSON parse evidence regardless.
-7. Discover and run `iccdev.xml-spec-qa` with CTest. For spectral CLUT parser
+7. Discover and run `iccdev.xml-spec-qa` with CTest. For spectral MPE parser
    changes, also run `iccdev.spectral-clut-xml-channel-mismatch`. Report the
    compiler, sanitizer envelope, profile inputs, complete pass count, and
    output path.

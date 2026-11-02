@@ -36,7 +36,9 @@
 // path must refuse it if it somehow does. ICC.2:2023 11.2.4/Table 114 and
 // 11.2.12/Table 122 require an S-element reference-white spectrum after each
 // spectral CLUT, so the same readers must reject a missing WhiteData child
-// rather than serializing an uninitialized spectrum.
+// rather than serializing an uninitialized spectrum. Tables 115, 116, 118 and
+// 123 likewise require the spectral matrix and observer payloads; their XML
+// readers must not replace omitted data with calloc()'s zeros.
 //
 // This is the companion to spectral-clut-channel-count-bound.cpp, which pins the
 // same invariant on the binary reader. The two exist separately because the
@@ -225,6 +227,57 @@ ParseOutcome parseAndBegin(const std::string &doc, bool bCallBegin)
   return parseAndBeginAs<CIccMpeXmlEmissionCLUT>(doc, bCallBegin);
 }
 
+template <class T>
+bool parseElement(const std::string &doc)
+{
+  xmlDoc *pDoc = xmlReadMemory(doc.c_str(), (int)doc.size(), "frag.xml", NULL,
+                               XML_PARSE_NOERROR | XML_PARSE_NOWARNING |
+                               XML_PARSE_HUGE);
+  if (!pDoc) {
+    std::fprintf(stderr, "[spectral-clut-xml] test fixture is not valid XML\n");
+    return false;
+  }
+
+  T elem;
+  std::string parseStr;
+  xmlNode *pRoot = xmlDocGetRootElement(pDoc);
+  bool bParsed = pRoot && elem.ParseXml(pRoot, parseStr);
+  xmlFreeDoc(pDoc);
+  return bParsed;
+}
+
+std::string buildMatrixDoc(const char *elementName, bool bIncludeWhite,
+                           bool bIncludeMatrix)
+{
+  std::string s = "<";
+  s += elementName;
+  s += " InputChannels=\"3\" OutputChannels=\"3\">\n";
+  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"4\"/>\n";
+  if (bIncludeWhite)
+    s += "  <WhiteData>1 1 1 1</WhiteData>\n";
+  if (bIncludeMatrix)
+    s += "  <MatrixData>1 0 0 0 0 1 0 0 0 0 1 0</MatrixData>\n";
+  s += "  <OffsetData>0 0 0 0</OffsetData>\n";
+  s += "</";
+  s += elementName;
+  s += ">\n";
+  return s;
+}
+
+std::string buildObserverDoc(const char *elementName, bool bIncludeWhite)
+{
+  std::string s = "<";
+  s += elementName;
+  s += " InputChannels=\"3\" OutputChannels=\"3\" Flags=\"0\">\n";
+  s += "  <Wavelengths start=\"400\" end=\"700\" steps=\"3\"/>\n";
+  if (bIncludeWhite)
+    s += "  <WhiteData>1 1 1</WhiteData>\n";
+  s += "</";
+  s += elementName;
+  s += ">\n";
+  return s;
+}
+
 // Assert the contract for a declared count that narrows onto a dimensionality a
 // CIccCLUT can hold.
 //
@@ -274,6 +327,41 @@ int main()
       doc, /*bCallBegin*/false);
     check(!r.bParsed, "ReflectanceCLutElement without WhiteData -> ParseXml false");
   }
+
+  // The spectral matrix and observer SetSize() methods use calloc(). Missing
+  // children therefore became invented zero spectra or matrices, and both the
+  // binary writer and ToXml() treated those allocations as real input data.
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", false, true)),
+        "EmissionMatrixElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, false)),
+        "EmissionMatrixElement without MatrixData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", false, true)),
+        "InvEmissionMatrixElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, false)),
+        "InvEmissionMatrixElement without MatrixData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", false)),
+        "EmissionObserverElement without WhiteData -> ParseXml false");
+  check(!parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", false)),
+        "ReflectanceObserverElement without WhiteData -> ParseXml false");
+
+  check(parseElement<CIccMpeXmlEmissionMatrix>(
+          buildMatrixDoc("EmissionMatrixElement", true, true)),
+        "complete EmissionMatrixElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlInvEmissionMatrix>(
+          buildMatrixDoc("InvEmissionMatrixElement", true, true)),
+        "complete InvEmissionMatrixElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlEmissionObserver>(
+          buildObserverDoc("EmissionObserverElement", true)),
+        "complete EmissionObserverElement -> ParseXml true");
+  check(parseElement<CIccMpeXmlReflectanceObserver>(
+          buildObserverDoc("ReflectanceObserverElement", true)),
+        "complete ReflectanceObserverElement -> ParseXml true");
 
   // ---- The XML route to the mismatch -----------------------------------------
   //

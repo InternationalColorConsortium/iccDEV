@@ -1762,7 +1762,8 @@ bool CIccMpeXmlEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    parseStr += "Missing MatrixData";
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   pData = icXmlFindNode(pNode->children, "MatrixData");
@@ -1772,7 +1773,8 @@ bool CIccMpeXmlEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    parseStr += "Missing MatrixData";
+    parseStr += "Missing Matrix Data\n";
+    return false;
   }
 
   pData = icXmlFindNode(pNode->children, "OffsetData");
@@ -1885,7 +1887,8 @@ bool CIccMpeXmlInvEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr
       return false;
   }
   else {
-    parseStr += "Missing White Data";
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   pData = icXmlFindNode(pNode->children, "MatrixData");
@@ -1895,7 +1898,8 @@ bool CIccMpeXmlInvEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr
       return false;
   }
   else {
-    parseStr += "Missing Matrix Data";
+    parseStr += "Missing Matrix Data\n";
+    return false;
   }
 
   pData = icXmlFindNode(pNode->children, "OffsetData");
@@ -4279,7 +4283,8 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
   }
   else {
-    parseStr += "Missing White Data";
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   return true;
@@ -4366,7 +4371,8 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
       return false;
   }
   else {
-    parseStr += "Missing White Data";
+    parseStr += "Missing White Data\n";
+    return false;
   }
 
   return true;
