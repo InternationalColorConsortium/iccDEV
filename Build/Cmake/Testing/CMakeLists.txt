@@ -14929,6 +14929,20 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
   )
 endif()
 
+# Issue #2964: the file-backed SampledSegment and SingleSampledCurve readers must stop when
+# their sample table cannot be sized. The deterministic SingleSampledCurve cap
+# runs under every Unix tool build; a validated Linux LD_PRELOAD allocator DSO
+# also reaches the otherwise impractical SampledSegment allocation-failure path.
+if(TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.xml-sampled-curve-setsize
+    120
+    "iccdev;xml;curve;setsize;allocation;issue-2964;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-sampled-curve-setsize-tests.sh"
+  )
+endif()
+
 # ICC.2 specification-driven XML coverage for spectral PCS, bi-spectral PCS,
 # and MCS header fields. The script also records the current iccRoundTrip class
 # boundary and requires iccPawgReport to emit parseable evidence for each

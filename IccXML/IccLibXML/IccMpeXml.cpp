@@ -74,6 +74,20 @@ static const icUInt16Number kIccXmlMaxMatrixChannels = 255;
 static const icUInt16Number kIccXmlMaxChannels = 0xFFFF;
 static const int kIccXmlMaxSpectralSteps = 65535;
 
+static void icXmlReportCurveSampleSizeFailure(std::string &parseStr,
+                                              const char *curveName,
+                                              icUInt32Number count,
+                                              const char *filename)
+{
+  parseStr += "Unable to store ";
+  parseStr += std::to_string(count);
+  parseStr += " samples from '";
+  parseStr += filename;
+  parseStr += "' in ";
+  parseStr += curveName;
+  parseStr += ".\n";
+}
+
 static int icXmlBoundedSpectralSteps(const icSpectralRange &range)
 {
   return std::min<int>((int)range.steps, kIccXmlMaxSpectralSteps);
@@ -507,7 +521,13 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
       }
 
       else {
-        SetSize(data.GetSize());
+        if (!SetSize(data.GetSize())) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Sampled Curve Segment",
+                                            data.GetSize(), filename);
+          delete[] buf;
+          delete file;
+          return false;
+        }
         icFloatNumber *src = data.GetBuf();
         icFloatNumber *dst = m_pSamples;          
 
@@ -557,7 +577,12 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Sampled Curve Segment",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst =  m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -584,7 +609,12 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Sampled Curve Segment",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -620,7 +650,12 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Sampled Curve Segment",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -656,7 +691,12 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Sampled Curve Segment",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
 
         icUInt32Number i;
@@ -1004,7 +1044,13 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         }
  
         else {
-          SetSize(data.GetSize());
+          if (!SetSize(data.GetSize())) {
+            icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                              data.GetSize(), filename);
+            delete[] buf;
+            delete file;
+            return false;
+          }
           icUInt8Number *src = data.GetBuf();
           icFloatNumber *dst = m_pSamples;
 
@@ -1042,7 +1088,13 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         }
 
         else {
-          SetSize(data.GetSize());
+          if (!SetSize(data.GetSize())) {
+            icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                              data.GetSize(), filename);
+            delete[] buf;
+            delete file;
+            return false;
+          }
 
           icUInt16Number *src = data.GetBuf();
           icFloatNumber *dst = m_pSamples;
@@ -1075,7 +1127,13 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         }
 
         else {
-          SetSize(data.GetSize());
+          if (!SetSize(data.GetSize())) {
+            icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                              data.GetSize(), filename);
+            delete[] buf;
+            delete file;
+            return false;
+          }
           icFloatNumber *src = data.GetBuf();
           icFloatNumber *dst = m_pSamples;
 
@@ -1110,7 +1168,12 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -1137,7 +1200,12 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -1173,7 +1241,12 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -1209,7 +1282,12 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
           return false;
         }
 
-        SetSize(num);
+        if (!SetSize(num)) {
+          icXmlReportCurveSampleSizeFailure(parseStr, "Single Sampled Curve",
+                                            num, filename);
+          delete file;
+          return false;
+        }
         icFloatNumber *dst = m_pSamples;
 
         icUInt32Number i;

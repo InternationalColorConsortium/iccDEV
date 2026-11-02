@@ -145,6 +145,18 @@ siblings, with complete-element controls retained by the direct regression.
 The combined ASan, UBSan, integer, and float sanitizer build stayed clean, as
 expected for this specification-invalid but memory-safe zero-substitution.
 
+The #2964 sampled-curve audit also checked the non-normative XML file-import
+paths. Every `Filename=` text and binary branch in both
+`CIccSampledCurveSegmentXml` and `CIccSingleSampledCurveXml` must check the
+result of `SetSize()` before copying samples. The single-curve implementation
+has a 65,535-sample storage limit, so a 65,536-byte UInt8 input is a compact,
+deterministic refusal case. The segment class has no comparable count cap; its
+allocation-failure contract is exercised on Linux by a validated allocator DSO
+that refuses only `calloc(257, 4)`. CTest registers these boundary, injected,
+and non-injected controls as `iccdev.xml-sampled-curve-setsize`. Sanitizer builds
+still run the deterministic case and report the DSO case as skipped when their
+allocator interceptors prevent `LD_PRELOAD` interposition.
+
 A valid MCS profile carrying malformed `ProfileSubClassVersion` text (`1.bad`)
 is still accepted, normalized to `0.00`, and reported valid. This is the
 already-known #2387/#2384 parse-diagnostic suppression identified in
