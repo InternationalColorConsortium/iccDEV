@@ -1,2 +1,3 @@
-# Docker-only workflow security analyzer.
+# Docker-only workflow policy and security analyzers.
+PyYAML==6.0.3
 zizmor==1.31.1
