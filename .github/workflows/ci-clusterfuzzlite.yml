@@ -125,9 +125,139 @@ jobs:
             echo "run_mode=$run_mode"
           } >> "$GITHUB_OUTPUT"  # elements-sanitized
 
+  refresh-corpora:
+    name: "Refresh persistent corpora"
+    needs: configure
+    permissions:
+      actions: read  # Read the latest exact-name corpus artifacts.
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare current-run corpus artifacts
+        id: prepare
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_MODE: ${{ needs.configure.outputs.run_mode }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          targets=(
+            icc_profileparse_fuzzer
+            icc_cmmapply_fuzzer
+            icc_profilevisualize_fuzzer
+            icc_writerserialize_fuzzer
+          )
+          if [ "$RUN_MODE" = "full" ]; then
+            targets+=(
+              icc_xmlparse_fuzzer
+              icc_jsonparse_fuzzer
+              icc_connectconfig_fuzzer
+              icc_pawgreport_fuzzer
+            )
+          fi
+          .github/scripts/iccdev-cfl-artifact-refresh.sh \
+            --prepare "$GITHUB_REPOSITORY" cfl-corpus-refresh "${targets[@]}"
+          for target in "${targets[@]}"; do
+            echo "$target=true" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          done
+
+      - name: Refresh profile parser corpus
+        if: ${{ steps.prepare.outputs.icc_profileparse_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_profileparse_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_profileparse_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh CMM apply corpus
+        if: ${{ steps.prepare.outputs.icc_cmmapply_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_cmmapply_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_cmmapply_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh profile visualization corpus
+        if: ${{ steps.prepare.outputs.icc_profilevisualize_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_profilevisualize_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_profilevisualize_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh writer serialization corpus
+        if: ${{ steps.prepare.outputs.icc_writerserialize_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_writerserialize_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_writerserialize_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh XML parser corpus
+        if: ${{ steps.prepare.outputs.icc_xmlparse_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_xmlparse_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_xmlparse_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh JSON parser corpus
+        if: ${{ steps.prepare.outputs.icc_jsonparse_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_jsonparse_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_jsonparse_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh IccConnect configuration corpus
+        if: ${{ steps.prepare.outputs.icc_connectconfig_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_connectconfig_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_connectconfig_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Refresh PAWG assessment corpus
+        if: ${{ steps.prepare.outputs.icc_pawgreport_fuzzer == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: cifuzz-corpus-icc_pawgreport_fuzzer
+          path: cfl-corpus-refresh/cifuzz-corpus-icc_pawgreport_fuzzer.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   fuzz:
     name: "libFuzzer (${{ matrix.group }}, ${{ matrix.sanitizer }})"
-    needs: configure
+    needs:
+      - configure
+      - refresh-corpora
     runs-on: ubuntu-latest
     timeout-minutes: 60
     concurrency:

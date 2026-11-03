@@ -30,6 +30,8 @@ patch_test="$repo_root/.github/scripts/iccdev-fuzz-patch-check-tests.sh"
 target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
 artifact_cleanup_test="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup-tests.sh"
+artifact_refresh="$repo_root/.github/scripts/iccdev-cfl-artifact-refresh.sh"
+artifact_refresh_test="$repo_root/.github/scripts/iccdev-cfl-artifact-refresh-tests.sh"
 source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
 readme="$repo_root/.github/ci/cfl/README.md"
 skill="$repo_root/.github/skills/clusterfuzzlite/SKILL.md"
@@ -38,7 +40,8 @@ for required in "$workflow" "$afl_workflow" "$cfl_workflow" \
   "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
   "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
-  "$artifact_cleanup" "$artifact_cleanup_test" "$source_digest"; do
+  "$artifact_cleanup" "$artifact_cleanup_test" \
+  "$artifact_refresh" "$artifact_refresh_test" "$source_digest"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -54,6 +57,8 @@ bash -n "$patch_test"
 bash -n "$target_test"
 bash -n "$artifact_cleanup"
 bash -n "$artifact_cleanup_test"
+bash -n "$artifact_refresh"
+bash -n "$artifact_refresh_test"
 bash -n "$source_digest"
 
 test "$(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | wc -l)" -eq 1
@@ -93,7 +98,7 @@ grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$wo
 grep -q '^      matrix: \${{ steps.duration.outputs.matrix }}$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      run_mode: \${{ steps.duration.outputs.run_mode }}$' "$workflow"
-test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 8
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 9
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"
@@ -104,6 +109,18 @@ grep -q '^            echo "fuzz_seconds=$((minutes \* 60))"$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal validated output target.
 grep -q '^          } >> "$GITHUB_OUTPUT"  # elements-sanitized$' "$workflow"
 grep -q '^    needs: configure$' "$workflow"
+grep -q '^  refresh-corpora:$' "$workflow"
+grep -q '^    name: "Refresh persistent corpora"$' "$workflow"
+test "$(grep -c '^      - refresh-corpora$' "$workflow")" -eq 1
+test "$(grep -c '^      - name: Refresh .* corpus$' "$workflow")" -eq 8
+test "$(grep -c '^          retention-days: 1$' "$workflow")" -eq 8
+test "$(grep -c '^          compression-level: 0$' "$workflow")" -eq 8
+# shellcheck disable=SC2016 # Match the literal API query parameter.
+grep -Fq 'actions/artifacts?name=$artifact_name&per_page=100' "$artifact_refresh"
+if grep -Fq 'actions/artifacts?per_page=100' "$artifact_refresh"; then
+  echo "[FAIL] Corpus refresh must use the exact-name artifact filter" >&2
+  exit 1
+fi
 grep -q '^      max-parallel: 3$' "$workflow"
 grep -q '^  prune:$' "$workflow"
 grep -q '^  cleanup-artifacts:$' "$workflow"
@@ -113,7 +130,7 @@ if grep -q '^    if: .*always()' "$workflow"; then
   echo "[FAIL] ClusterFuzzLite cleanup jobs must stop on cancellation" >&2
   exit 1
 fi
-test "$(grep -c '^      - configure$' "$workflow")" -eq 2
+test "$(grep -c '^      - configure$' "$workflow")" -eq 3
 test "$(grep -c '^      - fuzz$' "$workflow")" -eq 1
 test "$(grep -c '^      - prune$' "$workflow")" -eq 1
 grep -q '^    timeout-minutes: 60$' "$workflow"
@@ -277,6 +294,7 @@ test "$compiler_gate_line" -gt "$skip_build_line"
 
 "$target_test"
 "$artifact_cleanup_test"
+"$artifact_refresh_test"
 "$patch_test"
 
 validate_action_reference() {
