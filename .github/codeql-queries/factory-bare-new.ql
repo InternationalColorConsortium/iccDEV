@@ -52,12 +52,39 @@ class JsonFactoryFunction extends Function {
   }
 }
 
+/**
+ * A call whose enclosing try statement has a catch-all handler. This is the
+ * repository's established boundary for factories that intentionally throw on
+ * allocation failure.
+ */
+predicate callProtectedByCatchAll(FunctionCall call) {
+  exists(TryStmt tryStatement |
+    tryStatement.getStmt().getAChild*() = call and
+    tryStatement.getACatchClause() instanceof CatchAnyBlock
+  )
+}
+
+/**
+ * A factory for which every statically resolved call is protected by a
+ * catch-all handler. Requiring at least one call keeps unreferenced factories
+ * visible for review.
+ */
+predicate allKnownCallsCatchAllocationFailure(Function factory) {
+  exists(FunctionCall call | call.getTarget() = factory) and
+  forall(FunctionCall call |
+    call.getTarget() = factory
+  |
+    callProtectedByCatchAll(call)
+  )
+}
+
 from BareNewExpr newExpr
 where
   (
     newExpr.getEnclosingFunction() instanceof FactoryFunction or
     newExpr.getEnclosingFunction() instanceof JsonFactoryFunction
   ) and
+  not allKnownCallsCatchAllocationFailure(newExpr.getEnclosingFunction()) and
   newExpr.getFile().getRelativePath().matches("%Icc%")
 select newExpr,
   "Factory method '" + newExpr.getEnclosingFunction().getName() +

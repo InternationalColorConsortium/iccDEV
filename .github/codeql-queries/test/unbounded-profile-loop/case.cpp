@@ -83,3 +83,22 @@ public:
 private:
   unsigned int m_nCount;
 };
+
+class LayoutGuarded {
+public:
+  bool CalcTileLayout(unsigned int limit)
+  {
+    if (m_nTilesAcross > limit / 16)
+      return false;
+    return true;
+  }
+
+  void Apply()
+  {
+    for (unsigned int i = 0; i < m_nTilesAcross; i++)
+      consume(i);
+  }
+
+private:
+  unsigned int m_nTilesAcross;
+};

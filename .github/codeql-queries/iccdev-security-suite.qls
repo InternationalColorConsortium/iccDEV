@@ -8,6 +8,10 @@
       - json-size-overflow.ql
       - json-size-to-narrow-setsize.ql
       - json-unchecked-type-access.ql
+      # The stock cpp/world-writable-file-creation query owns this signal.
+      # Keep the custom experiment available for research without uploading
+      # duplicate alerts under a second rule ID.
+      - world-writable-output.ql
       - iccdev-mcp/api-path-traversal.ql
       - iccdev-mcp/missing-output-sanitization.ql
       - iccdev-mcp/profile-path-traversal.ql

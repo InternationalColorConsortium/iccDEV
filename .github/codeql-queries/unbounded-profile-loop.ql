@@ -126,7 +126,9 @@ predicate hasSetupBoundGuardInSameType(Field field) {
       // propagated its false return before Apply() (issue #2313).
       setup instanceof Constructor
       or
-      setup.getName().regexpMatch("(?i).*(begin|open|create|init|read|validate|load|parse|set).*")
+      setup.getName().regexpMatch(
+        "(?i).*(begin|open|create|init|read|validate|load|parse|set|calc.*layout).*"
+      )
     ) and
     conditionMentionsFieldAndBound(guard.getCondition(), field)
   )

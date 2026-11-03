@@ -1,8 +1,9 @@
 /**
  * @name Unchecked allocation in profile processing
- * @description new, malloc, calloc, and realloc return values must be checked
- *              before use. Malformed ICC profiles can trigger large allocations
- *              that fail, and unchecked NULL dereference crashes the tool.
+ * @description malloc, calloc, realloc, and ICC allocation-wrapper return values
+ *              must be checked before dereference. Malformed ICC profiles can
+ *              trigger large allocations that fail, and unchecked NULL
+ *              dereference crashes the tool.
  * @kind problem
  * @problem.severity error
  * @precision medium
@@ -27,6 +28,31 @@ class AllocationCall extends FunctionCall {
   }
 }
 
+/**
+ * A use that can dereference the allocation result rather than merely compare,
+ * return, or assign the pointer.
+ */
+predicate dereferencesAllocation(VariableAccess use) {
+  exists(PointerDereferenceExpr dereference |
+    dereference.getOperand().getAChild*() = use
+  )
+  or
+  exists(ArrayExpr access |
+    access.getArrayBase().getAChild*() = use
+  )
+  or
+  exists(PointerFieldAccess access |
+    access.getQualifier().getAChild*() = use
+  )
+  or
+  exists(FunctionCall sink |
+    sink.getAnArgument().getAChild*() = use and
+    sink.getTarget().getName() in [
+      "memcpy", "memmove", "memset", "strcpy", "strncpy", "strcat", "strncat"
+    ]
+  )
+}
+
 from AllocationCall call
 where
   // The return value is assigned to a variable
@@ -39,8 +65,9 @@ where
     assign.getLValue().(VariableAccess).getTarget() = v and
     exists(VariableAccess use |
       use.getTarget() = v and
+      use.getEnclosingFunction() = call.getEnclosingFunction() and
+      dereferencesAllocation(use) and
       use.getLocation().getStartLine() > assign.getLocation().getStartLine() and
-      use.getLocation().getStartLine() < assign.getLocation().getStartLine() + 5 and
       not exists(IfStmt check |
         check.getCondition().getAChild*().(VariableAccess).getTarget() = v and
         check.getLocation().getStartLine() > assign.getLocation().getStartLine() and

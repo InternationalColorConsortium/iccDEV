@@ -1,0 +1,1 @@
+| IccFactoryCase.cpp:34:10:34:22 | new | Factory method 'CreateUnsafe' uses bare 'new' which throws std::bad_alloc on failure. Callers checking for nullptr will not catch the exception. Use new(std::nothrow) for graceful failure handling (CWE-252, CWE-755). |

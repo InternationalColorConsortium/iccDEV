@@ -1,0 +1,1 @@
+| IccAllocationCase.cpp:37:12:37:17 | call to malloc | Allocation result from malloc() used without NULL check. Malformed profiles can trigger allocation failure (CWE-252/CWE-476). |

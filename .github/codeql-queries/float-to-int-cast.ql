@@ -1,13 +1,15 @@
 /**
  * @name Historical ICC float-to-integer conversion regression
  * @description Detects reintroductions of float-to-integer undefined behavior
- *              fixed in ICC visualization and spectral resampling. The query
- *              requires a preceding finiteness check and range validation on
- *              the same value, rather than relying on a source-line window.
+ *              fixed in ICC visualization and spectral resampling, plus the
+ *              non-finite interpolation positions missed when alerts
+ *              #1086-#1088 were dismissed. The query requires a preceding
+ *              finiteness check and range validation on the same value rather
+ *              than relying on a source-line window.
  * @kind problem
  * @problem.severity error
  * @precision high
- * @id iccdev/float-to-int-cast
+ * @id iccdev/float-to-int-cast-v2
  * @tags security
  *       correctness
  *       external/cwe/cwe-681
@@ -32,22 +34,35 @@ private predicate convertedVariable(CStyleCast cast, Variable variable) {
 }
 
 private predicate isHistoricalConversion(CStyleCast cast, Variable variable, string issue) {
-  convertedVariable(cast, variable) and
   (
-    cast.getEnclosingFunction().getName() = ["ClipU8", "ClipU16"] and
-    variable.getName() = "input" and
-    issue = "#1396"
-    or
-    exists(FunctionCall roundCall |
-      (roundCall = cast.getExpr() or roundCall = cast.getExpr().getAChild*()) and
-      roundCall.getTarget().getName().regexpMatch("(?i)^(round|lround)$") and
-      variable.getName() = "valueTemp" and
+    convertedVariable(cast, variable) and
+    (
+      cast.getEnclosingFunction().getName() = ["ClipU8", "ClipU16"] and
+      variable.getName() = "input" and
       issue = "#1396"
+      or
+      exists(FunctionCall roundCall |
+        (roundCall = cast.getExpr() or roundCall = cast.getExpr().getAChild*()) and
+        roundCall.getTarget().getName().regexpMatch("(?i)^(round|lround)$") and
+        variable.getName() = "valueTemp" and
+        issue = "#1396"
+      )
+      or
+      cast.getEnclosingFunction().getName() = "resampleCore" and
+      variable.getName() = "t" and
+      issue = "#2230"
     )
-    or
-    cast.getEnclosingFunction().getName() = "resampleCore" and
-    variable.getName() = "t" and
-    issue = "#2230"
+  )
+  or
+  (
+    cast.getEnclosingFunction().getName() = "Interpolate" and
+    exists(Variable converted |
+      convertedVariable(cast, converted) and
+      converted.getName() = "fpos"
+    ) and
+    variable.getName() = "pos" and
+    variable.getAnAccess().getEnclosingFunction() = cast.getEnclosingFunction() and
+    issue = "dismissed alerts #1086-#1088"
   )
 }
 
@@ -96,5 +111,5 @@ where
   not hasFinitenessAndRangeChecks(cast, variable) and
   isProductSource(cast.getFile())
 select cast,
-  "Float-to-integer conversion matches the ICC defect fixed in " + issue +
+  "Float-to-integer conversion matches the ICC numeric defect tracked by " + issue +
   " but lacks preceding finiteness and two-sided range checks (CWE-681)."

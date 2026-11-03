@@ -37,6 +37,8 @@ permissions:
       - 'IccConnect/**'
       - 'Tools/**'
       - 'examples/**'
+      - 'Build/Cmake/**'
+      - '.github/ci/regression/**'
       - '.github/codeql-queries/**'
       - '.github/codeql-config.yml'
       - '.github/scripts/codeql-report.sh'
@@ -97,6 +99,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             cmake clang \
+            pkg-config libheif-dev \
             libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
             nlohmann-json3-dev libwxgtk3.2-dev 2>/dev/null
 
@@ -138,7 +141,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
-          codeql pack install "$TRUSTED_CODEQL_QUERIES"
+          codeql pack ci "$TRUSTED_CODEQL_QUERIES"
 
       - name: Configure iccDEV
         shell: bash --noprofile --norc {0}
@@ -203,6 +206,7 @@ jobs:
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/cpp-security-and-quality.sarif \
+            --sarif-category=iccdev-standard-cpp-security-and-quality \
             --threads=0 \
             "$TRUSTED_CODEQL_QUERIES/iccdev-cpp-security-and-quality.qls"
 
@@ -210,6 +214,7 @@ jobs:
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/iccdev-security.sarif \
+            --sarif-category=iccdev-custom-security \
             --threads=0 \
             "$TRUSTED_CODEQL_QUERIES/iccdev-security-suite.qls"
 
@@ -217,6 +222,7 @@ jobs:
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/iccdev-jsonlib-security.sarif \
+            --sarif-category=iccdev-jsonlib-security \
             --threads=0 \
             "$TRUSTED_CODEQL_QUERIES/iccdev-jsonlib-suite.qls"
 
@@ -231,10 +237,22 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           "$TRUSTED_SCRIPTS/codeql-report.sh" \
+            --fingerprints-out codeql-results/fingerprints.tsv \
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \
             codeql-results/iccdev-jsonlib-security.sarif \
             > codeql-results/report.txt
+
+          {
+            sanitize_line '## CodeQL raw SARIF report'
+            printf '\n'
+            echo '```text'
+            while IFS= read -r report_line; do
+              sanitize_code_line "$report_line"
+              printf '\n'
+            done < codeql-results/report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload standard CodeQL SARIF
         if: always()

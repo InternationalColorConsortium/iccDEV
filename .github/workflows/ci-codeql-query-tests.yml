@@ -97,16 +97,16 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Both installs, as .github/codeql-queries/README.md prescribes.
+          # Both locked installs, as .github/codeql-queries/README.md prescribes.
           # With the pinned bundle above these mostly resolve from the bundle's
-          # own qlpacks (it rewrites the lock files to an empty dependency set
-          # in the process -- harmless here, but do not commit that churn).
+          # own qlpacks. `pack ci` verifies the committed lock files without
+          # rewriting them, so stale dependency metadata fails closed.
           # They matter for a standalone CLI, where the query pack's lock
           # supplies codeql/cpp-all 8.0.3 and the test pack pins that same
           # version; the second install is what keeps the two in step if the
           # query pack's lock is ever regenerated against a newer cpp-all.
-          codeql pack install .github/codeql-queries
-          codeql pack install .github/codeql-queries/test \
+          codeql pack ci .github/codeql-queries
+          codeql pack ci .github/codeql-queries/test \
             --additional-packs=.github/codeql-queries
 
       - name: Run query unit tests

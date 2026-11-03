@@ -1,3 +1,4 @@
-| case.cpp:39:23:39:42 | (unsigned char)... | Float-to-integer conversion matches the ICC defect fixed in #1396 but lacks preceding finiteness and two-sided range checks (CWE-681). |
-| case.cpp:53:13:53:42 | (int)... | Float-to-integer conversion matches the ICC defect fixed in #1396 but lacks preceding finiteness and two-sided range checks (CWE-681). |
-| case.cpp:67:13:67:30 | (int)... | Float-to-integer conversion matches the ICC defect fixed in #2230 but lacks preceding finiteness and two-sided range checks (CWE-681). |
+| case.cpp:39:23:39:42 | (unsigned char)... | Float-to-integer conversion matches the ICC numeric defect tracked by #1396 but lacks preceding finiteness and two-sided range checks (CWE-681). |
+| case.cpp:53:13:53:42 | (int)... | Float-to-integer conversion matches the ICC numeric defect tracked by #1396 but lacks preceding finiteness and two-sided range checks (CWE-681). |
+| case.cpp:67:13:67:30 | (int)... | Float-to-integer conversion matches the ICC numeric defect tracked by #2230 but lacks preceding finiteness and two-sided range checks (CWE-681). |
+| case.cpp:88:12:88:29 | (unsigned int)... | Float-to-integer conversion matches the ICC numeric defect tracked by dismissed alerts #1086-#1088 but lacks preceding finiteness and two-sided range checks (CWE-681). |

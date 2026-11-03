@@ -7846,6 +7846,89 @@ function(iccdev_add_json_namedcolor_colorspaces_test)
   endif()
 endfunction()
 
+# Dismissed CodeQL alerts #1086-#1088: relational clamps do not constrain NaN,
+# so three tag-array Interpolate() implementations reached undefined
+# float-to-unsigned conversions. Exercise the public API with NaN and require a
+# fail-closed result before any conversion or array access.
+function(iccdev_add_tag_interpolate_nonfinite_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTagInterpolateNonfiniteTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-interpolate-nonfinite.cpp"
+  )
+  target_compile_features(iccTagInterpolateNonfiniteTest PRIVATE cxx_std_17)
+  target_include_directories(iccTagInterpolateNonfiniteTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccTagInterpolateNonfiniteTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB}
+  )
+  add_dependencies(check iccTagInterpolateNonfiniteTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tag-interpolate-nonfinite
+      COMMAND "$<TARGET_FILE:iccTagInterpolateNonfiniteTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tag-interpolate-nonfinite
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTagInterpolateNonfiniteTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tag-interpolate-nonfinite PROPERTIES
+    TIMEOUT 30
+    LABELS "iccdev;tag;interpolate;ubsan;codeql;regression"
+  )
+  if(WIN32)
+    set_tests_properties(iccdev.tag-interpolate-nonfinite PROPERTIES
+      ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+  endif()
+endfunction()
+
+# Refined iccdev/unchecked-allocation signal: GetNewApply() indexed its
+# sub-apply pointer array without checking calloc. Link the static library so a
+# narrow GNU --wrap=calloc fault can prove the null write and the fail-closed fix.
+function(iccdev_add_mpecalc_apply_allocation_failure_test)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT TARGET IccProfLib2-static)
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCalcApplyAllocationFailureTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpecalc-apply-allocation-failure.cpp"
+  )
+  target_compile_features(iccMpeCalcApplyAllocationFailureTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeCalcApplyAllocationFailureTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMpeCalcApplyAllocationFailureTest PRIVATE
+    IccProfLib2-static
+  )
+  target_link_options(iccMpeCalcApplyAllocationFailureTest PRIVATE
+    "-Wl,--wrap=calloc"
+  )
+  add_dependencies(check iccMpeCalcApplyAllocationFailureTest)
+
+  add_test(
+    NAME iccdev.mpecalc-apply-allocation-failure
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      ${ICCDEV_TEST_ENV}
+      "$<TARGET_FILE:iccMpeCalcApplyAllocationFailureTest>"
+  )
+  set_tests_properties(iccdev.mpecalc-apply-allocation-failure PROPERTIES
+    TIMEOUT 30
+    LABELS "iccdev;mpe;calc;allocation;codeql;regression"
+  )
+endfunction()
+
 # #2565: a calculatorElement may carry an ICC.2 calculatorLimits ('clmt') block after
 # its sub-element positions (Table 85b).  Read() followed the positions and stepped
 # over it, so the limits were never checked and Write() dropped them.  The helper
@@ -13313,6 +13396,8 @@ if(WIN32)
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
   iccdev_add_colorant_count_narrowing_json_test()
   iccdev_add_calculator_limits_test()
+  iccdev_add_tag_interpolate_nonfinite_test()
+  iccdev_add_mpecalc_apply_allocation_failure_test()
   iccdev_add_calculator_limits_json_test()
   iccdev_add_json_calculator_newcopy_test()
   iccdev_add_json_mpe_reserved_roundtrip_test()
@@ -13863,6 +13948,8 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()
 iccdev_add_colorant_count_narrowing_json_test()
 iccdev_add_calculator_limits_test()
+iccdev_add_tag_interpolate_nonfinite_test()
+iccdev_add_mpecalc_apply_allocation_failure_test()
 iccdev_add_calculator_limits_json_test()
 iccdev_add_json_calculator_newcopy_test()
 iccdev_add_json_mpe_reserved_roundtrip_test()

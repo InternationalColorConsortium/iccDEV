@@ -66,6 +66,7 @@ Output:
   codeql-results/iccdev-security.sarif            Custom query results
   codeql-results/iccdev-jsonlib-security.sarif     IccJSON/IccConnect query results
   codeql-results/report.txt                       Human-readable report
+  codeql-results/fingerprints.tsv                 Stable raw-finding comparison manifest
 
 Build configuration:
   The CodeQL database is built out-of-tree with ICC_JSON_ORDERED=ON so CI and
@@ -169,7 +170,7 @@ fi
 # Install pack dependencies
 echo ""
 echo "=== Installing CodeQL pack dependencies ==="
-"${CODEQL[@]}" pack install --mode=use-lock .github/codeql-queries/
+"${CODEQL[@]}" pack ci .github/codeql-queries/
 
 # Build database
 if [ "$SKIP_BUILD" -eq 0 ]; then
@@ -205,63 +206,80 @@ fi
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
+rm -f "$RESULTS_DIR/report.txt" "$RESULTS_DIR/fingerprints.tsv"
+
+ANALYZE_CACHE_ARGS=()
+if [ "$SKIP_BUILD" -eq 1 ]; then
+    # Query iteration intentionally reuses the extracted database, but it must
+    # never reuse a BQRS produced by an older revision of the same query ID.
+    ANALYZE_CACHE_ARGS+=(--rerun)
+fi
+
+SARIF_FILES=()
 
 echo ""
 echo "=== Running CodeQL analysis ==="
 
 # Standard suite
 if [ "$CUSTOM_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
-    echo "  Running repository-filtered cpp-security-and-quality suite..."
+    echo "  Running high-signal stock C/C++ suite..."
+    STANDARD_SARIF="$RESULTS_DIR/cpp-security-and-quality.sarif"
+    rm -f "$STANDARD_SARIF"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
-        --output="$RESULTS_DIR/cpp-security-and-quality.sarif" \
+        --output="$STANDARD_SARIF" \
+        --sarif-category=iccdev-standard-cpp-security-and-quality \
         --threads="$CODEQL_THREADS" \
         --ram="$CODEQL_RAM_MB" \
+        "${ANALYZE_CACHE_ARGS[@]}" \
         .github/codeql-queries/iccdev-cpp-security-and-quality.qls
+    SARIF_FILES+=("$STANDARD_SARIF")
     echo "[OK] Standard suite complete"
 fi
 
 # Custom core suite
 if [ "$STANDARD_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
     echo "  Running custom iccDEV security queries..."
+    CUSTOM_SARIF="$RESULTS_DIR/iccdev-security.sarif"
+    rm -f "$CUSTOM_SARIF"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
-        --output="$RESULTS_DIR/iccdev-security.sarif" \
+        --output="$CUSTOM_SARIF" \
+        --sarif-category=iccdev-custom-security \
         --threads="$CODEQL_THREADS" \
         --ram="$CODEQL_RAM_MB" \
+        "${ANALYZE_CACHE_ARGS[@]}" \
         .github/codeql-queries/iccdev-security-suite.qls
+    SARIF_FILES+=("$CUSTOM_SARIF")
     echo "[OK] Custom suite complete"
 fi
 
 # IccJSON/IccConnect suite
 if [ "$STANDARD_ONLY" -eq 0 ] && [ "$CUSTOM_ONLY" -eq 0 ]; then
     echo "  Running IccJSON/IccConnect targeted security queries..."
+    JSONLIB_SARIF="$RESULTS_DIR/iccdev-jsonlib-security.sarif"
+    rm -f "$JSONLIB_SARIF"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
-        --output="$RESULTS_DIR/iccdev-jsonlib-security.sarif" \
+        --output="$JSONLIB_SARIF" \
+        --sarif-category=iccdev-jsonlib-security \
         --threads="$CODEQL_THREADS" \
         --ram="$CODEQL_RAM_MB" \
+        "${ANALYZE_CACHE_ARGS[@]}" \
         .github/codeql-queries/iccdev-jsonlib-suite.qls
+    SARIF_FILES+=("$JSONLIB_SARIF")
     echo "[OK] IccJSON/IccConnect suite complete"
 fi
 
 # Generate report
 echo ""
 echo "=== Generating report ==="
-SARIF_FILES=()
-if [ -f "$RESULTS_DIR/cpp-security-and-quality.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/cpp-security-and-quality.sarif")
-fi
-if [ -f "$RESULTS_DIR/iccdev-security.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/iccdev-security.sarif")
-fi
-if [ -f "$RESULTS_DIR/iccdev-jsonlib-security.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/iccdev-jsonlib-security.sarif")
-fi
-
 if [ ${#SARIF_FILES[@]} -gt 0 ]; then
-    "$SCRIPT_DIR/codeql-report.sh" "${SARIF_FILES[@]}" > "$RESULTS_DIR/report.txt"
+    "$SCRIPT_DIR/codeql-report.sh" \
+        --fingerprints-out "$RESULTS_DIR/fingerprints.tsv" \
+        "${SARIF_FILES[@]}" > "$RESULTS_DIR/report.txt"
     echo "[OK] Report saved to $RESULTS_DIR/report.txt"
+    echo "[OK] Fingerprints saved to $RESULTS_DIR/fingerprints.tsv"
 else
     echo "[WARN] No SARIF files found to generate report"
 fi
@@ -269,7 +287,9 @@ fi
 # Print summary
 echo ""
 echo "=== Results ==="
-find "$RESULTS_DIR" -maxdepth 1 \( -name "*.sarif" -o -name "report.txt" \) -print | sort | xargs -r ls -lh
+find "$RESULTS_DIR" -maxdepth 1 \
+    \( -name "*.sarif" -o -name "report.txt" -o -name "fingerprints.tsv" \) \
+    -print | sort | xargs -r ls -lh
 echo ""
 echo "View report:  cat $RESULTS_DIR/report.txt"
 echo "View SARIF:   python3 -m json.tool $RESULTS_DIR/iccdev-security.sarif | sed -n '1,100p'"

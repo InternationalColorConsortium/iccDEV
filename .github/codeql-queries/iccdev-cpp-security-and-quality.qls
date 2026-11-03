@@ -1,5 +1,15 @@
-- description: "iccDEV C++ security-and-quality suite without path-injection"
-- import: codeql-suites/cpp-security-and-quality.qls
+- description: "iccDEV high-signal stock C++ suite"
+- queries: .
   from: codeql/cpp-queries
-- exclude:
-    id: cpp/path-injection
+- apply: code-scanning-selectors.yml
+  from: codeql/suite-helpers
+- include:
+    id:
+      # These three stock rules preserve reviewed security prompts that are
+      # outside the default suite. The wider security-and-quality suite added
+      # 231 documentation/style findings without another reproduced defect.
+      - cpp/inconsistent-null-check
+      - cpp/uncontrolled-allocation-size
+      - cpp/world-writable-file-creation
+- apply: codeql-suites/exclude-slow-queries.yml
+  from: codeql/cpp-queries

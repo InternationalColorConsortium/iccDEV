@@ -7,7 +7,7 @@
  * @kind problem
  * @problem.severity error
  * @precision high
- * @id iccdev/division-by-zero-profile
+ * @id iccdev/division-by-zero-profile-v2
  * @tags security
  *       correctness
  *       external/cwe/cwe-369

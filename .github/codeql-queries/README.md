@@ -1,7 +1,9 @@
 # iccDEV CodeQL Queries
 
 iccDEV includes custom CodeQL queries for ICC-specific C/C++ security patterns.
-They complement GitHub's standard `cpp-security-and-quality` suite. The
+They complement a high-signal stock suite: GitHub's default C++ code-scanning
+selection plus `cpp/uncontrolled-allocation-size`,
+`cpp/inconsistent-null-check`, and `cpp/world-writable-file-creation`. The
 `iccdev-mcp/` subdirectory contains Python queries for the MCP REST/API package.
 
 ## Query Summary
@@ -11,20 +13,20 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `argv-unchecked-index` | CWE-125, CWE-787 | CmdLine tool indexes argv without bound check |
 | `describe-without-validate` | CWE-476 | `Describe()` called without prior `Validate()` check |
 | `signed-offset-overflow` | CWE-190 | Profile-derived offset used in pointer arithmetic |
-| `division-by-zero-profile` | CWE-369 | Unguarded reintroduction of the profile/CAM denominator defects fixed in #1406, #1410, #1679, #1782, or #1950 |
-| `float-to-int-cast` | CWE-681 | Missing finite/range validation at conversion boundaries fixed in #1396 and #2230 |
+| `division-by-zero-profile` | CWE-369 | Rule ID `iccdev/division-by-zero-profile-v2`: unguarded reintroduction of the profile/CAM denominator defects fixed in #1406, #1410, #1679, #1782, or #1950 |
+| `float-to-int-cast` | CWE-681 | Rule ID `iccdev/float-to-int-cast-v2`: missing finite/range validation at the #1396/#2230 conversion boundaries and the interpolation family behind dismissed alerts #1086-#1088 |
 | `signed-char-byte-conversion` | CWE-704 | Signed char data assigned to unsigned byte without explicit cast |
 | `unchecked-file-io` | CWE-252 | Ignored `fopen`, `fread`, or `fwrite` results |
 | `unsafe-header-cast` | CWE-681 | Header field cast to narrower type |
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
-| `unchecked-allocation` | CWE-252, CWE-476 | Allocation result used without null check |
-| `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without cap |
+| `unchecked-allocation` | CWE-252, CWE-476 | Allocation result dereferenced in the assigning function without a null check |
+| `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without a recognized setup/layout cap |
 | `unbounded-clut-index` | CWE-125 | CLUT `GetData()` buffer indexed without a length bound (#1548) |
-| `world-writable-output` | CWE-732 | File created with world-writable mode |
+| `world-writable-output` | CWE-732 | Research-only duplicate; CI uses stock `cpp/world-writable-file-creation` for this signal |
 | `unsafe-tag-downcast` | CWE-843 | `FindTag()` result cast without type check |
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |
 | `tell-subtraction-underflow` | CWE-191, CWE-681 | Tell-derived offset subtraction narrowed without bounds check |
-| `factory-bare-new` | CWE-252, CWE-755 | Factory allocation without `std::nothrow` |
+| `factory-bare-new` | CWE-252, CWE-755 | Factory allocation without `std::nothrow` and without catch-all protection at every known call site |
 | `fixedpoint-type-confusion` | CWE-681, CWE-197 | Fixed-point conversion function called with wrong type |
 | `ignored-save-profile-result` | CWE-252 | `SaveIccProfile()` result ignored before reporting output success |
 | `json-raw-normalized-value` | CWE-682 | JSON serialization of raw normalized ICC value |
@@ -53,7 +55,7 @@ Run the MCP-specific suite against a Python CodeQL database rooted at
 `iccdev-mcp/`:
 
 ```bash
-gh codeql pack install .github/codeql-queries
+gh codeql pack ci .github/codeql-queries
 gh codeql database create /tmp/codeql-db-iccdev-mcp \
   --language=python --source-root=iccdev-mcp --overwrite
 gh codeql database analyze /tmp/codeql-db-iccdev-mcp \
@@ -82,11 +84,12 @@ Results are written to `codeql-results/`:
 - `iccdev-jsonlib-security.sarif`
 - `iccdev-mcp-security.sarif` when the MCP Python suite is run separately
 - `report.txt`
+- `fingerprints.tsv` (category, rule, path, line, and SARIF primary-location fingerprint)
 
 ## Adding a Query
 
 1. Create `.github/codeql-queries/my-query.ql` with `@kind problem` metadata.
-2. Run `gh codeql pack install .github/codeql-queries`.
+2. Run `gh codeql pack ci .github/codeql-queries`.
 3. Test against a local database:
    `gh codeql database analyze <db> .github/codeql-queries/my-query.ql --format=sarif-latest --output=/tmp/test.sarif`
 4. Verify results before committing.
@@ -94,8 +97,8 @@ Results are written to `codeql-results/`:
 Run the checked-in query tests after changing query logic:
 
 ```bash
-codeql pack install .github/codeql-queries
-codeql pack install .github/codeql-queries/test \
+codeql pack ci .github/codeql-queries
+codeql pack ci .github/codeql-queries/test \
   --additional-packs=.github/codeql-queries
 codeql test run .github/codeql-queries/test \
   --additional-packs=.github/codeql-queries
@@ -110,6 +113,16 @@ and #881; neither is an untrusted profile loop bound. Do not generalize those
 exclusions to other job or count fields.
 Keep the negative query-test case: genuinely unguarded profile-count loops must
 still be reported.
+`Calc*Layout()` is also recognized when it bounds the same field used by the
+loop; the TIFF tile-layout mutant pins that narrow contract.
+
+`unchecked-allocation` reports only dereference-capable uses in the function
+that receives the allocation result. Returning or comparing a pointer is not a
+dereference, and a later member access in a different method must not be
+attributed to the assigning call. `factory-bare-new` suppresses a factory only
+when it has at least one resolved call and every resolved call is inside a
+`try` with a catch-all handler. `unsafe-header-cast` recognizes an `INT_MAX`
+fallback only when the ternary condition compares the same header field.
 
 `iccdev-security-suite.qls` owns the non-JSON C/C++ queries. JSON-derived
 queries, including `json-size-to-narrow-setsize`, belong only to
@@ -118,7 +131,7 @@ queries, including `json-size-to-narrow-setsize`, belong only to
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.
 
-`division-by-zero-profile` and `float-to-int-cast` are regression-fingerprint
+`division-by-zero-profile-v2` and `float-to-int-cast-v2` are regression-fingerprint
 queries, not broad arithmetic linters. Their retired predecessors matched 65
 and 64 locations respectively on the 2026-11-03 branch database, including
 known guarded code. The replacements match exact historical defect families
@@ -128,3 +141,10 @@ or fixed source-line windows. The retired
 `signature-serialized-without-zero-guard` experiment remains excluded: it
 reported zero locations while missing known unguarded serializers, so a clean
 result did not establish coverage.
+
+The hosted dismissed-alert audit found 112 alerts under the retired DBZ rule
+and 72 under the retired float-cast rule. Do not bulk reopen them. The three
+float-cast alerts #1086-#1088 were the exception: UBSan proved NaN reached all
+three interpolation casts, and the v2 query now fingerprints that family.
+The evidence and maintainer reproduction are in
+[`docs/codeql-dismissed-alert-audit.md`](../../docs/codeql-dismissed-alert-audit.md).

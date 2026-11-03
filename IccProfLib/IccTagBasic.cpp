@@ -5915,6 +5915,13 @@ bool CIccTagSparseMatrixArray::Interpolate(icFloatNumber *DstVector, icFloatNumb
   else if (nMatrix<=1)
     return false;
 
+  // CodeQL alerts #1086-#1088 were dismissed on the assumption that the two
+  // clamps below constrain every input to [0,1]. Relational comparisons with
+  // NaN are both false, however, so NaN reached the float-to-unsigned cast and
+  // invoked undefined behavior. Reject every non-finite position first.
+  if (!std::isfinite(pos))
+    return false;
+
   if (pos<0.0)
     pos=0.0;
   if (pos>1.0)
@@ -6310,6 +6317,9 @@ bool CIccTagFixedNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
   if (zeroVals)
     nVector ++;
   else if (nVector<=1)
+    return false;
+
+  if (!std::isfinite(pos))
     return false;
 
   if (pos<0.0)
@@ -6916,6 +6926,9 @@ bool CIccTagNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber po
   if (zeroVals)
     nVector ++;
   else if (nVector<=1)
+    return false;
+
+  if (!std::isfinite(pos))
     return false;
 
   if (pos<0.0)

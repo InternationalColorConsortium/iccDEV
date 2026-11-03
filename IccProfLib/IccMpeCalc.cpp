@@ -5510,6 +5510,10 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
   pApply->m_nSubElem = m_nSubElem;
   if(m_nSubElem) {
     pApply->m_SubElem = (CIccSubCalcApply **)calloc(m_nSubElem, sizeof(CIccSubCalcApply*));
+    if (!pApply->m_SubElem) {
+      delete pApply;
+      return NULL;
+    }
 
     if (m_SubElem) {
       // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and

@@ -80,17 +80,37 @@ The GitHub Actions CodeQL workflow uploads three SARIF categories:
 `iccdev-standard-cpp-security-and-quality`, `iccdev-custom-security` and
 `iccdev-jsonlib-security`. Custom-query alerts still need maintainer triage
 before they are cited in issues or PRs.
+Both hosted CI and the local runner set those categories in SARIF and generate
+`codeql-results/fingerprints.tsv`. `report.txt` records each raw category's
+count, CodeQL version, and SHA-256 over its sorted fingerprint rows. Compare
+those raw values rather than the Security UI's open-alert count, which omits
+dismissed findings. A mode-selective local run reports only suites executed in
+that invocation, and `--skip-build` forces query reevaluation so an older BQRS
+cannot masquerade as the current query result.
 The local runner uses the same `iccdev-cpp-security-and-quality.qls` wrapper as
-hosted CI; invoking GitHub's raw suite directly reintroduces the 79 reviewed
-`cpp/path-injection` alerts and is not a comparable baseline.
-`division-by-zero-profile` now fingerprints the five historical profile/CAM
+hosted CI. The historical filename and SARIF category are retained for alert
+continuity, but the wrapper now contains the default code-scanning selection
+plus three explicitly reviewed stock rules. Invoking GitHub's raw
+security-and-quality suite directly reintroduces 79 reviewed
+`cpp/path-injection` alerts and 152 other style/documentation findings, so it
+is not a comparable baseline.
+Hosted CI installs `pkg-config` and `libheif-dev`, matching the unified
+Dockerfile and the reference local database. The previous hosted run omitted
+`iccHeifDump.cpp`; that dependency mismatch accounted for its two-finding
+standard-suite delta and one-finding custom-suite delta.
+
+`division-by-zero-profile-v2` now fingerprints the five historical profile/CAM
 families fixed in #1406, #1410, #1679, #1782, and #1950. It requires a
 denominator guard to control the division, so the #1837 early-return case is a
-negative regression instead of an alert. `float-to-int-cast` similarly covers
-the named #1396 and #2230 conversion boundaries and requires finiteness plus
-two-sided range validation on the converted value. These are intentionally
-high-precision regression queries: broad denominator-name and five-line
-proximity heuristics are the recorded noise baselines, not templates to reuse.
+negative regression instead of an alert. `float-to-int-cast-v2` similarly
+covers the named #1396 and #2230 conversion boundaries and requires finiteness
+plus two-sided range validation on the converted value. It also covers the
+three interpolation casts behind dismissed alerts #1086-#1088: `[0,1]`
+relational clamps do not constrain NaN. These are intentionally high-precision
+regression queries: broad denominator-name and five-line proximity heuristics
+are the recorded noise baselines, not templates to reuse. See the
+[dismissed-alert audit](codeql-dismissed-alert-audit.md) for the sampling,
+three-alert reversal recommendation, and executable proof.
 For `unbounded-profile-loop`, trace the full profile-to-tool path before
 synthesizing a PoC. A guard in `Begin()` may establish an Apply-path invariant;
 alerts #999, #1000, and #1647 are the reference case. If every tool path
@@ -162,10 +182,27 @@ The 2026-11-03 CodeQL 2.27.4 reference database records these decisions:
 
 | Candidate | Result | CI decision |
 |-----------|--------|-------------|
-| Raw `cpp-security-and-quality` | 328 alerts, including 79 reviewed `cpp/path-injection` alerts | Keep the repository wrapper; its comparable baseline is 249 |
+| Raw `cpp-security-and-quality` | 328 alerts, including 79 reviewed `cpp/path-injection` alerts | Do not upload the raw suite |
+| Previous repository-filtered wrapper | 249 alerts: 17 error, 61 warning, 171 note | Replace its quality/style tail while retaining its filename and SARIF category for alert continuity |
+| Default `cpp-code-scanning` | Zero findings on the fixed-source database | Use as the high-precision stock base |
+| Default plus three reviewed stock rules | 18 findings: 15 allocation-size, two inconsistent-null-check, one world-writable output | Upload this targeted wrapper; 231 fewer findings than the previous wrapper |
+| `cpp-security-extended` | 95 findings: 79 path-injection, 15 allocation-size, one world-writable output | Do not upload; it adds no useful family beyond the targeted wrapper |
+| `cpp-security-experimental` | 196 findings: 79 path-injection, 69 expired-lifetime, 31 allocation-multiplication, 15 allocation-size, one signed pointer-arithmetic conversion, one world-writable output | Manual research only; sampled lifetime reports mis-model live containers/iterators, while sampled multiplication reports include existing 64-bit guards and copy paths |
 | Experimental `cpp/divide-by-zero-using-return-value` | No SARIF after a 10-minute ceiling, about 4.3 GiB RSS, and sustained two-core use | Manual/periodic research only |
 | `cpp/uncontrolled-allocation-size` | 15 existing standard-suite alerts | Retain for manual tag-size/allocation-contract triage; do not duplicate with a broad custom rule |
 | `cpp/inconsistent-null-check` | Two existing standard-suite alerts; reviewed default-string and transform-invariant cases were not reachable defects | Retain as review prompts, not blocking custom findings |
+
+The wrapper remains named `iccdev-cpp-security-and-quality.qls`, and its SARIF
+category remains `iccdev-standard-cpp-security-and-quality`, to avoid needless
+alert-identity churn. Its contents are now the default code-scanning selection
+plus the three explicit rules above.
+
+The refined custom suite reduced the same-database noise baseline from 20
+reviewed alerts to four actionable findings: three NaN interpolation casts and
+one unchecked calculator apply allocation. UBSan/ASan reproduced all four
+before their fixes; the final fixed-source database reports zero custom
+findings. The full A/B and fingerprint digest are recorded in the
+[dismissed-alert audit](codeql-dismissed-alert-audit.md).
 
 The closed SBO/HBO issue fingerprints remain covered by narrow custom rules:
 `unbounded-clut-index` (#1548), `fixed-buffer-loop-bound` (#2608), and

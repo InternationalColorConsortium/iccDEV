@@ -9,6 +9,7 @@
 #
 ## Usage:
 ##   .github/scripts/codeql-report.sh [sarif_file ...]
+##   .github/scripts/codeql-report.sh --fingerprints-out FILE [sarif_file ...]
 ##   .github/scripts/codeql-report.sh codeql-results/*.sarif
 ##
 ## Output: Text report to stdout
@@ -18,8 +19,18 @@
 ###############################################################
 set -euo pipefail
 
+FINGERPRINTS_OUT=""
+if [ "${1:-}" = "--fingerprints-out" ]; then
+  if [ $# -lt 3 ] || [ -z "${2:-}" ]; then
+    echo "ERROR: --fingerprints-out requires a path and at least one SARIF file" >&2
+    exit 1
+  fi
+  FINGERPRINTS_OUT="$2"
+  shift 2
+fi
+
 if [ $# -eq 0 ]; then
-  echo "Usage: $0 <sarif_file> [sarif_file ...]" >&2
+  echo "Usage: $0 [--fingerprints-out FILE] <sarif_file> [sarif_file ...]" >&2
   exit 1
 fi
 
@@ -28,11 +39,27 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-python3 - "$@" << 'PYTHON_SCRIPT'
+python3 - "$FINGERPRINTS_OUT" "$@" << 'PYTHON_SCRIPT'
+import hashlib
 import json
 import sys
 import os
 from collections import defaultdict
+
+def category_for_run(run, path):
+    automation_id = run.get("automationDetails", {}).get("id", "")
+    if automation_id:
+        return automation_id.rstrip("/").rsplit("/", 1)[0] if not automation_id.endswith("/") else automation_id.rstrip("/")
+    return {
+        "cpp-security-and-quality.sarif": "iccdev-standard-cpp-security-and-quality",
+        "iccdev-security.sarif": "iccdev-custom-security",
+        "iccdev-jsonlib-security.sarif": "iccdev-jsonlib-security",
+    }.get(os.path.basename(path), os.path.basename(path))
+
+
+def clean_field(value):
+    return str(value).replace("\t", " ").replace("\r", " ").replace("\n", " ")
+
 
 def parse_sarif(path):
     """Parse a SARIF file and return structured results."""
@@ -40,14 +67,17 @@ def parse_sarif(path):
         with open(path) as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        print("ERROR: Failed to parse %s: %s" % (path, e), file=sys.stderr)
-        return []
+        raise RuntimeError("Failed to parse %s: %s" % (path, e)) from e
+    if not isinstance(data, dict) or not isinstance(data.get("runs"), list):
+        raise RuntimeError("Invalid SARIF document in %s: missing runs array" % path)
     results = []
     for run in data.get("runs", []):
         # Build rule lookup
         rules = {}
         tool = run.get("tool", {}).get("driver", {})
         tool_name = tool.get("name", "unknown")
+        tool_version = tool.get("semanticVersion", tool.get("version", "unknown"))
+        category = category_for_run(run, path)
         for ext in run.get("tool", {}).get("extensions", []):
             for rule in ext.get("rules", []):
                 rules[rule["id"]] = rule
@@ -56,7 +86,6 @@ def parse_sarif(path):
 
         for result in run.get("results", []):
             rule_id = result.get("ruleId", "unknown")
-            level = result.get("level", "warning")
             msg = result.get("message", {}).get("text", "")
             locs = result.get("locations", [])
             loc_str = ""
@@ -72,6 +101,7 @@ def parse_sarif(path):
 
             # Get rule metadata
             rule_meta = rules.get(rule_id, {})
+            level = result.get("level") or rule_meta.get("defaultConfiguration", {}).get("level", "warning")
             severity = rule_meta.get("properties", {}).get("problem.severity", level)
             tags = rule_meta.get("properties", {}).get("tags", [])
             cwe_tags = [t for t in tags if t.startswith("external/cwe/")]
@@ -87,6 +117,9 @@ def parse_sarif(path):
                 "line": line,
                 "cwe": cwe_str,
                 "tool": tool_name,
+                "tool_version": tool_version,
+                "category": category,
+                "fingerprint": result.get("partialFingerprints", {}).get("primaryLocationLineHash", ""),
             })
     return results
 
@@ -96,15 +129,34 @@ def severity_rank(s):
     return order.get(s.lower(), 9)
 
 def main():
-    sarif_files = sys.argv[1:]
+    fingerprints_out = sys.argv[1]
+    sarif_files = sys.argv[2:]
     all_results = []
 
     for path in sarif_files:
         if not os.path.isfile(path):
-            print("WARNING: {} not found, skipping".format(path), file=sys.stderr)
-            continue
+            raise RuntimeError("SARIF input is missing or is not a regular file: {}".format(path))
         results = parse_sarif(path)
         all_results.extend(results)
+
+    fingerprint_rows = sorted(
+        "\t".join([
+            clean_field(r["category"]),
+            clean_field(r["rule_id"]),
+            clean_field(r["file"]),
+            str(r["line"]),
+            clean_field(r["fingerprint"]),
+        ])
+        for r in all_results
+    )
+    fingerprint_payload = "\n".join(fingerprint_rows)
+    if fingerprint_payload:
+        fingerprint_payload += "\n"
+    fingerprint_digest = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
+    if fingerprints_out:
+        with open(fingerprints_out, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write("category\trule_id\tpath\tline\tprimary_location_line_hash\n")
+            stream.write(fingerprint_payload)
 
     # Header
     print("=" * 72)
@@ -113,6 +165,10 @@ def main():
     print()
     print("SARIF files analyzed: {}".format(len(sarif_files)))
     print("Total findings: {}".format(len(all_results)))
+    print("Fingerprint rows: {}".format(len(fingerprint_rows)))
+    print("Fingerprint SHA-256: {}".format(fingerprint_digest))
+    if fingerprints_out:
+        print("Fingerprint manifest: {}".format(fingerprints_out))
     print()
 
     if not all_results:
@@ -126,6 +182,28 @@ def main():
     print("--- Severity Summary ---")
     for level in sorted(by_level, key=severity_rank):
         print("  {}: {}".format(level.upper(), by_level[level]))
+    print()
+
+    # Summary by SARIF category. These raw counts remain visible even when the
+    # corresponding GitHub code-scanning alerts have been dismissed.
+    by_category = defaultdict(list)
+    for r in all_results:
+        by_category[r["category"]].append(r)
+    print("--- Raw Findings by SARIF Category ---")
+    for category, results in sorted(by_category.items()):
+        rows = sorted(
+            "\t".join([
+                clean_field(r["category"]), clean_field(r["rule_id"]),
+                clean_field(r["file"]), str(r["line"]), clean_field(r["fingerprint"]),
+            ])
+            for r in results
+        )
+        payload = "\n".join(rows) + ("\n" if rows else "")
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        versions = sorted(set(r["tool_version"] for r in results))
+        print("  {:45s} {:>5d}  {}  {}".format(
+            category, len(results), ",".join(versions), digest
+        ))
     print()
 
     # Summary by rule
@@ -214,5 +292,9 @@ def main():
     print("=" * 72)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as error:
+        print("ERROR: {}".format(error), file=sys.stderr)
+        sys.exit(1)
 PYTHON_SCRIPT

@@ -15,7 +15,31 @@
 
 import cpp
 
-from CStyleCast cast
+/**
+ * The cast is the bounded branch of a conditional expression that compares the
+ * same field and substitutes INT_MAX on the other branch.
+ */
+predicate boundedByIntMax(CStyleCast cast, Field field) {
+  exists(
+    ConditionalExpr conditional, RelationalOperation comparison,
+    Literal comparisonBound, Literal fallback
+  |
+    conditional.getCondition().getAChild*() = comparison and
+    comparison.getAChild*().(FieldAccess).getTarget() = field and
+    comparison.getAChild*() = comparisonBound and
+    comparisonBound.getValue().regexpMatch("(?i)(2147483647|0x7fffffff)[lL]?") and
+    (
+      conditional.getThen().getAChild*() = cast.getExpr() and
+      conditional.getElse().getAChild*() = fallback
+      or
+      conditional.getElse().getAChild*() = cast.getExpr() and
+      conditional.getThen().getAChild*() = fallback
+    ) and
+    fallback.getValue().regexpMatch("(?i)(2147483647|0x7fffffff)[lL]?")
+  )
+}
+
+from CStyleCast cast, FieldAccess fieldAccess
 where
   // Cast target is signed int
   cast.getType().getName() = "int" and
@@ -23,18 +47,13 @@ where
   cast.getExpr().getType().getUnspecifiedType().(IntegralType).isUnsigned() and
   cast.getExpr().getType().getSize() = 4 and
   // The expression involves a member access (field read from a struct)
-  exists(FieldAccess fa |
-    fa = cast.getExpr().getAChild*() and
-    fa.getTarget().getName() in [
-      "size", "offset", "count",
-      "nCount", "m_nCount", "nSize"
-    ]
-  ) and
+  fieldAccess = cast.getExpr().getAChild*() and
+  fieldAccess.getTarget().getName() in [
+    "size", "offset", "count",
+    "nCount", "m_nCount", "nSize"
+  ] and
   // Not already guarded by a ternary with INT_MAX
-  not exists(ConditionalExpr cond |
-    cond.getAChild*() = cast and
-    cond.toString().matches("%INT_MAX%")
-  ) and
+  not boundedByIntMax(cast, fieldAccess.getTarget()) and
   // Exclude header files (type definitions)
   not cast.getFile().getExtension() = "h"
 select cast,

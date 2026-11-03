@@ -75,3 +75,31 @@ int resampleCore(double t, bool safe)
     return 30;
   return (int)std::floor(t);
 }
+
+class UnsafeInterpolation {
+public:
+  unsigned int Interpolate(float pos)
+  {
+    if (pos < 0.0f)
+      pos = 0.0f;
+    if (pos > 1.0f)
+      pos = 1.0f;
+    float fpos = 7.0f * pos;
+    return (unsigned int)fpos; // $ Alert
+  }
+};
+
+class SafeInterpolation {
+public:
+  unsigned int Interpolate(float pos)
+  {
+    if (!std::isfinite(pos))
+      return 0;
+    if (pos < 0.0f)
+      pos = 0.0f;
+    if (pos > 1.0f)
+      pos = 1.0f;
+    float fpos = 7.0f * pos;
+    return (unsigned int)fpos;
+  }
+};
