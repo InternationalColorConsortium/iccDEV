@@ -4277,6 +4277,29 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
   std::string sSigPathName = Info.GetSigPathName(sigPath);
   icSignature sig = icGetFirstSigPathSig(sigPath);
 
+  // ICC.1 and ICC.2 allow only B, B+M+matrix, B+A+CLUT, or all five
+  // stages in mAB/mBA tags. Legacy lut8/lut16 use different stage rules.
+  if (GetType()==icSigLutAtoBType || GetType()==icSigLutBtoAType) {
+    if (!m_CurvesB) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - B-curves must be present.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    if ((m_Matrix != NULL) != (m_CurvesM != NULL)) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Matrix and M-curves must both be present or absent.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+    if ((m_CLUT != NULL) != (m_CurvesA != NULL)) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - CLUT and A-curves must both be present or absent.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+  }
+
   if (!pProfile) {
     sReport += icMsgValidateWarning;
     sReport += sSigPathName;
@@ -5083,14 +5106,6 @@ icValidateStatus CIccTagLutAtoB::Validate(std::string sigPath, std::string &sRep
       }
 
       if (m_CurvesA) {
-        if (!m_CLUT) {
-          sReport += icMsgValidateNonCompliant;
-          sReport += sSigPathName;
-          sReport += " - CLUT must be present if using A-curves.\n";
-
-          rv = icMaxStatus(rv, icValidateNonCompliant);
-        }
-
         icUInt32Number nCurves = !IsInputB() ? m_nInput : m_nOutput;
         for (i=0; i<nCurves; i++) {
           if (m_CurvesA[i]) {
@@ -5246,14 +5261,6 @@ icValidateStatus CIccTagLutBtoA::Validate(std::string sigPath, std::string &sRep
       }
 
       if (m_CurvesA) {
-        if (!m_CLUT) {
-          sReport += icMsgValidateNonCompliant;
-          sReport += sSigPathName;
-          sReport += " - CLUT must be present if using A-curves.\n";
-
-          rv = icMaxStatus(rv, icValidateNonCompliant);
-        }
-
         for (i=0; i<nOutput; i++) {
           if (m_CurvesA[i]) {
             rv = icMaxStatus(rv, m_CurvesA[i]->Validate(sigPath+icGetSigPath(GetType()), sReport, pProfile));
