@@ -68,6 +68,12 @@ namespace iccDEV {
 // under the cap; 5+ channels at the default granularity exceed it.
 static const icUInt32Number icMaxRoundTripSamples = 2000000;
 
+// icGetSpaceSamples() can report up to 16 device channels for the colour-space
+// signatures accepted below.  Keep the input pixel and the dimensionality guard
+// tied to the same limit: the previous 15-element input array was written at
+// index 15 while evaluating a valid 16-channel ICC.2 profile.
+static const int icMaxRoundTripDeviceSamples = 16;
+
 // Return true when nGran^ndim would exceed icMaxRoundTripSamples, evaluated
 // without overflowing icUInt32Number: the running product is compared against
 // the cap divided by nGran before each multiply, so the product itself never
@@ -151,14 +157,14 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     return result;
   }
 
-  icFloatNumber sPixel[15];
+  icFloatNumber sPixel[icMaxRoundTripDeviceSamples];
   icFloatNumber devPcs[15], roundPcs1[15], roundPcs2[15];
 
   const int ndim = icGetSpaceSamples(pProfile->m_Header.colorSpace);
   // safety, and add hints for static analysis
   if (ndim < 1)
     return icCmmStatUnsupported;
-  if (ndim > 16)
+  if (ndim > icMaxRoundTripDeviceSamples)
     return icCmmStatTooManySamples;
 
   // determine granularity
@@ -190,8 +196,8 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
   const icFloatNumber stepsize = (icFloatNumber)(1.0/(icFloatNumber)(nGran-1));
   const icFloatNumber nstart = 0.0;
   const icFloatNumber nEnd = (icFloatNumber)(1.0+stepsize/2.0);
-  icFloatNumber steps[ 17 ];        // maximum ndim + 1
-  for ( int j=0; j < 17; j++ ) {
+  icFloatNumber steps[icMaxRoundTripDeviceSamples + 1];
+  for (int j = 0; j < icMaxRoundTripDeviceSamples + 1; j++) {
     steps[j] = nstart;
   }
 

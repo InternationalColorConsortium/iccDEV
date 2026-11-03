@@ -1,5 +1,7 @@
 #!/bin/bash
-# Issue #2964 file-backed sampled-curve SetSize() failure regression coverage.
+# XML MPE SetSize() failure regression coverage.  Issue #2964 covers the
+# file-backed sampled curves; the matrix cases cover both allocation paths in
+# CIccMpeXmlMatrix::ParseXml().
 #
 # Copyright (c) International Color Consortium.
 # SPDX-License-Identifier: BSD-3-Clause
@@ -119,6 +121,35 @@ def single_curve(filename):
               FirstEntry="0" LastEntry="1" StorageType="3" ExtensionType="0"
               Filename="{filename}" Format="binary" Endian="little"/>'''
 
+def matrix_profile(with_data):
+    matrix_data = ''
+    if with_data:
+        matrix_data = '<MatrixData>' + ('0 ' * (255 * 255)) + '</MatrixData>'
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.10</ProfileVersion>
+    <ProfileSubVersion>1.0</ProfileSubVersion>
+    <ProfileDeviceClass>mid </ProfileDeviceClass>
+    <ProfileSubClass>osel</ProfileSubClass>
+    <DataColourSpace>nc00ff</DataColourSpace>
+    <PCS></PCS>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0" Y="0" Z="0"/></PCSIlluminant>
+    <MCS>mc00ff</MCS>
+  </Header>
+  <Tags>
+    <AToM0Tag><multiProcessElementType>
+      <MultiProcessElements InputChannels="255" OutputChannels="255">
+        <MatrixElement InputChannels="255" OutputChannels="255">
+          {matrix_data}
+        </MatrixElement>
+      </MultiProcessElements>
+    </multiProcessElementType></AToM0Tag>
+  </Tags>
+</IccProfile>
+'''
+
 segment = '''<SegmentedCurve>
             <FormulaSegment Start="-infinity" End="0" FunctionType="0">1 0 0 0</FormulaSegment>
             <SampledSegment Start="0" End="1" StorageType="3"
@@ -132,6 +163,8 @@ segment = '''<SegmentedCurve>
 (out / 'single-over-cap.xml').write_text(profile(single_curve('single-65536.bin')))
 (out / 'single-at-cap.xml').write_text(profile(single_curve('single-65535.bin')))
 (out / 'sampled-segment.xml').write_text(profile(segment))
+(out / 'matrix-full.xml').write_text(matrix_profile(True))
+(out / 'matrix-zero.xml').write_text(matrix_profile(False))
 PY
 
 echo "=== SingleSampledCurve deterministic SetSize refusal ==="
@@ -236,6 +269,20 @@ void *calloc(size_t count, size_t size)
     return NULL;
   }
 
+  enabled = getenv("ICCDEV_FAIL_MATRIX_CALLOC");
+  if (enabled && !strcmp(enabled, "matrix") && count == 65025 && size == 4) {
+    static const char message[] = "iccdev fault injection: calloc(65025, 4) refused\n";
+    ssize_t ignored = write(STDERR_FILENO, message, sizeof(message) - 1);
+    (void)ignored;
+    return NULL;
+  }
+  if (enabled && !strcmp(enabled, "constants") && count == 255 && size == 4) {
+    static const char message[] = "iccdev fault injection: calloc(255, 4) refused\n";
+    ssize_t ignored = write(STDERR_FILENO, message, sizeof(message) - 1);
+    (void)ignored;
+    return NULL;
+  }
+
   return real_calloc(count, size);
 }
 SHIM
@@ -280,6 +327,58 @@ SHIM
       else
         pass "xml-sampled-segment-allocation-failure"
       fi
+
+      echo "=== MatrixElement allocation failures ==="
+
+      for matrix_kind in full zero; do
+        matrix_control_log="$OUTDIR/matrix-${matrix_kind}-control.log"
+        matrix_control_icc="$OUTDIR/matrix-${matrix_kind}-control.icc"
+        rm -f "$matrix_control_icc"
+        (cd "$OUTDIR" && ICCDEV_FAIL_MATRIX_CALLOC=0 LD_PRELOAD="$shim_so" \
+          "$FROMXML" "matrix-${matrix_kind}.xml" "$matrix_control_icc") >"$matrix_control_log" 2>&1
+        matrix_control_rc=$?
+
+        if has_sanitizer_finding "$matrix_control_log"; then
+          fail "xml-matrix-${matrix_kind}-control" "sanitizer finding without injection"
+        elif [ ! -s "$matrix_control_icc" ] || ! grep -q "Profile parsed" "$matrix_control_log"; then
+          fail "xml-matrix-${matrix_kind}-control" "matrix control did not parse (rc=$matrix_control_rc)"
+        else
+          pass "xml-matrix-${matrix_kind}-control"
+        fi
+      done
+
+      for matrix_kind in full zero; do
+        if [ "$matrix_kind" = "full" ]; then
+          fail_mode=matrix
+          allocation="65025, 4"
+        else
+          fail_mode=constants
+          allocation="255, 4"
+        fi
+
+        matrix_log="$OUTDIR/matrix-${matrix_kind}-injected.log"
+        matrix_icc="$OUTDIR/matrix-${matrix_kind}-injected.icc"
+        rm -f "$matrix_icc"
+        (cd "$OUTDIR" && ICCDEV_FAIL_MATRIX_CALLOC="$fail_mode" LD_PRELOAD="$shim_so" \
+          "$FROMXML" "matrix-${matrix_kind}.xml" "$matrix_icc") >"$matrix_log" 2>&1
+        matrix_rc=$?
+
+        if ! grep -q "iccdev fault injection: calloc(${allocation}) refused" "$matrix_log"; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "the targeted allocation was not refused"
+        elif was_signal_death "$matrix_rc"; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "iccFromXml died on signal $((matrix_rc - 128))"
+        elif has_sanitizer_finding "$matrix_log"; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "sanitizer finding after allocation failure"
+        elif [ "$matrix_rc" -eq 0 ]; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "allocation failure was accepted"
+        elif [ -e "$matrix_icc" ]; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "a profile was written after allocation failure"
+        elif ! grep -q "Unable to allocate MatrixElement data" "$matrix_log"; then
+          fail "xml-matrix-${matrix_kind}-allocation-failure" "missing MatrixElement allocation diagnostic"
+        else
+          pass "xml-matrix-${matrix_kind}-allocation-failure"
+        fi
+      done
     fi
   fi
 fi
