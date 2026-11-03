@@ -16,11 +16,12 @@
 ##   .github/scripts/run-codeql-local.sh --custom-only # iccDEV core queries only
 ##   .github/scripts/run-codeql-local.sh --jsonlib-only # IccJSON/IccConnect queries only
 ##   .github/scripts/run-codeql-local.sh --skip-build  # reuse existing DB
+##   .github/scripts/run-codeql-local.sh --allow-version-mismatch # research only
 ##   .github/scripts/run-codeql-local.sh --help
 ##
 ## Output: codeql-results/ directory with SARIF files and report.txt
 ##
-## Last Updated: 2026-04-09 by David Hoyt
+## Last Updated: 2026-11-03
 #
 ###############################################################
 set -euo pipefail
@@ -35,6 +36,9 @@ CUSTOM_ONLY=0
 JSONLIB_ONLY=0
 SKIP_BUILD=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
+CODEQL_THREADS="${ICCDEV_CODEQL_THREADS:-4}"
+CODEQL_RAM_MB="${ICCDEV_CODEQL_RAM_MB:-8192}"
+ALLOW_VERSION_MISMATCH=0
 
 usage() {
     cat <<EOF
@@ -45,11 +49,16 @@ Run CodeQL security analysis on iccDEV and generate a report.
 Options:
   --custom-only   Run only the custom iccDEV core security queries
   --jsonlib-only  Run only the IccJSON/IccConnect targeted security queries
-  --standard-only Run only the standard cpp-security-and-quality suite
+  --standard-only Run only the repository-filtered cpp-security-and-quality suite
   --skip-build    Skip database creation (reuse existing at $DB_DIR)
   --db-dir DIR    Use custom database directory (default: $DB_DIR)
   --build-dir DIR Use custom CMake build directory (default: $BUILD_DIR)
   --jobs N        Parallel build jobs (default: $JOBS)
+  --codeql-threads N
+                  CodeQL evaluator threads (default: $CODEQL_THREADS)
+  --codeql-ram MB CodeQL evaluator RAM budget in MiB (default: $CODEQL_RAM_MB)
+  --allow-version-mismatch
+                  Allow a CLI version other than the Dockerfile pin (research only)
   --help          Show this help
 
 Output:
@@ -62,10 +71,10 @@ Build configuration:
   The CodeQL database is built out-of-tree with ICC_JSON_ORDERED=ON so CI and
   local analysis use deterministic JSON key ordering.
 
-  Scope is the product build only: ENABLE_TESTS=OFF, matching
-  ci-codeql-security.yml. The regression suite under .github/ci/regression is
-  NOT in the database, so an alert reported there will not reproduce here --
-  that is expected, not evidence the alert is fixed.
+  Scope is the default product/tool build with ENABLE_TESTS=OFF, matching
+  ci-codeql-security.yml. Test-only regression targets are excluded. A source
+  file under .github/ci/regression can still be present when a product/tool
+  target compiles it; iccDescribeSinkTest.cpp is the current example.
 
 Examples:
   # Full analysis from scratch
@@ -97,6 +106,9 @@ while [ $# -gt 0 ]; do
         --db-dir)       DB_DIR="$2"; shift 2 ;;
         --build-dir)    BUILD_DIR="$2"; shift 2 ;;
         --jobs)         JOBS="$2"; shift 2 ;;
+        --codeql-threads) CODEQL_THREADS="$2"; shift 2 ;;
+        --codeql-ram)   CODEQL_RAM_MB="$2"; shift 2 ;;
+        --allow-version-mismatch) ALLOW_VERSION_MISMATCH=1; shift ;;
         --help|-h)      usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
@@ -108,6 +120,13 @@ if [ $((CUSTOM_ONLY + JSONLIB_ONLY + STANDARD_ONLY)) -gt 1 ]; then
 fi
 
 cd "$REPO_ROOT"
+
+for numeric_option in "$JOBS" "$CODEQL_THREADS" "$CODEQL_RAM_MB"; do
+    if ! [[ "$numeric_option" =~ ^[1-9][0-9]*$ ]]; then
+        echo "[FAIL] Job, thread, and RAM values must be positive integers" >&2
+        exit 1
+    fi
+done
 
 # Verify prerequisites
 echo "=== Checking prerequisites ==="
@@ -123,6 +142,23 @@ CODEQL_VERSION="$("${CODEQL[@]}" version 2>&1)"
 CODEQL_VERSION="${CODEQL_VERSION%%$'\n'*}"
 echo "[OK] ${CODEQL[*]} $CODEQL_VERSION"
 
+EXPECTED_CODEQL_VERSION="$(sed -n 's/^ARG CODEQL_VERSION=//p' "$REPO_ROOT/Dockerfile" | head -n 1)"
+ACTUAL_CODEQL_VERSION="$(sed -n 's/^CodeQL command-line toolchain release \([0-9][0-9.]*\)\.$/\1/p' <<< "$CODEQL_VERSION")"
+if [ -z "$EXPECTED_CODEQL_VERSION" ] || [ -z "$ACTUAL_CODEQL_VERSION" ]; then
+    echo "[FAIL] Could not resolve the Dockerfile or active CodeQL version" >&2
+    exit 1
+fi
+if [ "$ACTUAL_CODEQL_VERSION" != "$EXPECTED_CODEQL_VERSION" ]; then
+    if [ "$ALLOW_VERSION_MISMATCH" -eq 0 ]; then
+        echo "[FAIL] CodeQL $ACTUAL_CODEQL_VERSION does not match the Dockerfile pin $EXPECTED_CODEQL_VERSION" >&2
+        echo "       Install the pinned bundle or pass --allow-version-mismatch for research-only A/B testing." >&2
+        exit 1
+    fi
+    echo "[WARN] Research override: CodeQL $ACTUAL_CODEQL_VERSION differs from pin $EXPECTED_CODEQL_VERSION"
+else
+    echo "[OK] CodeQL version matches Dockerfile pin $EXPECTED_CODEQL_VERSION"
+fi
+
 if [ "$SKIP_BUILD" -eq 0 ]; then
     if [ ! -f "$REPO_ROOT/Build/Cmake/CMakeLists.txt" ]; then
         echo "[FAIL] Build/Cmake/CMakeLists.txt not found. Run from iccDEV root." >&2
@@ -133,7 +169,7 @@ fi
 # Install pack dependencies
 echo ""
 echo "=== Installing CodeQL pack dependencies ==="
-"${CODEQL[@]}" pack install .github/codeql-queries/
+"${CODEQL[@]}" pack install --mode=use-lock .github/codeql-queries/
 
 # Build database
 if [ "$SKIP_BUILD" -eq 0 ]; then
@@ -175,12 +211,13 @@ echo "=== Running CodeQL analysis ==="
 
 # Standard suite
 if [ "$CUSTOM_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
-    echo "  Running standard cpp-security-and-quality suite..."
+    echo "  Running repository-filtered cpp-security-and-quality suite..."
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/cpp-security-and-quality.sarif" \
-        --threads=0 \
-        codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls
+        --threads="$CODEQL_THREADS" \
+        --ram="$CODEQL_RAM_MB" \
+        .github/codeql-queries/iccdev-cpp-security-and-quality.qls
     echo "[OK] Standard suite complete"
 fi
 
@@ -190,7 +227,8 @@ if [ "$STANDARD_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/iccdev-security.sarif" \
-        --threads=0 \
+        --threads="$CODEQL_THREADS" \
+        --ram="$CODEQL_RAM_MB" \
         .github/codeql-queries/iccdev-security-suite.qls
     echo "[OK] Custom suite complete"
 fi
@@ -201,7 +239,8 @@ if [ "$STANDARD_ONLY" -eq 0 ] && [ "$CUSTOM_ONLY" -eq 0 ]; then
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/iccdev-jsonlib-security.sarif" \
-        --threads=0 \
+        --threads="$CODEQL_THREADS" \
+        --ram="$CODEQL_RAM_MB" \
         .github/codeql-queries/iccdev-jsonlib-suite.qls
     echo "[OK] IccJSON/IccConnect suite complete"
 fi

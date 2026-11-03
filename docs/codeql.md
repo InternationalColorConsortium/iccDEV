@@ -21,11 +21,16 @@ Run local analysis with:
 ```
 
 The local runner prefers a `codeql` executable on `PATH` and falls back to the
-GitHub CLI `gh codeql` extension. The unified container includes the pinned
-CodeQL bundle, so it can analyze the caller's current checkout without
-installing the extension. Resolve the selected image to a digest, mount the
-checkout read-only, copy it to container scratch, and copy the results back to
-the caller:
+GitHub CLI `gh codeql` extension. It fails closed when that CLI does not match
+the Dockerfile bundle pin; `--allow-version-mismatch` is reserved for explicit
+research A/B runs. Evaluator defaults are four threads and 8192 MiB to avoid
+the unbounded-thread out-of-memory failure seen with `--threads=0`; override
+them with `--codeql-threads`, `--codeql-ram`, or the corresponding
+`ICCDEV_CODEQL_THREADS` / `ICCDEV_CODEQL_RAM_MB` environment variables. The
+unified container includes the pinned CodeQL bundle, so it can analyze the
+caller's current checkout without installing the extension. Resolve the
+selected image to a digest, mount the checkout read-only, copy it to container
+scratch, and copy the results back to the caller:
 
 ```bash
 IMAGE_TAG=ghcr.io/internationalcolorconsortium/iccdev:latest
@@ -75,8 +80,17 @@ The GitHub Actions CodeQL workflow uploads three SARIF categories:
 `iccdev-standard-cpp-security-and-quality`, `iccdev-custom-security` and
 `iccdev-jsonlib-security`. Custom-query alerts still need maintainer triage
 before they are cited in issues or PRs.
-This includes the division-by-zero profile query, which has produced useful
-fixes but also guard-sensitive false positives.
+The local runner uses the same `iccdev-cpp-security-and-quality.qls` wrapper as
+hosted CI; invoking GitHub's raw suite directly reintroduces the 79 reviewed
+`cpp/path-injection` alerts and is not a comparable baseline.
+`division-by-zero-profile` now fingerprints the five historical profile/CAM
+families fixed in #1406, #1410, #1679, #1782, and #1950. It requires a
+denominator guard to control the division, so the #1837 early-return case is a
+negative regression instead of an alert. `float-to-int-cast` similarly covers
+the named #1396 and #2230 conversion boundaries and requires finiteness plus
+two-sided range validation on the converted value. These are intentionally
+high-precision regression queries: broad denominator-name and five-line
+proximity heuristics are the recorded noise baselines, not templates to reuse.
 For `unbounded-profile-loop`, trace the full profile-to-tool path before
 synthesizing a PoC. A guard in `Begin()` may establish an Apply-path invariant;
 alerts #999, #1000, and #1647 are the reference case. If every tool path
@@ -136,9 +150,28 @@ Numerical accuracy findings need separate, semantics-aware queries. Prefer
 narrow rules for a named conversion family or formula, with an executable
 oracle that pins finite-domain, boundary, and round-trip error behavior. Do
 not combine NaN/Inf guards, fixed-point reconstruction, float-to-int range
-checks, and ICC encoding tolerances into one generic numeric query: the removed
-division-by-zero and broad float-range experiments are the false-positive
-baseline for why those contracts must remain separate.
+checks, and ICC encoding tolerances into one generic numeric query. The
+retired broad DBZ/float experiments remain the A/B noise baseline; the restored
+queries are historical regression fingerprints. The retired zero-signature
+query remains research-only until it can detect the known unguarded serializer
+sites as well as suppress guarded ones.
+
+## Stock-query A/B reference
+
+The 2026-11-03 CodeQL 2.27.4 reference database records these decisions:
+
+| Candidate | Result | CI decision |
+|-----------|--------|-------------|
+| Raw `cpp-security-and-quality` | 328 alerts, including 79 reviewed `cpp/path-injection` alerts | Keep the repository wrapper; its comparable baseline is 249 |
+| Experimental `cpp/divide-by-zero-using-return-value` | No SARIF after a 10-minute ceiling, about 4.3 GiB RSS, and sustained two-core use | Manual/periodic research only |
+| `cpp/uncontrolled-allocation-size` | 15 existing standard-suite alerts | Retain for manual tag-size/allocation-contract triage; do not duplicate with a broad custom rule |
+| `cpp/inconsistent-null-check` | Two existing standard-suite alerts; reviewed default-string and transform-invariant cases were not reachable defects | Retain as review prompts, not blocking custom findings |
+
+The closed SBO/HBO issue fingerprints remain covered by narrow custom rules:
+`unbounded-clut-index` (#1548), `fixed-buffer-loop-bound` (#2608), and
+`fixed-buffer-transform-output` (#2868/#2886). Add another rule only when a
+closed or newly reproduced bug supplies a positive mutant and a correctly
+bounded negative control.
 
 Workflow and Python-script governance uses the preflight CodeQL gates instead
 of the C/C++ database runner:

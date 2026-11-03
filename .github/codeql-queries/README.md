@@ -11,6 +11,8 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `argv-unchecked-index` | CWE-125, CWE-787 | CmdLine tool indexes argv without bound check |
 | `describe-without-validate` | CWE-476 | `Describe()` called without prior `Validate()` check |
 | `signed-offset-overflow` | CWE-190 | Profile-derived offset used in pointer arithmetic |
+| `division-by-zero-profile` | CWE-369 | Unguarded reintroduction of the profile/CAM denominator defects fixed in #1406, #1410, #1679, #1782, or #1950 |
+| `float-to-int-cast` | CWE-681 | Missing finite/range validation at conversion boundaries fixed in #1396 and #2230 |
 | `signed-char-byte-conversion` | CWE-704 | Signed char data assigned to unsigned byte without explicit cast |
 | `unchecked-file-io` | CWE-252 | Ignored `fopen`, `fread`, or `fwrite` results |
 | `unsafe-header-cast` | CWE-681 | Header field cast to narrower type |
@@ -115,3 +117,14 @@ queries, including `json-size-to-narrow-setsize`, belong only to
 
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.
+
+`division-by-zero-profile` and `float-to-int-cast` are regression-fingerprint
+queries, not broad arithmetic linters. Their retired predecessors matched 65
+and 64 locations respectively on the 2026-11-03 branch database, including
+known guarded code. The replacements match exact historical defect families
+and use value/control-flow evidence. Keep every positive historical mutant and
+guarded negative control in the query tests; do not restore field-name regexes
+or fixed source-line windows. The retired
+`signature-serialized-without-zero-guard` experiment remains excluded: it
+reported zero locations while missing known unguarded serializers, so a clean
+result did not establish coverage.

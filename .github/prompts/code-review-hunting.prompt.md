@@ -141,6 +141,12 @@ heap buffer sized from one member is unsafe when indexed by a sibling channel,
 element, or function count. Issue #2608 is the reference shape: a 16-entry
 stack array indexed to `m_nOutputChannels`.
 
+Before broadening a buffer query, search the closed `sbo` and `hbo` issue sets
+and turn representative fixed shapes into positive mutants with guarded or
+correctly-sized negative controls. A query that cannot rediscover those fixed
+families is not yet a useful bug fingerprint; a query that reports their
+guarded current forms is not ready for per-PR CI.
+
 Treat `index > count` before `buffer[index]` as suspect. The first invalid
 index is exactly `count`, so the rejection normally needs `index >= count` and
 a NULL-storage check. Run `iccdev/fixed-buffer-loop-bound` for fixed
@@ -154,6 +160,12 @@ infinity, negative fractional powers, zero denominators, fixed-point boundary
 values, and float-to-int casts independently. A broad "float looks risky"
 finding is not actionable; require a named ICC encoding/formula and an
 executable expected-value oracle.
+
+Run `iccdev/division-by-zero-profile` for the #1406, #1410, #1679, #1782, and
+#1950 denominator families and `iccdev/float-to-int-cast` for the #1396/#2230
+conversion boundaries. These rules intentionally require control/value
+evidence. Do not replace them with denominator-name regexes, fixed line
+windows, or a clean result from the retired zero-signature experiment.
 
 ## PoC Synthesis Requirements
 

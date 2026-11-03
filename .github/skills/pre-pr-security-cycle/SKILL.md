@@ -77,7 +77,7 @@ and PR-head results distinct in the handoff.
 | Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, `zizmor`, CodeQL Actions analysis, expression-in-run scan |
 | Python script | Python syntax check and CodeQL Python analysis |
 | Shell script | ShellCheck and `zizmor`; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
-| C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security`; query changes also require a positive fixture and a safe negative control |
+| C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security`; query changes also require a positive fixture, a safe negative control, and before/after alert-count A/B on the same database |
 | Parser/profile/tool behavior | Code review hunting prompt plus sanitizer build where practical |
 | Release, WASM, vcpkg | Governance prompt plus package/runtime smoke logs |
 | Dockerfile or container image | `hadolint`, Trivy config/image scan, Dockle/Grype/Syft when practical |

@@ -1,0 +1,6 @@
+| case.cpp:37:15:37:30 | ... / ... | Division matches the ICC defect fixed in #1406 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
+| case.cpp:47:15:47:26 | ... / ... | Division matches the ICC defect fixed in #1410 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
+| case.cpp:57:20:57:31 | ... / ... | Division matches the ICC defect fixed in #1679 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
+| case.cpp:58:16:58:32 | ... / ... | Division matches the ICC defect fixed in #1679 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
+| case.cpp:72:15:72:26 | ... / ... | Division matches the ICC defect fixed in #1782 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
+| case.cpp:82:15:82:41 | ... / ... | Division matches the ICC defect fixed in #1950 but is not controlled by a denominator zero/range/finiteness guard (CWE-369). |
