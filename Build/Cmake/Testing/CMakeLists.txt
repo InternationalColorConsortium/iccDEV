@@ -498,7 +498,7 @@ function(iccdev_add_iccconnect_config_parser_test)
   set_tests_properties(iccdev.iccconnect-config-parser PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;iccconnect;config;cli;json;regression"
+    LABELS "iccdev;iccconnect;config;cli;json;issue-2982;regression"
   )
   if(WIN32)
     set(_iccconnect_config_windows_env_mods

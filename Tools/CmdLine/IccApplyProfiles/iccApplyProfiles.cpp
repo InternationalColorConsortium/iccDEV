@@ -763,12 +763,10 @@ int main(int argc, const char** argv)
     // rather than advancing argv/argc once more: this is the last use of the
     // argument vector, so the pointer bump that pairs with the count above would be
     // a store no later read could observe (#1958).
-    // Not covered here: a trailing "-ENV:sig value" pair is *counted* as consumed
-    // even when the profile pair it precedes never arrives, so fromArgs() reports
-    // it as used and this comparison cannot see it. That shape pushes a profile
-    // entry with an empty file path, which the embedded-profile branch below then
-    // treats as "-embedded" -- a defect in fromArgs() itself rather than in the
-    // argument count, and so out of scope for this guard.
+    // A trailing "-ENV:sig value" pair is rejected inside fromArgs() because it
+    // has no following transform. That #2140 path and the valid leading-ENV
+    // control are pinned for normal and search sequences by
+    // iccdev.iccconnect-config-parser (#2982).
     if (nArg != argc) {
       printf("Unexpected extra arguments\n");
       return EXIT_FAILURE;
