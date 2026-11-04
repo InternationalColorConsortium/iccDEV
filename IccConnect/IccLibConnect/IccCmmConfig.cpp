@@ -1156,11 +1156,8 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         nIntent = nIntent % 1000000;
       }
-      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
-      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
-      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
-      // is present regardless of any flag.  Left as-is here -- wiring it
-      // through is a library API change, not part of this decode fix (#2190).
+      // The config factory carries this independent selector to the xform as a
+      // CMM processing-control hint (#2981).
       pProf->m_useHToS = (nIntent / 100000) != 0;
       // Strip the HToS digit before the V5 sub-profile digit is read.  Without
       // this the "/ 10000" below still sees the hundred-thousands column, so any
@@ -1476,11 +1473,8 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         nIntent = nIntent % 1000000;
       }
-      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
-      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
-      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
-      // is present regardless of any flag.  Left as-is here -- wiring it
-      // through is a library API change, not part of this decode fix (#2190).
+      // The config factory carries this independent selector to the xform as a
+      // CMM processing-control hint (#2981).
       pProf->m_useHToS = (nIntent / 100000) != 0;
       // Strip the HToS digit before the V5 sub-profile digit is read.  Without
       // this the "/ 10000" below still sees the hundred-thousands column, so any

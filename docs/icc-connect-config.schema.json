@@ -142,7 +142,7 @@
         "useHToS": {
           "type": "boolean",
           "default": false,
-          "description": "Use hue-to-saturation transform for this profile step"
+          "description": "Use the HDR-to-SDR PCS range-conversion transform for this profile step when ICC.2 profile flags indicate an extended-to-standard connection"
         },
         "useV5SubProfile": {
           "type": "boolean",

@@ -214,6 +214,7 @@ protected:
   IIccProfileConnectionConditions* m_pSrcPcc = nullptr;
   icXformLutType m_nSrcLutType;
   bool m_bSrcUseD2BxB2DxTags;
+  bool m_bSrcUseHToS = true;
 
   CIccProfile* m_pDstProfile=nullptr;
   icRenderingIntent m_nDstIntent;
@@ -221,6 +222,7 @@ protected:
   IIccProfileConnectionConditions* m_pDstPcc = nullptr;
   icXformLutType m_nDstLutType;
   bool m_bDstUseD2BxB2DxTags;
+  bool m_bDstUseHToS = true;
 
   CIccProfile* m_pDstInitProfile = nullptr;
   icRenderingIntent m_nDstInitIntent;
@@ -235,6 +237,7 @@ protected:
   IIccProfileConnectionConditions* m_pMidPcc = nullptr;
   icXformLutType m_nMidLutType;
   bool m_bMidUseD2BxB2DxTags;
+  bool m_bMidUseHToS = true;
 
   CIccCmmPtrArray m_dst_to_mid;
   CIccCmmPtrArray m_src_to_mid;

@@ -235,7 +235,7 @@ parsed by the shared `CIccCfgProfile::fromArgs` is:
 | `+10`-`+13` | Base intent without D2Bx/B2Dx tags |
 | `+1000` | Use luminance-based PCS adjustment |
 | `+10000` | Use V5 sub-profile if present |
-| `+100000` | Use HToS tag if present |
+| `+100000` | Use the ICC.2 HDR-to-SDR (`H2Sx`) tag if indicated and present |
 | `+1000000` | NamedColor over-black (`icSigNmclSpectralOverBlackMbr`, `'spcb'`) |
 | `+2000000` | NamedColor over-gray (`icSigNmclSpectralOverGrayMbr`, `'spcg'`) |
 
@@ -245,11 +245,13 @@ overprint values above -- the members are mutually exclusive, so a combined
 `+3000000` is refused rather than decoded as over-white -- and the whole code
 must be non-negative (#2190).
 
-`+100000` is currently recorded in the configuration but not acted on: no
-`AddXform` overload takes an HToS argument, and `CheckPCSRangeConversions()`
-injects the HToS transform whenever the tag is present, regardless of the flag.
-It is accepted and round-trips through the JSON config, but selects nothing
-(#2190).
+`+100000` enables the IccConnect CMM processing control for an HDR-to-SDR PCS
+range conversion. ICC.2:2023 sections 7.2.13 and 9.2.85 through 9.2.88 require
+an extended-range source followed by a non-extended profile and place the
+selected `H2Sx` transform immediately after the source colorimetric transform.
+Annex K.2.9 permits a CMM processing control to disable that otherwise
+indicated conversion. The config selector supplies that control without
+widening the public `AddXform` overloads (#2981).
 
 `iccApplyToLink` and `iccBenchApply` do not reach that shared parser. Each
 carries its own decode of a smaller set of columns, and the weights differ by a

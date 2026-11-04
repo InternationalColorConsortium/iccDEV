@@ -287,10 +287,9 @@ assert_cfg_lacks() {
   fi
 }
 
-# useHToS is asserted as a decode result only. Nothing downstream consumes it
-# (AddXform takes no HToS argument and CheckPCSRangeConversions injects the
-# transform unconditionally), so these cases pin which columns the parser reads
-# -- they are not evidence that the HToS selector does anything at apply time.
+# These cases pin which columns the parser reads. The separate
+# iccdev.iccconnect-htos-selector CTest proves that the decoded value controls
+# actual HDR-to-SDR transform injection (#2981).
 #
 # The two flags are a crossing pair, for the same reason the encoding cases
 # above are: asserting only that +100000 sets HToS would still pass with the

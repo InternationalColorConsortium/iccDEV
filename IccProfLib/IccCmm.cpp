@@ -441,6 +441,7 @@ CIccXform::CIccXform()
   m_nInterp = icInterpLinear;
   m_bUseD2BTags = false;
   m_bLuminanceMatching = false;
+  m_bUseHToS = true;
   m_PCSOffset[0] = m_PCSOffset[1] = m_PCSOffset[2] = 0;
 }
 
@@ -1448,6 +1449,7 @@ void CIccXform::SetParams(CIccProfile *pProfile, bool bInput, icRenderingIntent 
   m_bAbsToRel = bAbsToRel;
   m_nMCS = nMCS;
   m_bLuminanceMatching = false;
+  m_bUseHToS = true;
 
   // m_pProfile, m_bInput and m_bUseSpectralPCS above are exactly the fields
   // the base GetSrcSpace()/GetDstSpace() compute from (m_bGamutXform and
@@ -1474,6 +1476,12 @@ void CIccXform::SetParams(CIccProfile *pProfile, bool bInput, icRenderingIntent 
     pHint = pHintManager->GetHint("CIccLuminanceMatchingHint");
     if (pHint) {
       m_bLuminanceMatching = true;
+    }
+
+    pHint = pHintManager->GetHint("CIccUseHToSHint");
+    if (pHint) {
+      CIccUseHToSHint *pHToSHint = (CIccUseHToSHint*)pHint;
+      m_bUseHToS = pHToSHint->UseHToS();
     }
   }
 }
@@ -10147,7 +10155,8 @@ icStatusCMM CIccCmm::CheckPCSRangeConversions()
 
     for (; next != m_Xforms->end(); last = next, next++) {
       //Add extended PCS to standard PCS conversion as needed
-      if (last->ptr->IsInput() && last->ptr->IsExtendedPCS() && IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) &&
+      if (last->ptr->UseHToS() && last->ptr->IsInput() &&
+        last->ptr->IsExtendedPCS() && IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) &&
         !next->ptr->IsExtendedPCS()) {
         CIccProfile* pProfile = last->ptr->GetProfilePtr();
         CIccTag* pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());

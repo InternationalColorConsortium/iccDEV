@@ -575,6 +575,51 @@ function(iccdev_add_createsearch_embedded_profile_test)
   endif()
 endfunction()
 
+function(iccdev_add_iccconnect_htos_selector_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccConnectHToSSelectorTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccconnect-htos-selector.cpp"
+  )
+  target_compile_features(iccConnectHToSSelectorTest PRIVATE cxx_std_17)
+  target_link_libraries(iccConnectHToSSelectorTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+  add_dependencies(check iccConnectHToSSelectorTest)
+
+  if(WIN32)
+    set(_htos_profile_root "${ICCDEV_TEST_OUTDIR}/windows-testing")
+  else()
+    set(_htos_profile_root "${ICCDEV_TESTING_DIR}")
+  endif()
+
+  add_test(
+    NAME iccdev.iccconnect-htos-selector
+    COMMAND "$<TARGET_FILE:iccConnectHToSSelectorTest>"
+      "${_htos_profile_root}/HDR/BT2100PQNarrowScene.icc"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.iccconnect-htos-selector PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccconnect;hdr;iccmax;issue-2981;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+  if(WIN32)
+    set(_htos_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccConnectHToSSelectorTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _htos_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccconnect-htos-selector PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_htos_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mru_apply_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13188,6 +13233,7 @@ if(WIN32)
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_createsearch_embedded_profile_test()
+  iccdev_add_iccconnect_htos_selector_test()
   iccdev_add_mru_apply_ownership_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
@@ -13751,6 +13797,7 @@ iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_createsearch_embedded_profile_test()
+iccdev_add_iccconnect_htos_selector_test()
 iccdev_add_mru_apply_ownership_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()

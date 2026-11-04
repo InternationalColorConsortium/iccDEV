@@ -149,6 +149,15 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
   CIccProfile* pPcc = nullptr;
   CIccCreateXformHintManager Hint;
 
+  {
+    icStatusCMM stat = AddHintNoThrow(
+      Hint, new (std::nothrow) CIccUseHToSHint(pCfg->m_useHToS));
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach HToS selector for '" + pCfg->m_iccFile + "'";
+      return stat;
+    }
+  }
+
   if (pCfg->m_useBPC) {
     icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
     if (stat != icCmmStatOk) {
@@ -350,6 +359,13 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
       CIccProfile* pPcc = nullptr;
       CIccCreateXformHintManager Hint;
 
+      stat = AddHintNoThrow(
+        Hint, new (std::nothrow) CIccUseHToSHint(pCfg->m_useHToS));
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach HToS selector for embedded source profile";
+        goto stage_failed;
+      }
+
       if (pCfg->m_useBPC) {
         stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
         if (stat != icCmmStatOk) {
@@ -508,6 +524,13 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
     // CreateStandard's embedded branch.
     const bool bUseEmbedded = bFirst && pCfg->m_iccFile.empty() &&
                               pEmbeddedData && nEmbeddedLen;
+
+    stat = AddHintNoThrow(
+      Hint, new (std::nothrow) CIccUseHToSHint(pCfg->m_useHToS));
+    if (stat != icCmmStatOk) {
+      sStageErr = "failed to attach HToS selector";
+      goto search_stage_failed;
+    }
 
     if (bUseEmbedded && pCfg->m_useBPC) {
       stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
