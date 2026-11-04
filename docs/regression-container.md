@@ -25,9 +25,10 @@ revisions aligned with their documented runtime contracts.
 
 The pinned APT inventory includes direct dependencies used by repository QA,
 even when the Ubuntu base currently supplies them transitively. Keep GNU
-`find`/`sort`, `cloc`, Doxygen, Graphviz, and host metadata tools explicit
-because coverage matching, documentation QA, and timing reports call them
-directly. Keep PyYAML pinned in the isolated workflow-QA virtual environment;
+`find`/`sort`, `cloc`, Doxygen, Graphviz, `unzip`, and host metadata tools
+explicit because coverage matching, documentation QA, corpus refresh, and
+timing reports call them directly. Keep PyYAML pinned in the isolated
+workflow-QA virtual environment;
 the MCP virtual environment intentionally remains first on `PATH`.
 `DEBIAN_FRONTEND` is a build argument; do not persist it into the runtime
 environment.
@@ -467,7 +468,7 @@ docker build --no-cache --pull -t "$IMAGE" .
 docker run --rm "$IMAGE" bash -lc '
   set -euo pipefail
   command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
-  command -v cloc doxygen dot find sort lscpu
+  command -v cloc doxygen dot find sort lscpu unzip
   command -v hadolint zizmor shellcheck afl-fuzz valgrind llvm-symbolizer
   command -v lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
   "$ICCDEV_WORKFLOW_QA_PYTHON" -c "import yaml"

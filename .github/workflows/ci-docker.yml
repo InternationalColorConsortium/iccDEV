@@ -233,7 +233,7 @@ jobs:
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
             command -v git gh clang clang++ gcc g++ cmake cppcheck clang-tidy scan-build
-            command -v cloc doxygen dot find sort lscpu
+            command -v cloc doxygen dot find sort lscpu unzip
             command -v hadolint zizmor shellcheck afl-fuzz valgrind ms_print callgrind_annotate llvm-symbolizer
             command -v codeql lcov genhtml gcovr llvm-cov llvm-profdata perf gprof strace
             "$ICCDEV_WORKFLOW_QA_PYTHON" -c "import yaml"

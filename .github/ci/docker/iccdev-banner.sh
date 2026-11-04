@@ -94,7 +94,7 @@ if command -v bash >/dev/null 2>&1; then
 fi
 
 qa_tools=""
-for tool in clang-tidy cppcheck scan-build cloc doxygen dot hadolint zizmor \
+for tool in clang-tidy cppcheck scan-build cloc doxygen dot unzip hadolint zizmor \
             valgrind gdb lcov genhtml gcovr llvm-cov llvm-profdata perf gprof \
             strace shellcheck afl-fuzz; do
   if command -v "$tool" >/dev/null 2>&1; then

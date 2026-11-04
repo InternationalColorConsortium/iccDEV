@@ -112,6 +112,7 @@ RUN for attempt in 1 2 3; do \
     strace=6.19+ds-0ubuntu5 \
     tar=1.35+dfsg-4ubuntu0.4 \
     time=1.9-0.4 \
+    unzip=6.0-29ubuntu1 \
     util-linux=2.41.3-3ubuntu2.2 \
     valgrind=1:3.26.0-0ubuntu1 \
     wx-common=3.2.9+dfsg-1 \
@@ -125,7 +126,7 @@ RUN for attempt in 1 2 3; do \
       sleep "$((attempt * 10))"; \
     done \
  && apt-get check \
- && command -v cloc doxygen dot find sort lscpu \
+ && command -v cloc doxygen dot find sort lscpu unzip \
  && test -f /usr/include/valgrind/memcheck.h \
  && sed -i 's/^#geninfo_unexecuted_blocks = 0$/geninfo_unexecuted_blocks = 1/' /etc/lcovrc \
  && grep -Fx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc \
@@ -408,7 +409,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v cloc >/dev/null && command -v doxygen >/dev/null && command -v dot >/dev/null && command -v find >/dev/null && command -v sort >/dev/null && command -v lscpu >/dev/null && command -v hadolint >/dev/null && command -v codeql >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v perf >/dev/null && command -v lcov >/dev/null && command -v genhtml >/dev/null && command -v gcovr >/dev/null && command -v llvm-cov >/dev/null && command -v llvm-profdata >/dev/null && \"$ICCDEV_WORKFLOW_QA_PYTHON\" -c 'import yaml' && perl -MJSON::XS -e 1 && test \"$LCOV_HOME\" = / && grep -Fqx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc && test -x \"$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl\" && test -x \"$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl\" && test \"$(git -C \"$ICCDEV_FLAMEGRAPH_DIR\" rev-parse HEAD)\" = \"$ICCDEV_FLAMEGRAPH_REVISION\" && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
+  CMD ["bash", "-c", "clang --version >/dev/null && cmake --version >/dev/null && command -v ninja >/dev/null && command -v cppcheck >/dev/null && command -v clang-tidy >/dev/null && command -v scan-build >/dev/null && command -v cloc >/dev/null && command -v doxygen >/dev/null && command -v dot >/dev/null && command -v find >/dev/null && command -v sort >/dev/null && command -v lscpu >/dev/null && command -v unzip >/dev/null && command -v hadolint >/dev/null && command -v codeql >/dev/null && command -v zizmor >/dev/null && command -v shellcheck >/dev/null && command -v afl-fuzz >/dev/null && command -v valgrind >/dev/null && command -v ms_print >/dev/null && command -v callgrind_annotate >/dev/null && command -v perf >/dev/null && command -v lcov >/dev/null && command -v genhtml >/dev/null && command -v gcovr >/dev/null && command -v llvm-cov >/dev/null && command -v llvm-profdata >/dev/null && \"$ICCDEV_WORKFLOW_QA_PYTHON\" -c 'import yaml' && perl -MJSON::XS -e 1 && test \"$LCOV_HOME\" = / && grep -Fqx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc && test -x \"$ICCDEV_FLAMEGRAPH_DIR/stackcollapse-perf.pl\" && test -x \"$ICCDEV_FLAMEGRAPH_DIR/flamegraph.pl\" && test \"$(git -C \"$ICCDEV_FLAMEGRAPH_DIR\" rev-parse HEAD)\" = \"$ICCDEV_FLAMEGRAPH_REVISION\" && command -v iccdev-valgrind-build >/dev/null && command -v iccdev-valgrind-run >/dev/null && command -v iccdev-valgrind-status >/dev/null && command -v iccdev-valgrind-validate >/dev/null && command -v iccdev-valgrind-self-test >/dev/null && command -v iccdev-build-msan-libcxx >/dev/null && test -f /usr/include/valgrind/memcheck.h && test -f /opt/iccdev-msan-libcxx/lib/libc++.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libc++abi.so.1 && test -f /opt/iccdev-msan-libcxx/lib/libxml2.so && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null"]
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

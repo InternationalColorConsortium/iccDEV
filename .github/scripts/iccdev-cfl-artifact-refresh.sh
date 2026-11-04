@@ -49,7 +49,7 @@ archive_has_testcase()
 
 case "${1:-}" in
   --prepare)
-    if [ "$#" -lt 5 ]; then
+    if [ "$#" -lt 4 ]; then
       usage >&2
       exit 2
     fi
@@ -79,6 +79,10 @@ case "$output_dir" in
 esac
 if [ -z "${GH_TOKEN:-}" ]; then
   echo "[FAIL] GH_TOKEN is required for corpus artifact refresh" >&2
+  exit 2
+fi
+if ! command -v unzip >/dev/null 2>&1; then
+  echo "[FAIL] unzip is required for corpus artifact refresh" >&2
   exit 2
 fi
 

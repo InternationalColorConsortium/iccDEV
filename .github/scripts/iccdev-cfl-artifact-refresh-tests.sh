@@ -89,6 +89,16 @@ export MOCK_INVALID_ZIP="$test_dir/invalid.zip"
 export MOCK_VISUAL_ZIP="$test_dir/visual.zip"
 export PATH="$mock_bin:$PATH"
 
+mkdir -p "$test_dir/no-tools"
+if PATH="$test_dir/no-tools" "$refresh_script" --prepare owner/repo \
+  "$test_dir/missing-unzip" icc_profileparse_fuzzer \
+  >"$test_dir/missing-unzip.log" 2>&1; then
+  echo "[FAIL] Artifact refresh accepted a missing unzip dependency" >&2
+  exit 1
+fi
+grep -Fq '[FAIL] unzip is required for corpus artifact refresh' \
+  "$test_dir/missing-unzip.log"
+
 output_dir="$test_dir/output"
 refresh_output="$("$refresh_script" --prepare owner/repo "$output_dir" \
   icc_profileparse_fuzzer \
