@@ -676,7 +676,8 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       pLastCfg->m_interpolation,
       pPcc,
       searchApply.m_transformInitial,
-      searchApply.m_useD2BxB2DxInitial
+      searchApply.m_useD2BxB2DxInitial,
+      searchApply.m_adjustPcsLuminanceInitial
     );
   }
 

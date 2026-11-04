@@ -373,12 +373,51 @@ void CIccCmmSearch::SetDstInitProfile(CIccProfile* pProfile,
   icXformLutType nLutType,
   bool bUseD2BxB2DxTags)
 {
+  SetDstInitProfile(pProfile, nIntent, nInterp, pPcc, nLutType,
+                    bUseD2BxB2DxTags, false);
+}
+
+void CIccCmmSearch::SetDstInitProfile(CIccProfile* pProfile,
+  icRenderingIntent nIntent,
+  icXformInterp nInterp,
+  IIccProfileConnectionConditions* pPcc,
+  icXformLutType nLutType,
+  bool bUseD2BxB2DxTags,
+  bool bAdjustPcsLuminance)
+{
   m_pDstInitProfile = pProfile;
   m_nDstInitIntent = nIntent;
   m_nDstInitInterp = nInterp;
   m_pDstInitPcc = pPcc;
   m_nDstInitLutType = nLutType;
   m_bDstInitUseD2BxB2DxTags = bUseD2BxB2DxTags;
+  m_bDstInitAdjustPcsLuminance = bAdjustPcsLuminance;
+}
+
+icStatusCMM CIccCmmSearch::AddDstInitXform(CIccCmm* pCmm)
+{
+  if (!pCmm || !m_pDstInitProfile)
+    return icCmmStatBadXform;
+
+  CIccCreateXformHintManager hints;
+  CIccCreateXformHintManager* pHints = nullptr;
+  if (m_bDstInitAdjustPcsLuminance) {
+    if (!hints.AddHint(new (std::nothrow) CIccLuminanceMatchingHint()))
+      return icCmmStatAllocErr;
+    pHints = &hints;
+  }
+
+  icStatusCMM rv = pCmm->AddXform(
+    m_pDstInitProfile,
+    m_nDstInitIntent,
+    m_nDstInitInterp,
+    m_pDstInitPcc,
+    m_nDstInitLutType,
+    m_bDstInitUseD2BxB2DxTags,
+    pHints);
+  // The pointer overload owns the profile on success and failure.
+  m_pDstInitProfile = nullptr;
+  return rv;
 }
 
 
@@ -473,8 +512,7 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
     checkCmmStatus(rv);
 
     if (m_pDstInitProfile) {
-      rv = cmm->AddXform(m_pDstInitProfile, m_nDstInitIntent, m_nDstInitInterp, m_pDstInitPcc, m_nDstInitLutType, m_bDstInitUseD2BxB2DxTags);
-      m_pDstInitProfile = nullptr;
+      rv = AddDstInitXform(cmm.get());
       checkCmmStatus(rv);
     }
     else {
@@ -520,8 +558,7 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool /* bUsePcsConversion 
     checkCmmStatus(rv);
 
     if (m_pDstInitProfile) {
-      rv = cmm->AddXform(m_pDstInitProfile, m_nDstInitIntent, m_nDstInitInterp, m_pDstInitPcc, m_nDstInitLutType, m_bDstInitUseD2BxB2DxTags);
-      m_pDstInitProfile = nullptr;
+      rv = AddDstInitXform(cmm.get());
       checkCmmStatus(rv);
     }
     else {

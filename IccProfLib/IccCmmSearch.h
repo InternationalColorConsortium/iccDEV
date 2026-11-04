@@ -162,6 +162,13 @@ public:
     IIccProfileConnectionConditions* pPcc,
     icXformLutType nLutType,
     bool bUseD2BxB2DxTags);
+  void SetDstInitProfile(CIccProfile* pProfile,
+    icRenderingIntent nIntent,
+    icXformInterp nInterp,
+    IIccProfileConnectionConditions* pPcc,
+    icXformLutType nLutType,
+    bool bUseD2BxB2DxTags,
+    bool bAdjustPcsLuminance);
 
   //Note ownership of pPCC object is passed to the CMM on success (it will delete these objects)
   icStatusCMM AttachPCC(IIccProfileConnectionConditions* pPCC, icFloatNumber dWeight);
@@ -200,6 +207,8 @@ public:
 
 protected:
 
+  icStatusCMM AddDstInitXform(CIccCmm* pCmm);
+
   int m_nAttached=0;
   bool m_bUsesBounds;
   icFloatNumber m_fOverBoundsCost;
@@ -228,6 +237,7 @@ protected:
   IIccProfileConnectionConditions* m_pDstInitPcc = nullptr;
   icXformLutType m_nDstInitLutType;
   bool m_bDstInitUseD2BxB2DxTags;
+  bool m_bDstInitAdjustPcsLuminance = false;
 
   CIccProfile* m_pMidProfile=nullptr;
   icRenderingIntent m_nMidIntent;

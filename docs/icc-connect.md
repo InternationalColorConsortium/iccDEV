@@ -58,6 +58,11 @@ passed to `CreateStandard` or `CreateSearch` are not retained by the library,
 but they must stay valid for the duration of the call, which performs `Begin()`
 before returning.
 
+For `CreateSearch`, `searchApply.initial.adjustPcsLuminance` attaches a
+`CIccLuminanceMatchingHint` to the optional destination initializer. The
+existing six-argument `CIccCmmSearch::SetDstInitProfile()` remains available;
+the additive overload accepts the adjustment flag used by the config factory.
+
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call

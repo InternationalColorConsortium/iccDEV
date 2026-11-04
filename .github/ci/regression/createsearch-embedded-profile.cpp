@@ -63,16 +63,26 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "IccConnect.h"
-#include "IccCmmConfig.h"
-#include "IccUtil.h"
-
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <list>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+// White-box access is limited to this regression translation unit.  It lets
+// the test inspect the initial sub-chain without adding a public test accessor.
+// Pre-include every C++ standard header used by the ICC headers so the access
+// macro cannot rewrite a standard-library class.
+#define protected public
+#include "IccConnect.h"
+#undef protected
+#include "IccCmmConfig.h"
+#include "IccUtil.h"
 
 // The search minimises a numerical cost, so two chains that differ only in how
 // the source profile was attached still have to agree bit-for-bit only up to
@@ -190,6 +200,48 @@ int main(int argc, char** argv)
   CIccCfgSearchApply fileCfg;
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
+
+  // #2979: the initial PCS-luminance selector must reach the xform hint, not
+  // stop at config parsing and serialization.  Inspect the initial sub-chain's
+  // last xform after CreateSearch has called Begin().
+  {
+    json cfg;
+    json stage;
+    stage["iccFile"] = profilePath;
+    stage["intent"] = "relative";
+    cfg["profileSequence"].push_back(stage);
+    cfg["profileSequence"].push_back(stage);
+    cfg["initial"]["intent"] = "relative";
+    cfg["initial"]["adjustPcsLuminance"] = true;
+
+    CIccCfgSearchApply adjustedInitial;
+    const bool parsed = adjustedInitial.fromJson(cfg, true);
+    failures += check(parsed && adjustedInitial.isInitialized() &&
+                        adjustedInitial.m_adjustPcsLuminanceInitial,
+                      "search config parses initial PCS-luminance adjustment");
+
+    if (parsed) {
+      std::string sAdjustmentErr;
+      std::unique_ptr<CIccConnectCmm> adjustedInitialCmm(
+        CIccConnectCmm::CreateSearch(adjustedInitial, nullptr, 0, 1,
+                                     &sAdjustmentErr));
+      if (!adjustedInitialCmm || !adjustedInitialCmm->GetSearchCmm()) {
+        std::fprintf(stderr,
+                     "createsearch-embedded-profile: FAIL  adjusted initial "
+                     "CreateSearch: %s\n",
+                     sAdjustmentErr.empty() ? "no error reported" :
+                       sAdjustmentErr.c_str());
+        failures++;
+      }
+      else {
+        CIccCmmSearch* search = adjustedInitialCmm->GetSearchCmm();
+        CIccXform* initialXform = search->m_mid_to_dst ?
+          search->m_mid_to_dst->GetLastXform() : nullptr;
+        failures += check(initialXform && initialXform->LuminanceMatching(),
+                          "CreateSearch applies initial PCS-luminance hint");
+      }
+    }
+  }
 
   std::string sEmbeddedErr;
   std::unique_ptr<CIccConnectCmm> embedded(
