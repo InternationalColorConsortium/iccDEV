@@ -269,9 +269,15 @@ dump_extrasamples_line() {
 # Require the dump to have succeeded and produced the line that must always be
 # there before any such assertion is trusted.
 dump_succeeded() {
-  local f="$1" expected_samples="$2" out
-  out="$("$TIFFDUMP" "$f" 2>/dev/null)" || return 1
-  printf '%s\n' "$out" | grep -q "^SamplesPerPixel: *${expected_samples}\$"
+  local f="$1" expected_samples="$2" out stderr_file
+  stderr_file="${f}.iccTiffDump.stderr"
+  if ! out="$("$TIFFDUMP" "$f" 2>"$stderr_file")"; then
+    printf '[DIAG] iccTiffDump stderr for %s:\n' "$f" | tee -a "$LOGFILE"
+    sed -n '1,40p' "$stderr_file" | tee -a "$LOGFILE"
+    return 1
+  fi
+
+  grep -q "^SamplesPerPixel: *${expected_samples}\$" <<< "$out"
 }
 
 require_tools() {

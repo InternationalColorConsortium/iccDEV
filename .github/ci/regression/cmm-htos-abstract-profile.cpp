@@ -5,9 +5,10 @@
 
     ICC.2:2023 8.14.3 permits only H2S0 for an abstract profile. This helper
     loads the generated HDR fixture, clones its transforms into in-memory
-    abstract-profile variants, and verifies that H2S1 and H2S3 are not selected
-    merely because they match the requested rendering intent. A display-profile
-    control proves that the ordinary intent-specific lookup remains active.
+    abstract-profile variants, and verifies that H2S1, H2S2, and H2S3 are not
+    selected merely because they match the requested rendering intent. A
+    display-profile control proves that the ordinary intent-specific lookup
+    remains active.
 
     Usage:
       cmm-htos-abstract-profile <extended.icc> <standard.icc>
@@ -178,6 +179,10 @@ int main(int argc, char** argv)
     CheckVariant(argv[1], argv[2], icSigAbstractClass, icSigHToS1Tag,
                  icRelativeColorimetric, 1),
     "abstract profile ignores intent-specific H2S1");
+  failures += Check(
+    CheckVariant(argv[1], argv[2], icSigAbstractClass, icSigHToS2Tag,
+                 icSaturation, 1),
+    "abstract profile ignores intent-specific H2S2");
   failures += Check(
     CheckVariant(argv[1], argv[2], icSigAbstractClass, icSigHToS3Tag,
                  icAbsoluteColorimetric, 1),
