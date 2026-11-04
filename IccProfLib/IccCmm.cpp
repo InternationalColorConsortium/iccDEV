@@ -3707,7 +3707,12 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
 
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
-    icFloatNumber xyz[3], normxyz[3], pccxyz[3];
+    // The temporary transform always ends in the 3-row observer matrix above,
+    // so Apply() initializes all three values.  Keep a defensive initialization
+    // here as well: it makes an unexpectedly incomplete step chain fail the
+    // zero-Y guard below instead of exposing an indeterminate value.
+    icFloatNumber xyz[3] = {0.0f, 0.0f, 0.0f};
+    icFloatNumber normxyz[3], pccxyz[3];
     
     if (illuminantRange.steps < 3) {
       delete pApply;

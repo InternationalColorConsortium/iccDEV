@@ -650,7 +650,10 @@ icStatusEncConvert icConvertEncodingProfile(CIccProfilePtr &newIcc, CIccProfile 
       if (pNameTag && (!szName || strcmp((const char*)szName, (const char*)szRefName)))
         return icEncConvertBadProfile;
 
-      CIccProfile *pBaseIcc = IIccEncProfileCacheHandler::GetHandler()->GetEncodingProfile(szRefName);
+      IIccEncProfileCacheHandler *pCacheHandler = IIccEncProfileCacheHandler::GetHandler();
+      CIccProfile *pBaseIcc = pCacheHandler
+        ? pCacheHandler->GetEncodingProfile(szRefName)
+        : NULL;
       if (!pBaseIcc) {
         CIccTag *pOwnParams = pEncodeIcc->FindTagOfType(icSigColorEncodingParamsTag, icSigTagStructType);
         if (!pOwnParams)
