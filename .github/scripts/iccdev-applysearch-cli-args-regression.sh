@@ -266,6 +266,19 @@ assert_rejected_sequence() {
     fail "$1 was refused, but not by the profile-sequence parser"
 }
 
+# -INIT configures a destination initializer, whose API has no BPC member or
+# xform-hint channel.  The packed 40 column used to be accepted and reduced to
+# an ordinary color transform.  Refuse it rather than report a BPC operation
+# that was not done.
+run_expect_reject init-bpc-unsupported \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 40
+assert_rejected_sequence init-bpc-unsupported
+
+# The selector remains valid on profile stages, which do have a BPC field.  The
+# control keeps the rejection scoped to -INIT.
+run_expect_success profile-bpc-control \
+  "$APPLY" "$DATA" 0 0 "$SRGB" 40 "$SRGB" 1 -INIT 1
+
 # Same value, both positions, same verdict -- the pairing is the assertion.
 run_expect_reject intent-overprint-3-profile \
   "$APPLY" "$DATA" 0 0 "$SRGB" 3000000 "$SRGB" 1 -INIT 1

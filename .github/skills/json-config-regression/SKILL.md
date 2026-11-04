@@ -45,6 +45,13 @@ ICCDEV_TOOLS_DIR=$PWD/Build/Tools ICCDEV_TESTING_DIR=$PWD/Testing .github/script
 ## Review Checklist
 
 - Verify exact CLI command names and config keys.
+- Classify each mapping as exact, replay-equivalent, config-only, or
+  parsed-only. Do not invent positional arguments for config-only fields.
+- Trace every claimed field through JSON/argv parsing, serialization, and its
+  runtime consumer. A successful parse or export does not prove application.
+- For packed rendering intents, test the same selector in each legal position;
+  profile stages and an ApplySearch `-INIT` stage do not expose the same hint
+  capabilities.
 - Add malformed tests for rejected input.
 - Confirm success paths still round-trip valid profiles/configs.
 - Keep test output reproducible from the repository root.
@@ -55,3 +62,4 @@ ICCDEV_TOOLS_DIR=$PWD/Build/Tools ICCDEV_TESTING_DIR=$PWD/Testing .github/script
 - `../../prompts/bisect-regression.prompt.md`
 - `../../../docs/iccjson.md`
 - `../../../docs/iccjson-tag-types.md`
+- `../../../docs/apply-tools-json-cli-parity.md`

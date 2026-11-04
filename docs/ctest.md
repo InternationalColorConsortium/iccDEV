@@ -195,7 +195,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.unknown-tag-size` | `.github/ci/regression/unknown-tag-size.cpp`; `CIccTagUnknown` empty state after construction, JSON without `unknownData`, failed `Read()` and oversize JSON, and copies of an empty tag, for issue #2706 |
 | `iccdev.same-file-identity` | `.github/ci/regression/same-file-identity.cpp`; `icIsSameFile()` compares file identity, not spelling, for issue #2692: the same path, `./`, a hard link and a symlink match, a byte-for-byte copy does not. Registered for Windows too, so the Win32 half runs in CI |
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
-| `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
+| `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp`; fail-closed JSON/argv parsing and the ApplySearch initializer/profile-stage BPC boundary |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |
@@ -315,7 +315,10 @@ files in `Testing/`.
 input, enough to activate two workers, and requires byte-identical output for
 the default path and `-threads 0`, `1`, and `2`. It also covers configuration
 mode, malformed thread counts, and the single-thread requirement for
-`-debugcalc`. `iccdev.applysearch-cli-args-exhaustive` reruns that contract
+`-debugcalc`. It rejects the packed BPC selector in the `-INIT` position,
+whose API has no BPC member or hint channel, while retaining a positive control
+for BPC on an ordinary profile stage.
+`iccdev.applysearch-cli-args-exhaustive` reruns that contract
 with exactly 1,025 rows and `-threads 0`, `1`, `2`, `4`, and `8`, activating the
 bulk path and all eight workers. It carries `slow;pr-extended` for the
 comprehensive pre-PR matrix; the routine PR CTest checks the smaller boundary.

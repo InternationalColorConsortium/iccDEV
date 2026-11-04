@@ -217,7 +217,7 @@ void Usage(FILE* stream)
   fprintf(stream, "    0 - Linear\n");
   fprintf(stream, "    1 - Tetrahedral\n\n");
 
-  fprintf(stream, "  For init_intent/intent1/intent2/mid_intent:\n");
+  fprintf(stream, "  For intent1/intent2/mid_intent:\n");
   fprintf(stream, "     0 - Perceptual\n");
   fprintf(stream, "     1 - Relative\n");
   fprintf(stream, "     2 - Saturation\n");
@@ -226,7 +226,11 @@ void Usage(FILE* stream)
   fprintf(stream, "     40 + Intent - with BPC\n");
   fprintf(stream, "     90 + Intent - Colorimetric Only\n");
   fprintf(stream, "    100 + Intent - Spectral Only\n");
-  fprintf(stream, " +10000 - Use V5 sub-profile if present\n");
+  fprintf(stream, " +10000 - Use V5 sub-profile if present\n\n");
+
+  fprintf(stream, "  For init_intent:\n");
+  fprintf(stream, "    Use the selectors above except 40 + Intent.\n");
+  fprintf(stream, "    BPC is a profile-stage option and is rejected for -INIT.\n");
   
   fprintf(stream, "\n");
 }

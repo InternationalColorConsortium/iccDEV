@@ -1606,7 +1606,11 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       nType = icXformLutColor;
     }
     else if (nType == 4) {
-      nType = icXformLutColor;
+      // BPC is carried by CIccApplyBPCHint, not by the color LUT type.
+      // CIccCfgSearchApply has no initial-BPC member and SetDstInitProfile has
+      // no hint parameter, so decoding 40 + Intent as a plain color transform
+      // silently discarded the requested BPC operation.
+      return 0;
     }
       
     // Pin the decoded values to their valid range.  Only the upper bound can

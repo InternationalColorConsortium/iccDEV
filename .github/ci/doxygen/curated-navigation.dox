@@ -92,6 +92,7 @@ configuration. Link the `IccConnect2` target. See \ref IccConnect.h
 /**
 \page curatedapplytools Apply and Benchmark
 
+- \subpage md_docs_2apply-tools-json-cli-parity "ApplyTools JSON and positional CLI parity"
 - \subpage iccapply_overview "iccApply visual lanes"
 - \subpage md_Tools_2CmdLine_2IccApplyNamedCmm_2Readme "iccApplyNamedCmm"
 - \subpage md_Tools_2CmdLine_2IccApplyProfiles_2Readme "iccApplyProfiles"

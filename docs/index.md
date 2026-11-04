@@ -12,4 +12,5 @@ tabs.
 - [Testing and CTest](testing.md)
 - [ICC.2 XML Header QA](xml-spec-qa.md)
 - [ICC XML and JSON Round-Trip QA](xml-json-roundtrip-qa.md)
+- [ApplyTools JSON and Positional CLI Parity](apply-tools-json-cli-parity.md)
 - [Valgrind-Family Analysis](valgrind-analysis.md)
