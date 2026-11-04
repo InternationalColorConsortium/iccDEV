@@ -22,7 +22,7 @@ on:
   workflow_call:
     inputs:
       os:
-        description: "Runner OS (ubuntu-latest or macos-latest)"
+        description: "Runner OS (ubuntu-latest or macos-15-intel)"
         type: string
         required: true
       python-version:

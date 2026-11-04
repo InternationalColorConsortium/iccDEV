@@ -30,7 +30,7 @@ on:
       os-list:
         description: "List of operating systems"
         required: false
-        default: '["ubuntu-latest", "macos-latest"]'
+        default: '["ubuntu-latest", "macos-15-intel"]'
         type: string
       build-types:
         description: "Build types"
@@ -90,15 +90,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(inputs.os-list || '["ubuntu-latest", "macos-latest"]') }}
+        os: ${{ fromJson(inputs.os-list || '["ubuntu-latest", "macos-15-intel"]') }}
         compiler: ${{ fromJson(inputs.compilers || '["gcc", "clang"]') }}
         build_type: ${{ fromJson(inputs.build-types || '["Release", "Debug"]') }}
         exclude:
-          - os: macos-latest
+          - os: macos-15-intel
             compiler: gcc
-          - os: macos-latest
+          - os: macos-15-intel
             compiler: gcc-15
-          - os: macos-latest
+          - os: macos-15-intel
             compiler: clang-22
           - os: ubuntu-latest
             compiler: clang
@@ -141,8 +141,8 @@ jobs:
           BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
-            ubuntu-latest|macos-latest) ;;
-            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, macos-latest"; exit 1 ;;
+            ubuntu-latest|macos-15-intel) ;;
+            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, macos-15-intel"; exit 1 ;;
           esac
           case "$COMP" in
             gcc|gcc-15|clang|clang-22) ;;

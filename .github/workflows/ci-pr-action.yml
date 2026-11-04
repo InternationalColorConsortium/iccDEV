@@ -1105,7 +1105,7 @@ jobs:
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
     with:
-      os-list: '["macos-latest"]'
+      os-list: '["macos-15-intel"]'
       build-types: '["Release"]'
       compilers: '["clang"]'
       enable-lto: true
@@ -1119,7 +1119,7 @@ jobs:
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
     with:
-      os-list: '["macos-latest"]'
+      os-list: '["macos-15-intel"]'
       build-types: '["Debug"]'
       compilers: '["clang"]'
       enable-lto: false

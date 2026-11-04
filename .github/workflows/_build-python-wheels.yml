@@ -57,7 +57,7 @@ jobs:
           - {id: linux-aarch64, os: ubuntu-24.04-arm, platform: linux, arch: aarch64}
           - {id: macos-x86_64, os: macos-15-intel, platform: macos, arch: x86_64}
           - {id: macos-arm64, os: macos-15, platform: macos, arch: arm64}
-          - {id: macos-universal2, os: macos-15, platform: macos, arch: universal2}
+          - {id: macos-universal2, os: macos-15-intel, platform: macos, arch: universal2}
           - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64}
           - {id: windows-arm64, os: windows-11-arm, platform: windows, arch: ARM64}
     defaults:
@@ -72,8 +72,8 @@ jobs:
       CIBW_TEST_COMMAND: >-
         python -m pytest --rootdir "{project}" --import-mode=importlib
         "{project}/python/tests" -v --tb=short -m "not parity"
-      # The arm64 host tests this slice; the Intel lane tests native x86_64 wheels.
-      CIBW_TEST_SKIP: "*-macosx_universal2:x86_64"
+      # Native arm64 and x86_64 lanes test both slices independently.
+      CIBW_TEST_SKIP: "*-macosx_universal2:arm64"
     steps:
       - name: Checkout wheel source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -60,6 +60,10 @@ gates in the screening record when their contracts apply.
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 | Unified Dockerfile | `Dockerfile` | Published runtime, MCP, and pinned CI dependency image. |
 
+Generic macOS build, CTest, JSON, and universal2 wheel jobs use the
+`macos-15-intel` hosted runner.  Native arm64 wheel and Apple SDK/mobile jobs
+remain on Apple Silicon so architecture-specific runtime coverage is retained.
+
 ## PR Path Classification
 
 `ci-matlab` is manual-dispatch only. It retains the R2026a Windows native

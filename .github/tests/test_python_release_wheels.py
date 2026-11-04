@@ -406,7 +406,7 @@ def test_shared_macos_wheel_lanes_use_supported_native_hosts():
     assert lanes == {
         "macos-x86_64": ("macos-15-intel", "x86_64"),
         "macos-arm64": ("macos-15", "arm64"),
-        "macos-universal2": ("macos-15", "universal2"),
+        "macos-universal2": ("macos-15-intel", "universal2"),
     }
 
 

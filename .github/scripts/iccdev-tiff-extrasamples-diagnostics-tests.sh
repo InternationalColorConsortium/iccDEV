@@ -271,7 +271,7 @@ dump_extrasamples_line() {
 dump_succeeded() {
   local f="$1" expected_samples="$2" out
   out="$("$TIFFDUMP" "$f" 2>/dev/null)" || return 1
-  printf '%s\n' "$out" | grep -q "^SamplesPerPixel: *${expected_samples}\$"
+  grep -q "^SamplesPerPixel: *${expected_samples}\$" <<< "$out"
 }
 
 require_tools() {

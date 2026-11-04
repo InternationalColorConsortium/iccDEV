@@ -61,7 +61,7 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
     uses: ./.github/workflows/_build-test-unix.yml
     with:
-      os: macos-latest
+      os: macos-15-intel
       python-version: ${{ matrix.python-version }}
       run-full-tests: false
       run-wheel-smoke: false
