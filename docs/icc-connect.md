@@ -58,6 +58,11 @@ passed to `CreateStandard` or `CreateSearch` are not retained by the library,
 but they must stay valid for the duration of the call, which performs `Begin()`
 before returning.
 
+For `CreateSearch`, each profile stage's `useBPC` and
+`adjustPcsLuminance` selectors are retained when the search CMM expands that
+stage into its forward and reverse sub-chains. This applies equally to embedded
+and file-backed profiles.
+
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call

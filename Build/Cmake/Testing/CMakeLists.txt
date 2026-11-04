@@ -533,12 +533,15 @@ function(iccdev_add_createsearch_embedded_profile_test)
   # search converges quickly and the run stays well inside the timeout below.
   set(_createsearch_embedded_profile
     "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
+  set(_createsearch_bpc_profile
+    "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc")
 
   if(WIN32)
     add_test(
       NAME iccdev.createsearch-embedded-profile
       COMMAND "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
         "${_createsearch_embedded_profile}"
+        "${_createsearch_bpc_profile}"
     )
   else()
     add_test(
@@ -548,6 +551,7 @@ function(iccdev_add_createsearch_embedded_profile_test)
         ${ICCDEV_TEST_ENV}
         "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
         "${_createsearch_embedded_profile}"
+        "${_createsearch_bpc_profile}"
     )
   endif()
   # A Nelder-Mead search runs per sample and the helper drives five chains
@@ -557,7 +561,7 @@ function(iccdev_add_createsearch_embedded_profile_test)
   set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 300
-    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression"
+    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression;issue-2980"
   )
   if(WIN32)
     set(_createsearch_embedded_windows_env_mods

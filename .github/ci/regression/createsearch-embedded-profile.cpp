@@ -25,7 +25,7 @@
     behind isInitialized().
 
     Usage:
-      createsearch-embedded-profile <profile.icc>
+      createsearch-embedded-profile <search-profile.icc> <bpc-profile.icc>
 
     Exit codes:
       0 - embedded and file-path search chains agree, and parsing behaves
@@ -63,16 +63,26 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "IccConnect.h"
-#include "IccCmmConfig.h"
-#include "IccUtil.h"
-
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <list>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+// White-box access is limited to this regression translation unit. It lets the
+// test inspect the search sub-chains without adding public test accessors.
+// Pre-include the standard headers used by ICC headers so the access macro does
+// not rewrite a standard-library class.
+#define protected public
+#include "IccConnect.h"
+#undef protected
+#include "IccCmmConfig.h"
+#include "IccUtil.h"
 
 // The search minimises a numerical cost, so two chains that differ only in how
 // the source profile was attached still have to agree bit-for-bit only up to
@@ -133,13 +143,15 @@ static const int kNumSamples = (int)(sizeof(kSamples) / sizeof(kSamples[0]));
 
 int main(int argc, char** argv)
 {
-  if (argc != 2) {
-    std::fprintf(stderr, "usage: %s <profile.icc>\n",
+  if (argc != 3) {
+    std::fprintf(stderr,
+                 "usage: %s <search-profile.icc> <bpc-profile.icc>\n",
                  argv[0] ? argv[0] : "createsearch-embedded-profile");
     return 2;
   }
 
   const char* profilePath = argv[1];
+  const char* bpcProfilePath = argv[2];
   int failures = 0;
 
   // ------------------------------------------------------------------
@@ -190,6 +202,70 @@ int main(int argc, char** argv)
   CIccCfgSearchApply fileCfg;
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
+
+  // #2980: file-backed search stages must retain their BPC and PCS-luminance
+  // hints when CIccCmmSearch expands them into forward and reverse sub-chains.
+  {
+    CIccCfgSearchApply bpcCfg;
+    CIccCfgProfilePtr bpcStage = MakeStage(bpcProfilePath);
+    bpcStage->m_useBPC = true;
+    bpcCfg.m_profiles.push_back(bpcStage);
+    bpcCfg.m_profiles.push_back(MakeStage(bpcProfilePath));
+
+    std::string sBpcErr;
+    std::unique_ptr<CIccConnectCmm> bpc(
+      CIccConnectCmm::CreateSearch(bpcCfg, nullptr, 0, 1, &sBpcErr));
+    if (!bpc || !bpc->GetSearchCmm()) {
+      std::fprintf(stderr,
+                   "createsearch-embedded-profile: FAIL  BPC stage hint: %s\n",
+                   sBpcErr.empty() ? "no error reported" : sBpcErr.c_str());
+      failures++;
+    }
+    else {
+      CIccCmmSearch* search = bpc->GetSearchCmm();
+      CIccCmm* forward = search->m_mid_to_dst.get();
+      CIccCmm* reverse = search->m_dst_to_mid.empty() ? nullptr :
+        search->m_dst_to_mid[0].get();
+      failures += check(forward && forward->GetFirstXform() &&
+                          forward->GetFirstXform()->NeedAdjustPCS(),
+                        "file-backed source stage retains BPC hint");
+      failures += check(reverse && reverse->GetLastXform() &&
+                          reverse->GetLastXform()->NeedAdjustPCS(),
+                        "reverse sub-chain retains source BPC hint");
+    }
+  }
+  {
+    CIccCfgSearchApply luminanceCfg;
+    luminanceCfg.m_profiles.push_back(MakeStage(profilePath));
+    CIccCfgProfilePtr luminanceStage = MakeStage(profilePath);
+    luminanceStage->m_adjustPcsLuminance = true;
+    luminanceCfg.m_profiles.push_back(luminanceStage);
+
+    std::string sLuminanceErr;
+    std::unique_ptr<CIccConnectCmm> luminance(
+      CIccConnectCmm::CreateSearch(luminanceCfg, nullptr, 0, 1,
+                                   &sLuminanceErr));
+    if (!luminance || !luminance->GetSearchCmm()) {
+      std::fprintf(stderr,
+                   "createsearch-embedded-profile: FAIL  PCS-luminance stage "
+                   "hint: %s\n",
+                   sLuminanceErr.empty() ? "no error reported" :
+                     sLuminanceErr.c_str());
+      failures++;
+    }
+    else {
+      CIccCmmSearch* search = luminance->GetSearchCmm();
+      CIccCmm* forward = search->m_mid_to_dst.get();
+      CIccCmm* reverse = search->m_dst_to_mid.empty() ? nullptr :
+        search->m_dst_to_mid[0].get();
+      failures += check(forward && forward->GetLastXform() &&
+                          forward->GetLastXform()->LuminanceMatching(),
+                        "file-backed destination retains PCS-luminance hint");
+      failures += check(reverse && reverse->GetFirstXform() &&
+                          reverse->GetFirstXform()->LuminanceMatching(),
+                        "reverse sub-chain retains destination luminance hint");
+    }
+  }
 
   std::string sEmbeddedErr;
   std::unique_ptr<CIccConnectCmm> embedded(

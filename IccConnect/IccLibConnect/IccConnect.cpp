@@ -503,23 +503,22 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
     // profile carried by the source image".  The memory overload of
     // CIccCmm::AddXform attaches a CIccMemIO and then dispatches virtually, so
     // it still lands in CIccCmmSearch::AddXform; the bytes only have to outlive
-    // the Begin() below, which this function performs.  Unlike the file-path
-    // stages here, this branch builds the BPC and PCS-luminance hints, matching
-    // CreateStandard's embedded branch.
+    // the Begin() below, which this function performs. BPC and PCS-luminance
+    // hints apply to every stage regardless of how its profile is loaded.
     const bool bUseEmbedded = bFirst && pCfg->m_iccFile.empty() &&
                               pEmbeddedData && nEmbeddedLen;
 
-    if (bUseEmbedded && pCfg->m_useBPC) {
+    if (pCfg->m_useBPC) {
       stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
       if (stat != icCmmStatOk) {
-        sStageErr = "failed to attach BPC hint for embedded source profile";
+        sStageErr = "failed to attach BPC hint";
         goto search_stage_failed;
       }
     }
-    if (bUseEmbedded && pCfg->m_adjustPcsLuminance) {
+    if (pCfg->m_adjustPcsLuminance) {
       stat = AddHintNoThrow(Hint, new (std::nothrow) CIccLuminanceMatchingHint());
       if (stat != icCmmStatOk) {
-        sStageErr = "failed to attach PCS-luminance hint for embedded source profile";
+        sStageErr = "failed to attach PCS-luminance hint";
         goto search_stage_failed;
       }
     }
