@@ -10150,11 +10150,20 @@ icStatusCMM CIccCmm::CheckPCSRangeConversions()
       if (last->ptr->IsInput() && last->ptr->IsExtendedPCS() && IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) &&
         !next->ptr->IsExtendedPCS()) {
         CIccProfile* pProfile = last->ptr->GetProfilePtr();
-        CIccTag* pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());
-        if (!pTag) {
+        CIccTag* pTag = NULL;
+
+        // ICC.2:2023 8.14.3 gives abstract profiles an H2S0-only rule;
+        // the intent-specific fallback cascade in 8.14.2 does not apply.
+        if (pProfile->m_Header.deviceClass == icSigAbstractClass) {
           pTag = pProfile->FindTag(icSigHToS0Tag);
+        }
+        else {
+          pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());
           if (!pTag) {
-            pTag = pProfile->FindTag(icSigHToS1Tag);
+            pTag = pProfile->FindTag(icSigHToS0Tag);
+            if (!pTag) {
+              pTag = pProfile->FindTag(icSigHToS1Tag);
+            }
           }
         }
         //If we find the HToSxTag then create a transform for it and inject it into the transform list
