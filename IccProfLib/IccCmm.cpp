@@ -10150,13 +10150,26 @@ icStatusCMM CIccCmm::CheckPCSRangeConversions()
       if (last->ptr->IsInput() && last->ptr->IsExtendedPCS() && IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) &&
         !next->ptr->IsExtendedPCS()) {
         CIccProfile* pProfile = last->ptr->GetProfilePtr();
+        // ICC.2:2023 8.14.2 defines the range-conversion precedence as the
+        // intent-specific tag, then H2S0, H2S1, and finally H2S3.
         CIccTag* pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());
-        if (!pTag) {
+        if (!pTag)
           pTag = pProfile->FindTag(icSigHToS0Tag);
-          if (!pTag) {
-            pTag = pProfile->FindTag(icSigHToS1Tag);
-          }
-        }
+        if (!pTag)
+          pTag = pProfile->FindTag(icSigHToS1Tag);
+
+        // The H2S3 fallback belongs to the intent-based cascades in 8.14.2
+        // and 8.14.7. Abstract profiles have the separate H2S0-only rule in
+        // 8.14.3, and the remaining profile classes define no such fallback.
+        icProfileClassSignature profileClass = pProfile->m_Header.deviceClass;
+        bool bUseHToS3Fallback =
+          profileClass == icSigInputClass ||
+          profileClass == icSigDisplayClass ||
+          profileClass == icSigOutputClass ||
+          profileClass == icSigColorSpaceClass ||
+          profileClass == icSigMultiplexVisualizationClass;
+        if (!pTag && bUseHToS3Fallback)
+          pTag = pProfile->FindTag(icSigHToS3Tag);
         //If we find the HToSxTag then create a transform for it and inject it into the transform list
         if (pTag) {
           // pProfile is borrowed here (it is shared with the surrounding link and

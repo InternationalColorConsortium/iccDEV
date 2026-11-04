@@ -196,6 +196,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.same-file-identity` | `.github/ci/regression/same-file-identity.cpp`; `icIsSameFile()` compares file identity, not spelling, for issue #2692: the same path, `./`, a hard link and a symlink match, a byte-for-byte copy does not. Registered for Windows too, so the Win32 half runs in CI |
 | `iccdev.issue-2692-same-file-output-regression` | `.github/scripts/iccdev-issue-2692-same-file-output-regression.sh`; iccApplyProfiles, iccSpecSepToTiff, iccTiffDump, iccJpegDump and iccPngDump refuse an output that is one of their inputs, with the input left byte-identical (#2692) |
 | `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
+| `iccdev.cmm-htos-fallback` | `.github/ci/regression/cmm-htos-fallback.cpp`; pins the ICC.2:2023 8.14.2 HDR-to-SDR precedence through its H2S3 final fallback, with H2S0, H2S1, and no-tag controls (#2983) |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.namedcmm-sample-guards` | `.github/ci/regression/namedcmm-sample-guards.cpp`; `CIccNamedColorCmm::Begin()` refuses a spectral source or destination that a colorimetric AToB3/BToA3 fallback cannot serve, as `CIccCmm::Begin()` does, for issue #2704 |
 | `iccdev.curve-apply-gamma` | `.github/ci/regression/curve-apply-gamma.cpp`; direct one-entry gamma API contract for issue #2686 |

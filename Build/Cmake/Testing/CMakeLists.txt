@@ -575,6 +575,51 @@ function(iccdev_add_createsearch_embedded_profile_test)
   endif()
 endfunction()
 
+function(iccdev_add_cmm_htos_fallback_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmHToSFallbackTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmm-htos-fallback.cpp"
+  )
+  target_compile_features(iccCmmHToSFallbackTest PRIVATE cxx_std_17)
+  target_link_libraries(iccCmmHToSFallbackTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCmmHToSFallbackTest)
+
+  if(WIN32)
+    set(_htos_fallback_profile_root "${ICCDEV_TEST_OUTDIR}/windows-testing")
+  else()
+    set(_htos_fallback_profile_root "${ICCDEV_TESTING_DIR}")
+  endif()
+
+  add_test(
+    NAME iccdev.cmm-htos-fallback
+    COMMAND "$<TARGET_FILE:iccCmmHToSFallbackTest>"
+      "${_htos_fallback_profile_root}/HDR/BT2100PQNarrowScene.icc"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.cmm-htos-fallback PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;hdr;iccmax;issue-2983;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+  if(WIN32)
+    set(_htos_fallback_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmHToSFallbackTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _htos_fallback_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.cmm-htos-fallback PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_htos_fallback_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mru_apply_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13188,6 +13233,7 @@ if(WIN32)
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_createsearch_embedded_profile_test()
+  iccdev_add_cmm_htos_fallback_test()
   iccdev_add_mru_apply_ownership_test()
   iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_cmmsearch_rebegin_test()
@@ -13751,6 +13797,7 @@ iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_createsearch_embedded_profile_test()
+iccdev_add_cmm_htos_fallback_test()
 iccdev_add_mru_apply_ownership_test()
 iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_cmmsearch_rebegin_test()
