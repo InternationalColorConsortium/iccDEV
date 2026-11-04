@@ -531,6 +531,9 @@ function(iccdev_add_createsearch_embedded_profile_test)
 
   # sRGB_D65_MAT.icc is a tracked v5 matrix/TRC profile, so a profile->itself
   # search converges quickly and the run stays well inside the timeout below.
+  # The same helper also inspects the initialized search CMM to keep
+  # searchApply.initial.interpolation distinct from the final profile setting
+  # (#2978); that assertion needs no interpolation-sensitive fixture.
   set(_createsearch_embedded_profile
     "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
 
@@ -557,7 +560,7 @@ function(iccdev_add_createsearch_embedded_profile_test)
   set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 300
-    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression"
+    LABELS "iccdev;iccconnect;cmmsearch;embedded;issue-2978;regression"
   )
   if(WIN32)
     set(_createsearch_embedded_windows_env_mods

@@ -58,6 +58,11 @@ passed to `CreateStandard` or `CreateSearch` are not retained by the library,
 but they must stay valid for the duration of the call, which performs `Begin()`
 before returning.
 
+For `CreateSearch`, `searchApply.initial.interpolation` configures the optional
+destination initializer independently of the final profile stage's
+`interpolation`. A mixed configuration retains both values; the initializer is
+not forced to use the final stage's interpolation.
+
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call

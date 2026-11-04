@@ -63,16 +63,27 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "IccConnect.h"
-#include "IccCmmConfig.h"
-#include "IccUtil.h"
-
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
+#include <list>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+// White-box access is limited to this regression translation unit.  It lets
+// the test verify which interpolation CreateSearch installed without adding a
+// test-only accessor to the public CIccCmmSearch API.  Pre-include every C++
+// standard header used by the ICC headers so the access macro cannot rewrite a
+// standard-library class.
+#define protected public
+#include "IccConnect.h"
+#undef protected
+#include "IccCmmConfig.h"
+#include "IccUtil.h"
 
 // The search minimises a numerical cost, so two chains that differ only in how
 // the source profile was attached still have to agree bit-for-bit only up to
@@ -190,6 +201,52 @@ int main(int argc, char** argv)
   CIccCfgSearchApply fileCfg;
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
+
+  // #2978: initial interpolation is independent of the final profile's
+  // interpolation in JSON.  Cross the two values so this fails if
+  // CreateSearch accidentally takes the final stage's value again.
+  {
+    json cfg;
+    json stage;
+    stage["iccFile"] = profilePath;
+    stage["intent"] = "relative";
+    stage["interpolation"] = "tetrahedral";
+    cfg["profileSequence"].push_back(stage);
+    cfg["profileSequence"].push_back(stage);
+    cfg["initial"]["intent"] = "relative";
+    cfg["initial"]["interpolation"] = "linear";
+
+    CIccCfgSearchApply distinctInterpolation;
+    const bool parsed = distinctInterpolation.fromJson(cfg, true);
+    failures += check(parsed && distinctInterpolation.isInitialized() &&
+                        distinctInterpolation.m_interpolationInitial == icInterpLinear &&
+                        distinctInterpolation.m_profiles.back()->m_interpolation ==
+                          icInterpTetrahedral,
+                      "search config keeps initial and final interpolation distinct");
+
+    if (parsed) {
+      std::string sInterpolationErr;
+      std::unique_ptr<CIccConnectCmm> initialInterpolationCmm(
+        CIccConnectCmm::CreateSearch(distinctInterpolation, nullptr, 0, 1,
+                                     &sInterpolationErr));
+      if (!initialInterpolationCmm || !initialInterpolationCmm->GetSearchCmm()) {
+        std::fprintf(stderr,
+                     "createsearch-embedded-profile: FAIL  distinct initial "
+                     "interpolation CreateSearch: %s\n",
+                     sInterpolationErr.empty() ? "no error reported" :
+                       sInterpolationErr.c_str());
+        failures++;
+      }
+      else {
+        CIccCmmSearch* search = initialInterpolationCmm->GetSearchCmm();
+        CIccXform* initialXform = search->m_mid_to_dst ?
+          search->m_mid_to_dst->GetLastXform() : nullptr;
+        failures += check(
+          initialXform && initialXform->GetInterp() == icInterpLinear,
+          "CreateSearch applies searchApply.initial.interpolation");
+      }
+    }
+  }
 
   std::string sEmbeddedErr;
   std::unique_ptr<CIccConnectCmm> embedded(

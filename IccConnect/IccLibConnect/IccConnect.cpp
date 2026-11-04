@@ -673,7 +673,7 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
     pCmm->SetDstInitProfile(
       pProfile,
       searchApply.m_intentInitial,
-      pLastCfg->m_interpolation,
+      searchApply.m_interpolationInitial,
       pPcc,
       searchApply.m_transformInitial,
       searchApply.m_useD2BxB2DxInitial
