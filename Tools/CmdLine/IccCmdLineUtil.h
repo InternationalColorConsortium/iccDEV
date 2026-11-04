@@ -475,32 +475,31 @@ inline ICC_CMDLINE_NO_SANITIZE_INTEGER bool icSha256File(
   size_t used = 0;
   unsigned long long totalBytes = 0;
   unsigned char readBuffer[4096];
-  size_t n;
   for (;;) {
-    n = fread(readBuffer, 1, sizeof(readBuffer), f);
-    totalBytes += (unsigned long long)n;
-    for (size_t offset = 0; offset < n;) {
-      const size_t take = (n - offset < sizeof(block) - used)
-        ? n - offset : sizeof(block) - used;
-      memcpy(block + used, readBuffer + offset, take);
-      used += take;
-      offset += take;
-      if (used == sizeof(block)) {
-        icSha256Block(h, block);
-        used = 0;
+    const size_t n = fread(readBuffer, 1, sizeof(readBuffer), f);
+    if (n) {
+      totalBytes += (unsigned long long)n;
+      for (size_t offset = 0; offset < n;) {
+        const size_t take = (n - offset < sizeof(block) - used)
+          ? n - offset : sizeof(block) - used;
+        memcpy(block + used, readBuffer + offset, take);
+        used += take;
+        offset += take;
+        if (used == sizeof(block)) {
+          icSha256Block(h, block);
+          used = 0;
+        }
       }
     }
 
-    // A short fread can return useful bytes while also setting EOF or the
-    // error indicator.  Consume those bytes, then inspect the indicators below
-    // instead of issuing another read against a failed stream position.
-    if (n < sizeof(readBuffer))
+    if (n < sizeof(readBuffer)) {
+      const bool readOk = ferror(f) == 0;
+      fclose(f);
+      if (!readOk)
+        return false;
       break;
+    }
   }
-  const bool readOk = ferror(f) == 0;
-  fclose(f);
-  if (!readOk)
-    return false;
 
   block[used++] = 0x80;
   if (used > 56) {

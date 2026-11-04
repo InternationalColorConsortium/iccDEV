@@ -496,28 +496,19 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
         printf("[INFO] Replaced %zu existing ICC_PROFILE APP2 chunk(s).\n", removedChunks);
 
     unsigned char buf[4096];
-    size_t n;
     for (;;) {
-        n = fread(buf, 1, sizeof(buf), in);
-        if (n > 0 && fwrite(buf, 1, n, out) != n)
+        const size_t n = fread(buf, 1, sizeof(buf), in);
+        if (n && fwrite(buf, 1, n, out) != n)
             safe_exit("Failed to write JPEG output.");
 
-        // A short fread can carry the last bytes together with EOF or an I/O
-        // error.  Process them once, then inspect ferror() below rather than
-        // reading again from a stream whose position may be indeterminate.
-        if (n < sizeof(buf))
+        // A short read marks EOF or an error.  Stop here so the next iteration
+        // cannot call fread() again after either stream indicator is set.
+        if (n < sizeof(buf)) {
+            if (ferror(in))
+                safe_exit("Failed to read JPEG input.");
             break;
+        }
     }
-
-    // The loop above ends on a short read, which fread can report for BOTH
-    // end-of-file and a read error -- the count alone cannot tell them apart,
-    // so the error indicator has to be consulted separately (#2162). Without
-    // this the copy stopped silently on an I/O error part-way through the image data:
-    // the output JPEG was left truncated with no EOI marker, yet this function
-    // returned true and the tool reported "successfully injected" and exited 0.
-    // Every fwrite above is already checked; this gives the read side parity.
-    if (ferror(in))
-        safe_exit("Failed to read JPEG input.");
 
     fclose(in);
     if (!icFlushAndClose(out))
