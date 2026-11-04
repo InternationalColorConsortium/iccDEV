@@ -399,14 +399,47 @@ def test_shared_uploads_are_opt_in_and_exclude_pr_events():
 
 def test_shared_macos_wheel_lanes_use_supported_native_hosts():
     lanes = {
-        lane["id"]: (lane["os"], lane["arch"])
+        lane["id"]: (lane["os"], lane["arch"], lane["timeout_minutes"])
         for lane in shared_wheel_job()["strategy"]["matrix"]["include"]
         if lane["platform"] == "macos"
     }
     assert lanes == {
-        "macos-x86_64": ("macos-15-intel", "x86_64"),
-        "macos-arm64": ("macos-15", "arm64"),
-        "macos-universal2": ("macos-15", "universal2"),
+        "macos-x86_64": ("macos-15-intel", "x86_64", 90),
+        "macos-arm64": ("macos-15", "arm64", 105),
+        "macos-universal2": ("macos-15", "universal2", 105),
+    }
+    assert shared_wheel_job()["timeout-minutes"] == "${{ matrix.timeout_minutes }}"
+
+
+def test_macos_execution_timeouts_cover_runner_latency():
+    release = load_workflow("ci-latest-release.yml")["jobs"]
+    assert release["macos"]["runs-on"] == "macos-15"
+    assert release["macos"]["timeout-minutes"] == 75
+
+    apple = load_workflow("ci-apple-mobile-core.yml")["jobs"]["build"]
+    assert apple["runs-on"] == "macos-latest"
+    assert apple["timeout-minutes"] == 60
+
+    unix = load_workflow("_build-test-unix.yml")
+    timeout = unix[True]["workflow_call"]["inputs"]["timeout-minutes"]
+    assert timeout["default"] == 45
+    assert unix["jobs"]["build-test"]["timeout-minutes"] == (
+        "${{ inputs.timeout-minutes }}"
+    )
+
+    primary = load_workflow("_build-matrix.yml")["jobs"]["standard-builds"]
+    assert primary["with"]["timeout-minutes"] == (
+        "${{ matrix.os == 'macos-latest' && 60 || 45 }}"
+    )
+    python_macos = load_workflow("ci-json-python.yml")["jobs"]["macos"]
+    assert python_macos["with"]["timeout-minutes"] == 60
+
+    matlab = load_workflow("ci-matlab.yml")["jobs"]["unix"]
+    assert matlab["timeout-minutes"] == "${{ matrix.timeout_minutes }}"
+    matlab_lanes = matlab["strategy"]["matrix"]["include"]
+    assert {lane["runner"]: lane["timeout_minutes"] for lane in matlab_lanes} == {
+        "ubuntu-latest": 45,
+        "macos-15": 60,
     }
 
 
