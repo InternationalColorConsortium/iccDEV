@@ -4,7 +4,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Reusable/manual C++ static lint report for iccDEV pull requests.
+# Intent: Reusable/manual C++ static-analysis report for iccDEV pull requests.
 #
 ###############################################################
 
@@ -39,6 +39,11 @@ on:
         required: false
         default: true
         type: boolean
+      run-scan-build:
+        description: "Run Clang Static Analyzer scan-build"
+        required: false
+        default: true
+        type: boolean
 
   workflow_call:
     inputs:
@@ -54,6 +59,11 @@ on:
         type: boolean
       run-clang-tidy:
         description: "Run clang-tidy"
+        required: false
+        default: true
+        type: boolean
+      run-scan-build:
+        description: "Run Clang Static Analyzer scan-build"
         required: false
         default: true
         type: boolean
@@ -592,3 +602,292 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
           path: lint_reports/
+
+  scan-build:
+    name: "scan-build"
+    if: inputs['run-scan-build']
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      SCAN_BUILD_DIR: /tmp/iccdev-scan-build
+      SCAN_REPORT_ROOT: scan-build-reports
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      # preflight: allow-package-install reason=scan-build-tool-bootstrap
+      - name: Install scan-build dependencies
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential cmake clang clang-tools pkg-config \
+            libpng-dev libxml2-dev libtiff-dev libjpeg-dev zlib1g-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common llvm
+
+          {
+            echo "### scan-build Environment"
+            echo ""
+            echo "| Tool | Detail |"
+            echo "|------|--------|"
+            printf '| scan-build | %s |\n' "$(sanitize_line "$(command -v scan-build)")"
+            printf '| clang | %s |\n' "$(sanitize_line "$(clang --version 2>&1 | sed -n '1p')")"
+            printf '| cmake | %s |\n' "$(sanitize_line "$(cmake --version | sed -n '1p')")"
+            printf '| parallel jobs | %s |\n' "$(sanitize_line "$(nproc)")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Configure analyzer build
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          cmake -E remove_directory "$SCAN_BUILD_DIR"
+          cmake -E remove_directory "$SCAN_REPORT_ROOT"
+          scan-build \
+            -analyzer-config stable-report-filename=true \
+            --use-cc clang \
+            --use-c++ clang++ \
+            cmake -S Build/Cmake -B "$SCAN_BUILD_DIR" -G "Unix Makefiles" \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DENABLE_TOOLS=ON \
+              -DENABLE_TESTS=OFF \
+              -DENABLE_WXWIDGETS=OFF \
+              -DICC_USE_ZLIB=ON \
+              -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
+              -Wno-dev
+
+      - name: Run scan-build
+        id: scan
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          mkdir -p "$SCAN_REPORT_ROOT"
+          set +e
+          scan-build \
+            --status-bugs \
+            --keep-going \
+            -analyzer-config stable-report-filename=true \
+            --use-cc clang \
+            --use-c++ clang++ \
+            -o "$SCAN_REPORT_ROOT" \
+            make -C "$SCAN_BUILD_DIR" -j"$(nproc)" \
+            > scan-build-output.log 2>&1
+          scan_status=$?
+          set -e
+          cat scan-build-output.log
+
+          report_count="$(find "$SCAN_REPORT_ROOT" -type f -name 'report-*.html' -print | wc -l | tr -d ' ')"
+          failure_count="$(find "$SCAN_REPORT_ROOT" -type f -path '*/failures/*' -print | wc -l | tr -d ' ')"
+
+          : > scan-build-findings.txt
+          : > scan-build-accepted.txt
+          : > scan-build-actionable.txt
+
+          # Keep the unix.Stream checker enabled. These exact source/function/type/
+          # content-hash identities are the reviewed stdio ownership-model false
+          # positives. A changed source line, function, path, or diagnostic remains
+          # actionable and fails the job so that the baseline cannot drift silently.
+          is_reviewed_false_positive() {
+            case "$1" in
+              'Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
+              'Tools/CmdLine/IccApplySearch/iccApplySearch.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
+              'Tools/CmdLine/IccApplyNamedCmm/iccApplyNamedCmm.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
+              'Tools/CmdLine/IccProfileVisualize/MiniTIFF.cpp|WriteTIFF|Resource leak|2222e639d697969968cd3ea9c59183c3' | \
+              'Tools/CmdLine/IccProfilePlot/MiniTIFF.cpp|WriteTIFF|Resource leak|2222e639d697969968cd3ea9c59183c3' | \
+              'IccConnect/IccLibConnect/IccJsonUtil.cpp|saveJsonAs|Resource leak|29db7ce8d2bae091782aefe01b4b2bff' | \
+              'Tools/CmdLine/IccProfilePlot/MiniPDF.cpp|CloseFile|Resource leak|6c3bedb35809b66b71f6bbeb51e804cc' | \
+              'IccConnect/IccLibConnect/IccCmmConfig.cpp|toIt8|Resource leak|6fa21eca8aff53685574c31d9b149ae3' | \
+              'Tools/CmdLine/IccProfilePlot/MiniSVG.cpp|CloseFile|Resource leak|bcb4da4aa1215ef6868e7a37b6156bad' | \
+              'Tools/CmdLine/IccJpegDump/iccJpegDump.cpp|ExtractIccFromJpeg|Resource leak|d9ed6da13d55b573439a18caaac16929' | \
+              'Tools/CmdLine/IccPngDump/iccPngDump.cpp|InjectIccProfileData|Resource leak|f0c7f81f73787b9642dda64ec0de2611')
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+
+          while IFS= read -r -d '' report; do
+            bug_file="$(sed -n 's/.*<!-- BUGFILE \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            bug_line="$(sed -n 's/.*<!-- BUGLINE \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            bug_function="$(sed -n 's/.*<!-- FUNCTIONNAME \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            bug_type="$(sed -n 's/.*<!-- BUGTYPE \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            bug_desc="$(sed -n 's/.*<!-- BUGDESC \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            bug_hash="$(sed -n 's/.*<!-- ISSUEHASHCONTENTOFLINEINCONTEXT \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
+            case "$bug_file" in
+              "$PWD"/*)
+                bug_file="${bug_file#"$PWD"/}"
+                ;;
+            esac
+            finding="${bug_file:-unknown}:${bug_line:-0}: ${bug_type:-unknown}: ${bug_desc:-no description} [${bug_function:-unknown}; ${bug_hash:-no-hash}]"
+            finding_key="${bug_file:-unknown}|${bug_function:-unknown}|${bug_type:-unknown}|${bug_hash:-no-hash}"
+            printf '%s\n' "$finding" >> scan-build-findings.txt
+            if is_reviewed_false_positive "$finding_key"; then
+              printf '%s\n' "$finding" >> scan-build-accepted.txt
+            else
+              printf '%s\n' "$finding" >> scan-build-actionable.txt
+            fi
+          done < <(find "$SCAN_REPORT_ROOT" -type f -name 'report-*.html' -print0 | sort -z)
+
+          accepted_count="$(wc -l < scan-build-accepted.txt | tr -d ' ')"
+          actionable_count="$(wc -l < scan-build-actionable.txt | tr -d ' ')"
+
+          if [ "$failure_count" -gt 0 ]; then
+            signal="analyzer-or-build-failure"
+          elif [ "$scan_status" -ge 128 ]; then
+            signal="signal-$((scan_status - 128))"
+          elif [ "$actionable_count" -gt 0 ]; then
+            signal="findings"
+          elif [ "$scan_status" -eq 0 ] && [ "$report_count" -eq 0 ]; then
+            signal="clean"
+          elif [ "$scan_status" -eq 1 ] && [ "$report_count" -gt 0 ] && \
+               [ "$accepted_count" -eq "$report_count" ]; then
+            signal="clean"
+          else
+            signal="analyzer-or-build-failure"
+          fi
+
+          {
+            printf 'status=%s\n' "$(sanitize_line "$scan_status")"
+            printf 'report_count=%s\n' "$(sanitize_line "$report_count")"
+            printf 'accepted_count=%s\n' "$(sanitize_line "$accepted_count")"
+            printf 'actionable_count=%s\n' "$(sanitize_line "$actionable_count")"
+            printf 'failure_count=%s\n' "$(sanitize_line "$failure_count")"
+            printf 'signal=%s\n' "$(sanitize_line "$signal")"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - name: Generate scan-build summary
+        if: always()
+        env:
+          SCAN_STATUS: ${{ steps.scan.outputs.status || 'not-run' }}
+          SCAN_REPORT_COUNT: ${{ steps.scan.outputs.report_count || '0' }}
+          SCAN_ACCEPTED_COUNT: ${{ steps.scan.outputs.accepted_count || '0' }}
+          SCAN_ACTIONABLE_COUNT: ${{ steps.scan.outputs.actionable_count || '0' }}
+          SCAN_FAILURE_COUNT: ${{ steps.scan.outputs.failure_count || '0' }}
+          SCAN_SIGNAL: ${{ steps.scan.outputs.signal || 'setup-failure' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          {
+            echo "## scan-build Signal"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            printf '| Signal | %s |\n' "$(sanitize_line "$SCAN_SIGNAL")"
+            printf '| Exit status | %s |\n' "$(sanitize_line "$SCAN_STATUS")"
+            printf '| HTML findings | %s |\n' "$(sanitize_line "$SCAN_REPORT_COUNT")"
+            printf '| Reviewed false positives | %s |\n' "$(sanitize_line "$SCAN_ACCEPTED_COUNT")"
+            printf '| Actionable findings | %s |\n' "$(sanitize_line "$SCAN_ACTIONABLE_COUNT")"
+            printf '| Analyzer failure files | %s |\n' "$(sanitize_line "$SCAN_FAILURE_COUNT")"
+            echo ""
+            echo "All default checkers, including unix.Stream, remain enabled. Reviewed"
+            echo "stdio ownership-model false positives are accepted only when source path,"
+            echo "function, diagnostic type, and content hash all match the audited baseline."
+
+            if [ -s scan-build-actionable.txt ]; then
+              echo ""
+              echo "### Actionable findings"
+              echo ""
+              echo '```text'
+              shown=0
+              while IFS= read -r line; do
+                if [ "$shown" -ge 40 ]; then
+                  echo "... additional findings withheld; see the manual-run artifact"
+                  break
+                fi
+                sanitize_code_line "$line"
+                echo ""
+                shown=$((shown + 1))
+              done < scan-build-actionable.txt
+              echo '```'
+            fi
+
+            if [ -s scan-build-accepted.txt ]; then
+              echo ""
+              echo "<details><summary>Reviewed false positives</summary>"
+              echo ""
+              echo '```text'
+              shown=0
+              while IFS= read -r line; do
+                if [ "$shown" -ge 40 ]; then
+                  echo "... additional findings withheld; see the manual-run artifact"
+                  break
+                fi
+                sanitize_code_line "$line"
+                echo ""
+                shown=$((shown + 1))
+              done < scan-build-accepted.txt
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload scan-build reports
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: ci-pr-lint-scan-build-reports
+          retention-days: 3
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            scan-build-reports/
+            scan-build-output.log
+            scan-build-findings.txt
+            scan-build-accepted.txt
+            scan-build-actionable.txt
+
+      - name: Enforce scan-build signal
+        if: always()
+        env:
+          SCAN_SIGNAL: ${{ steps.scan.outputs.signal || 'setup-failure' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          if [ "$SCAN_SIGNAL" != "clean" ]; then
+            printf 'scan-build signal: %s\n' "$(sanitize_line "$SCAN_SIGNAL")" >&2
+            exit 1
+          fi
