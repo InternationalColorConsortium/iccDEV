@@ -663,8 +663,13 @@ script output and still leave a deterministic pass/fail condition.
 The `ci-json-python` orchestrator calls the reusable Unix and Windows build
 workflows. The Windows reusable workflow serially builds its CTest helper
 binaries, runs CTest discovery, and executes CTest with JUnit output. The Unix
-reusable workflow runs the Linux CTest gate for full-test jobs and verifies its
-discovered suite set before execution. `ci-pr-win` reports helper compilation
+reusable workflow runs the routine CTest gate independently of the full tool
+parity sweep, verifies its discovered suite set, and retains JUnit and discovery
+logs for non-PR developer-report runs. The comprehensive matrix enables this
+gate on both Linux and macOS. `ci-pr-action` also runs representative CTest
+coverage in its macOS Release/LTO and Debug jobs, excluding `slow`,
+`clusterfuzzlite`, `pr-extended`, and `ci-infrastructure`. `ci-pr-win` reports
+helper compilation
 and CTest execution separately for MSVC, ClangCL, and MinGW, with JUnit results
 in each lane. MSVC and ClangCL helper builds remain serial because vcpkg stages
 shared runtime DLLs; MinGW's MSYS2 static lane uses bounded two-way compilation.

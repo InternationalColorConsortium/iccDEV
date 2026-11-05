@@ -45,7 +45,7 @@ Choose the smallest gate that proves the behavior:
   those checks pass and PR creation is authorized.
 - `ci-pr-action` full: final PR-head sounding board for merge readiness. It
   builds profiles and a representative CTest corpus across deterministic Unix
-  GCC/Clang Release and Debug, exact
+  GCC/Clang Release and Debug, including macOS Clang Release/LTO and Debug, exact
   GCC 15.2 strict Release LTO, non-sanitized GCC core tool tests, and Windows
   validation. Its tool-test caller excludes `pr-extended` CTests; the reusable
   tool workflow always excludes `ci-infrastructure` and `clusterfuzzlite`

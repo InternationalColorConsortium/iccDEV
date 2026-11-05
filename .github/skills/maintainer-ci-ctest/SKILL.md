@@ -89,7 +89,8 @@ when practical.
   Its full scope runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, non-sanitized GCC core tool tests, profile builds,
-  a representative CTest corpus, and Windows.
+  representative CTest coverage in both macOS Release/LTO and Debug, and
+  Windows.
   Its tool-test caller excludes `pr-extended` CTests; the reusable tool
   workflow always excludes `ci-infrastructure` and `clusterfuzzlite` CTests.
   It does not replace exhaustive pre-PR screening or local preflight.

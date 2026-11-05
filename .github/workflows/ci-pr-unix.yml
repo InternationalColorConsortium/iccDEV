@@ -57,6 +57,11 @@ on:
         required: false
         default: full
         type: string
+      run-ctest:
+        description: "Run representative Unix CTest coverage"
+        required: false
+        default: false
+        type: boolean
       target-sha:
         description: "Exact commit SHA to check out"
         required: false
@@ -439,6 +444,31 @@ jobs:
           find . -iname "*.icc" | wc -l
           echo "Build complete."
 
+      - name: Run representative Unix CTest
+        if: ${{ inputs.run-ctest }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git config --add safe.directory "$PWD"
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
+
+          jobs="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
+          cmake --build Build --target build-test-binaries --parallel "$jobs"
+          ctest --test-dir Build -N \
+            --label-exclude 'slow|clusterfuzzlite|pr-extended|ci-infrastructure' \
+            --no-tests=error 2>&1 | tee Build/ctest-list-representative.log
+          grep -Eq 'Total Tests: [1-9][0-9]*' Build/ctest-list-representative.log
+          ctest --test-dir Build \
+            --parallel "$jobs" \
+            --label-exclude 'slow|clusterfuzzlite|pr-extended|ci-infrastructure' \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit Build/ctest-results.xml 2>&1 | tee Build/ctest-run.log
+
       - name: Generate PR Unix Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -449,6 +479,7 @@ jobs:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
           ENABLE_LTO: ${{ inputs.enable-lto && 'ON' || 'OFF' }}
           PROFILE_TEST_MODE: ${{ inputs.profile-test-mode || 'full' }}
+          RUN_CTEST: ${{ inputs.run-ctest && 'ON' || 'OFF' }}
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
@@ -465,6 +496,7 @@ jobs:
           SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")
           SANITIZED_LTO=$(sanitize_line "${ENABLE_LTO}")
           SANITIZED_PROFILE_TEST_MODE=$(sanitize_line "${PROFILE_TEST_MODE}")
+          SANITIZED_RUN_CTEST=$(sanitize_line "${RUN_CTEST}")
           SANITIZED_WARNING_POLICY=$(sanitize_line "${WARNING_POLICY}")
           {
             echo "## ci-pr-unix Build Summary"
@@ -473,5 +505,6 @@ jobs:
             echo "- **Build Type:** $SANITIZED_BUILD_TYPE"
             echo "- **LTO:**        $SANITIZED_LTO"
             echo "- **Profile Tests:** $SANITIZED_PROFILE_TEST_MODE"
+            echo "- **CTest:**      $SANITIZED_RUN_CTEST"
             echo "- **Warning Policy:** $SANITIZED_WARNING_POLICY"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

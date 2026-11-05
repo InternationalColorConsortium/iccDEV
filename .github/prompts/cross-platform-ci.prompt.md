@@ -18,7 +18,7 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 
 | Workflow | Platform | Compiler | Key Differences |
 |----------|----------|----------|-----------------|
-| `ci-pr-action.yml` | ubuntu-latest orchestrator; delegated runners | Varies by selected lane | GCC 15.2 and GCC tool gates; optional macOS Clang and Windows validation |
+| `ci-pr-action.yml` | ubuntu-latest orchestrator; delegated runners | Varies by selected lane | GCC 15.2 and GCC tool gates; macOS Clang Release/LTO and Debug CTest; optional Windows validation |
 | `ci-pr-unix.yml` | ubuntu-latest, macos-latest | System GCC/Clang by default; GCC 15/Clang 22 selectable on Linux | Versioned compilers come from runner packages or signed APT repositories |
 | `ci-pr-win.yml` | windows-latest | MSVC, ClangCL, MinGW UCRT64 | vcpkg and MSYS2 deps, PowerShell governance |
 | `ci-sanitizer-tests.yml` | ubuntu-latest, windows-2025-vs2026 | N/A (shell tests) | Bash and PowerShell sanitizer-helper regressions |
@@ -44,6 +44,12 @@ target_compile_options(target PRIVATE
   $<$<CXX_COMPILER_ID:GNU>:-Wno-maybe-uninitialized>
 )
 ```
+
+On macOS, a Release/LTO-only `dynamic_cast` failure across a dylib boundary is
+an ABI signal, not a reason to weaken the test. Check that the polymorphic base
+has an exported out-of-line key function and that explicitly instantiated
+templates have matching `extern template` declarations in consumer headers.
+Compare Release/LTO with Debug and inspect RTTI ownership with `nm -m`.
 
 #### Sanitizer-Specific
 ```

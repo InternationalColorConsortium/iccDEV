@@ -1111,6 +1111,7 @@ jobs:
       enable-lto: true
       warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       profile-test-mode: smoke
+      run-ctest: true
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-debug:
@@ -1125,6 +1126,7 @@ jobs:
       enable-lto: false
       warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       profile-test-mode: smoke
+      run-ctest: true
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   apple-xcode-ctest:
