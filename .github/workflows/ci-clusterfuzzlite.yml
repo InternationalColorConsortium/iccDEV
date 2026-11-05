@@ -362,11 +362,13 @@ jobs:
             echo "[FAIL] No bootstrap corpus archives were downloaded" >&2
             exit 1
           fi
+          mkdir -p cfl-corpus-ready
           for archive in "${archives[@]}"; do
             target="${archive##*/cifuzz-corpus-}"
             target="${target%.tar}"
             mkdir -p "cifuzz-corpus/$target"
             tar -xf "$archive" -C "cifuzz-corpus/$target"
+            printf 'ready\n' > "cfl-corpus-ready/$target"
           done
 
       - name: Run bounded batch fuzzing
@@ -378,6 +380,9 @@ jobs:
           DRY_RUN: "false"
           SANITIZER: ${{ matrix.sanitizer }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: /github/workspace/.github/ci/cfl/runner-overlay:/opt/oss-fuzz/infra/cifuzz
+          ICCDEV_CFL_LOCAL_CORPUS_ROOT: /github/workspace/cifuzz-corpus
+          ICCDEV_CFL_LOCAL_CORPUS_MARKER_ROOT: /github/workspace/cfl-corpus-ready
           LOW_DISK_SPACE: "True"
           GIT_STORE_REPO: ""
           GIT_STORE_BRANCH: main

@@ -32,6 +32,8 @@ artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
 artifact_cleanup_test="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup-tests.sh"
 artifact_refresh="$repo_root/.github/scripts/iccdev-cfl-artifact-refresh.sh"
 artifact_refresh_test="$repo_root/.github/scripts/iccdev-cfl-artifact-refresh-tests.sh"
+local_corpus_overlay="$repo_root/.github/ci/cfl/runner-overlay/sitecustomize.py"
+local_corpus_overlay_test="$repo_root/.github/scripts/iccdev-cfl-local-corpus-overlay-tests.py"
 source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
 readme="$repo_root/.github/ci/cfl/README.md"
 skill="$repo_root/.github/skills/clusterfuzzlite/SKILL.md"
@@ -41,7 +43,8 @@ for required in "$workflow" "$afl_workflow" "$cfl_workflow" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
   "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
   "$artifact_cleanup" "$artifact_cleanup_test" \
-  "$artifact_refresh" "$artifact_refresh_test" "$source_digest"; do
+  "$artifact_refresh" "$artifact_refresh_test" \
+  "$local_corpus_overlay" "$local_corpus_overlay_test" "$source_digest"; do
   if [ ! -s "$required" ]; then
     echo "[FAIL] Missing ClusterFuzzLite file: $required" >&2
     exit 1
@@ -122,6 +125,10 @@ if grep -Fq 'actions/artifacts?per_page=100' "$artifact_refresh"; then
   exit 1
 fi
 grep -q '^      max-parallel: 3$' "$workflow"
+grep -q '^          PYTHONPATH: /github/workspace/.github/ci/cfl/runner-overlay:/opt/oss-fuzz/infra/cifuzz$' "$workflow"
+grep -q '^          ICCDEV_CFL_LOCAL_CORPUS_ROOT: /github/workspace/cifuzz-corpus$' "$workflow"
+grep -q '^          ICCDEV_CFL_LOCAL_CORPUS_MARKER_ROOT: /github/workspace/cfl-corpus-ready$' "$workflow"
+grep -Fq "printf 'ready\n' > \"cfl-corpus-ready/\$target\"" "$workflow"
 grep -q '^  prune:$' "$workflow"
 grep -q '^  cleanup-artifacts:$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions status expression.
@@ -295,6 +302,7 @@ test "$compiler_gate_line" -gt "$skip_build_line"
 "$target_test"
 "$artifact_cleanup_test"
 "$artifact_refresh_test"
+python3 "$local_corpus_overlay_test"
 "$patch_test"
 
 validate_action_reference() {
