@@ -40,6 +40,7 @@ FROM_XML="$TOOLS_DIR/IccFromXml/iccFromXml"
 GOOD_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 TRUNCATED="$OUTDIR/truncated.icc"
 MALWARE="$OUTDIR/private-pe-signature.icc"
+OVERLAPPING_PRIVATE="$OUTDIR/overlapping-private-tags.icc"
 GZIP_FALSE_POSITIVE="$OUTDIR/private-invalid-gzip-signature.icc"
 GZIP_TRUE_POSITIVE="$OUTDIR/private-valid-gzip-signature.icc"
 STD_GZIP_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-gzip-signature.icc"
@@ -896,6 +897,93 @@ run_private_malware_profile() {
   fi
 
   pass_case "$name" "private malware signature detected without crash"
+}
+
+# Issue #2988: S12 and S13 rescanned the same bytes for every overlapping
+# private-tag record. Under MSan, a mutated table with thousands of aliases
+# exceeded libFuzzer's per-input timeout. Keep the count at the supported tag
+# limit and make every entry name the same large, signature-free body.
+generate_overlapping_private_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$OVERLAPPING_PRIVATE" <<'PY'
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+tag_count = 1000
+tag_table_end = 132 + tag_count * 12
+payload_size = 900000
+size = tag_table_end + payload_size
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", tag_count)
+for index in range(tag_count):
+    entry = 132 + index * 12
+    data[entry:entry + 4] = b"zzzz"
+    data[entry + 4:entry + 8] = struct.pack(">I", tag_table_end)
+    data[entry + 8:entry + 12] = struct.pack(">I", payload_size)
+dst.write_bytes(data)
+PY
+}
+
+run_overlapping_private_profile() {
+  local name="pawg-overlapping-private-tag-work-bound"
+  local logfile="$OUTDIR/overlapping-private-tags.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$OVERLAPPING_PRIVATE"
+
+  if ! generate_overlapping_private_profile; then
+    fail_case "$name" "failed to generate overlapping private-tag profile"
+    return
+  fi
+
+  timeout 10 "$PAWG" "$OVERLAPPING_PRIVATE" > "$logfile" 2>&1 || exit_code=$?
+
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out while rescanning overlapping private-tag data"
+    return
+  fi
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[WARN] S11" "$logfile"; then
+    fail_case "$name" "private tag presence was not reported in S11"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "overlapping private-tag malware scan did not complete"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S13" "$logfile"; then
+    fail_case "$name" "overlapping private-tag NOP scan did not complete"
+    return
+  fi
+
+  pass_case "$name" "overlapping private-tag data scanned once within the work bound"
 }
 
 generate_private_invalid_gzip_signature_profile() {
@@ -1955,6 +2043,7 @@ fi
 run_calculator_operation_count
 run_hybrid_embedded_calculator_cost
 run_private_malware_profile
+run_overlapping_private_profile
 run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile
 run_standard_tag_invalid_gzip_signature_profile
