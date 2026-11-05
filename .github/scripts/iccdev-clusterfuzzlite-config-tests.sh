@@ -98,7 +98,7 @@ grep -q '^      fuzz_seconds: \${{ steps.duration.outputs.fuzz_seconds }}$' "$wo
 grep -q '^      matrix: \${{ steps.duration.outputs.matrix }}$' "$workflow"
 # shellcheck disable=SC2016 # Match the literal Actions expression.
 grep -q '^      run_mode: \${{ steps.duration.outputs.run_mode }}$' "$workflow"
-test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 9
+test "$(grep -c '^        shell: bash --noprofile --norc {0}$' "$workflow")" -eq 10
 grep -q '^          BASH_ENV: /dev/null$' "$workflow"
 grep -q '^          git config --global credential.helper ""$' "$workflow"
 grep -q '^          unset GITHUB_TOKEN || true$' "$workflow"

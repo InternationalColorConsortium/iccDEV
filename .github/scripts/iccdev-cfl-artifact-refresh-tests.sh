@@ -36,6 +36,7 @@ make_artifact_zip()
 
 profile_name=cifuzz-corpus-icc_profileparse_fuzzer
 visual_name=cifuzz-corpus-icc_profilevisualize_fuzzer
+writer_name=cifuzz-corpus-icc_writerserialize_fuzzer
 make_artifact_zip "$profile_name" profile-seed \
   "$test_dir/profile-fixture" "$test_dir/profile.zip"
 make_artifact_zip "$visual_name" visual-seed \
@@ -66,6 +67,9 @@ case "${2:-}" in
     printf '2026-11-03T02:00:00Z\t201\n'
     printf '2026-11-03T01:00:00Z\t202\n'
     ;;
+  *'name=cifuzz-corpus-icc_writerserialize_fuzzer&per_page=100')
+    printf '2026-11-03T03:00:00Z\t301\n'
+    ;;
   */actions/artifacts/101/zip)
     cat "$MOCK_PROFILE_ZIP"
     ;;
@@ -74,6 +78,9 @@ case "${2:-}" in
     ;;
   */actions/artifacts/202/zip)
     cat "$MOCK_VISUAL_ZIP"
+    ;;
+  */actions/artifacts/301/zip)
+    exit 1
     ;;
   *)
     echo "Unexpected mock gh request: $*" >&2
@@ -116,6 +123,17 @@ grep -Fq "Unexpected artifact layout for $visual_name id=201" \
   <<< "$refresh_output"
 grep -Fq "Refreshed corpus artifact name=$visual_name id=202" \
   <<< "$refresh_output"
+
+if "$refresh_script" --prepare owner/repo "$test_dir/download-failed" \
+  icc_writerserialize_fuzzer >"$test_dir/download-failed.log" 2>&1; then
+  echo "[FAIL] Artifact refresh accepted failed downloads for listed artifacts" >&2
+  exit 1
+fi
+grep -Fq "Could not download $writer_name id=301" \
+  "$test_dir/download-failed.log"
+grep -Fq "Could not recover any listed corpus artifact name=$writer_name candidates=1" \
+  "$test_dir/download-failed.log"
+test ! -e "$test_dir/download-failed/$writer_name.tar"
 
 if "$refresh_script" --prepare owner/repo "$test_dir/rejected" \
   icc_not_a_real_fuzzer >/dev/null 2>&1; then

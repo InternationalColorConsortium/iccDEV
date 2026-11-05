@@ -107,6 +107,7 @@ for target in "$@"; do
   output_tar="$output_dir/$artifact_name.tar"
   candidate_file="$work_dir/$target-candidates.tsv"
   sorted_candidate_file="$work_dir/$target-candidates-sorted.tsv"
+  candidate_count=0
   refreshed=0
 
   gh api \
@@ -120,6 +121,7 @@ for target in "$@"; do
       echo "[FAIL] Invalid artifact metadata for $artifact_name" >&2
       exit 1
     fi
+    candidate_count=$((candidate_count + 1))
 
     zip_path="$work_dir/$artifact_id.zip"
     candidate_tar="$work_dir/$artifact_id.tar"
@@ -153,6 +155,11 @@ for target in "$@"; do
   done < "$sorted_candidate_file"
 
   if [ "$refreshed" -eq 0 ]; then
+    if [ "$candidate_count" -gt 0 ]; then
+      printf '[FAIL] Could not recover any listed corpus artifact name=%s candidates=%s\n' \
+        "$artifact_name" "$candidate_count" >&2
+      exit 1
+    fi
     tar -cf "$output_tar" --files-from /dev/null
     printf '[PASS] Created empty cold-start corpus artifact name=%s\n' \
       "$artifact_name"

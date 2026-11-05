@@ -403,6 +403,10 @@ jobs:
           ctest_elapsed_ms="$(( (ctest_end_ns - ctest_start_ns) / 1000000 ))"
           printf 'ctest-hybrid\t%s\n' "$ctest_elapsed_ms" \
             >> coverage-report/timing/phases.tsv
+          ctest_profile_count="$(
+            find "${WORKSPACE_DIR}/profraw" -maxdepth 1 -type f \
+              -name 'ctest-*.profraw' -size +0c -print | wc -l | tr -d ' '
+          )"
 
           ctest_total_line="$(grep -E 'tests failed out of [0-9]+|No tests were found' "$ctest_log" | tail -1 || true)"
           ctest_time_line="$(grep -E '^Total Test time' "$ctest_log" | tail -1 || true)"
@@ -433,6 +437,7 @@ jobs:
             printf '=================================\n\n'
             printf 'Registered tests: %s\n' "$ctest_test_count"
             printf 'CTest exit code: %s\n' "$ctest_rc"
+            printf 'Nonempty CTest profiles: %s\n' "$ctest_profile_count"
             printf 'Elapsed wall time: %s milliseconds\n' "$ctest_elapsed_ms"
             printf 'CTest filter: %s\n' "$ctest_filter"
             printf 'CTest summary: %s\n' "${ctest_total_line:-n/a}"
@@ -447,6 +452,7 @@ jobs:
           {
             printf 'ctest_exit_code=%s\n' "$ctest_rc"
             printf 'ctest_test_count=%s\n' "$ctest_test_count"
+            printf 'ctest_profile_count=%s\n' "$ctest_profile_count"
             printf 'ctest_elapsed_ms=%s\n' "$ctest_elapsed_ms"
             printf 'ctest_large_profile_seconds=%s\n' "$large_profile_seconds"
           } >> "$GITHUB_ENV"
@@ -461,6 +467,10 @@ jobs:
           if [ "$ctest_rc" -ne 0 ]; then
             echo "::error title=CTest::Required coverage test exited with code ${ctest_rc}"
             exit "$ctest_rc"
+          fi
+          if [ "$ctest_profile_count" -eq 0 ]; then
+            echo "::error title=CTest coverage::Hybrid CTest produced no nonempty raw profiles"
+            exit 1
           fi
 
       - name: "Exercise profiles with iccDumpProfile"
@@ -792,6 +802,8 @@ jobs:
             "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_ms:-n/a} ms |"
           summary_line \
             "| CTest | exit ${ctest_exit_code:-n/a} | ${ctest_test_count:-0} tests, ${ctest_elapsed_ms:-n/a} ms |"
+          summary_line \
+            "| CTest raw profiles | ${ctest_profile_count:-0} | nonempty ctest-*.profraw files |"
           summary_line \
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
