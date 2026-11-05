@@ -32,6 +32,8 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${PREFLIGHT_SCAN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+FIXED_OUTPUT_BATCHING_CHECKER="$SCRIPT_DIR/check-workflow-fixed-output-batching.py"
+TARGET_FIXED_OUTPUT_BATCHING_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-fixed-output-batching.py"
 cd "$REPO_ROOT"
 
 failures=0
@@ -136,8 +138,19 @@ run_workflow_bash_prologue_policy() {
   fi
 }
 
+fixed_output_batching_checker_is_first_release() {
+  [ ! -f "$FIXED_OUTPUT_BATCHING_CHECKER" ] &&
+    [ "$FIXED_OUTPUT_BATCHING_CHECKER" != "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ] &&
+    [ -f "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ]
+}
+
 run_workflow_fixed_output_batching_policy() {
-  python3 .github/scripts/check-workflow-fixed-output-batching.py \
+  if fixed_output_batching_checker_is_first_release; then
+    echo "[SKIP] Trusted base lacks the fixed-output batching checker during its first release."
+    return 0
+  fi
+
+  python3 "$FIXED_OUTPUT_BATCHING_CHECKER" \
     "${workflow_files[@]}"
 }
 
@@ -1150,9 +1163,13 @@ else
   skip_or_fail "check-workflow-bash-prologue.py"
 fi
 
-if [ -f .github/scripts/check-workflow-fixed-output-batching.py ]; then
+if [ -f "$FIXED_OUTPUT_BATCHING_CHECKER" ]; then
   run_check "workflow fixed-output batching checker fixtures" \
-    python3 .github/scripts/check-workflow-fixed-output-batching.py --self-test
+    python3 "$FIXED_OUTPUT_BATCHING_CHECKER" --self-test
+elif fixed_output_batching_checker_is_first_release; then
+  echo "[SKIP] Trusted base lacks the fixed-output batching checker fixtures during their first release."
+  echo ""
+  skips=$((skips + 1))
 else
   skip_or_fail "check-workflow-fixed-output-batching.py"
 fi

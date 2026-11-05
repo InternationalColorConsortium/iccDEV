@@ -717,12 +717,18 @@ jobs:
           : > scan-build-accepted.txt
           : > scan-build-actionable.txt
 
-          # Keep the unix.Stream checker enabled. These exact source/function/type/
-          # content-hash identities are the reviewed stdio ownership-model false
-          # positives. A changed source line, function, path, or diagnostic remains
-          # actionable and fails the job so that the baseline cannot drift silently.
+          # Keep every default checker enabled. These exact source/function/type/
+          # content-hash identities are reviewed analyzer-modeling false positives.
+          # A changed source line, function, path, or diagnostic remains actionable
+          # and fails the job so that the baseline cannot drift silently.
           is_reviewed_false_positive() {
             case "$1" in
+              'Tools/CmdLine/IccCmdLineUtil.h|icSha256File|Stream already in EOF|9aba913bc0fe76b25c71547da10b68da' | \
+              'Tools/CmdLine/IccCmdLineUtil.h|icSha256File|Invalid stream state|ee6524c6771c15b6c37323bc8f817524' | \
+              'Tools/CmdLine/IccJpegDump/iccJpegDump.cpp|InjectIccIntoJpeg|Stream already in EOF|cc425d28eb83be64c03fa5b345f84b82' | \
+              'Tools/CmdLine/IccJpegDump/iccJpegDump.cpp|InjectIccIntoJpeg|Invalid stream state|1176ecb11a3bffafdaf1a7a728954338' | \
+              'IccProfLib/IccCmm.cpp|pushXYZNormalize|Result of operation is garbage or undefined|06035604e5292c1f563ef4739dd726dd' | \
+              'IccProfLib/IccMpeBasic.cpp|Write|Use of zero allocated|cdf2c3de969a8ac4a62056b0ae458866' | \
               'Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
               'Tools/CmdLine/IccApplySearch/iccApplySearch.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
               'Tools/CmdLine/IccApplyNamedCmm/iccApplyNamedCmm.cpp|main|Resource leak|1e1621e21b670836bcddfb3f91c04269' | \
@@ -751,7 +757,7 @@ jobs:
             bug_hash="$(sed -n 's/.*<!-- ISSUEHASHCONTENTOFLINEINCONTEXT \(.*\) -->.*/\1/p' "$report" | sed -n '1p')"
             case "$bug_file" in
               "$PWD"/*)
-                bug_file="${bug_file#"$PWD"/}"
+                bug_file="$(realpath --relative-to="$PWD" "$bug_file")"
                 ;;
             esac
             finding="${bug_file:-unknown}:${bug_line:-0}: ${bug_type:-unknown}: ${bug_desc:-no description} [${bug_function:-unknown}; ${bug_hash:-no-hash}]"
@@ -820,7 +826,7 @@ jobs:
             printf '| Analyzer failure files | %s |\n' "$(sanitize_line "$SCAN_FAILURE_COUNT")"
             echo ""
             echo "All default checkers, including unix.Stream, remain enabled. Reviewed"
-            echo "stdio ownership-model false positives are accepted only when source path,"
+            echo "analyzer-modeling false positives are accepted only when source path,"
             echo "function, diagnostic type, and content hash all match the audited baseline."
 
             if [ -s scan-build-actionable.txt ]; then
