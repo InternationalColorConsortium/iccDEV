@@ -146,9 +146,15 @@ export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
 export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
 
 mkdir -p "$OUTDIR/logs" "$OUTDIR/tiffs"
-mapfile -d '' PROFILES < <(find "$PROFILE_DIR" -maxdepth 1 -type f -name '*.icc' -print0 | LC_ALL=C sort -z)
+PROFILES=()
+PROFILE_COUNT=0
+for profile in "$PROFILE_DIR"/*.icc; do
+  [ -f "$profile" ] || continue
+  PROFILES[PROFILE_COUNT]="$profile"
+  PROFILE_COUNT=$((PROFILE_COUNT + 1))
+done
 
-if [ "${#PROFILES[@]}" -eq 0 ]; then
+if [ "$PROFILE_COUNT" -eq 0 ]; then
   echo "No .icc profiles found in: $PROFILE_DIR" >&2
   exit 2
 fi
@@ -157,7 +163,7 @@ status_is_fail_on() {
   local status="$1" item
   [ "$FAIL_ON" = "ALL" ] && return 0
   IFS=',' read -r -a _fail_on_items <<<"$FAIL_ON"
-  for item in "${_fail_on_items[@]}"; do
+  for item in ${_fail_on_items[@]+"${_fail_on_items[@]}"}; do
     [ "$item" = "$status" ] && return 0
   done
   return 1
@@ -184,7 +190,7 @@ crash=0
 timeout_count=0
 qa_issue=0
 
-for profile in "${PROFILES[@]}"; do
+for profile in ${PROFILES[@]+"${PROFILES[@]}"}; do
   if [ "$MAX_PROFILES" -gt 0 ] && [ "$total" -ge "$MAX_PROFILES" ]; then
     break
   fi

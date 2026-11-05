@@ -140,11 +140,12 @@ run_zero_curve_write() {
     fi
   fi
 
-  if ! "$CXX" -std=c++17 "${san_flags[@]}" \
+  if ! "$CXX" -std=c++17 ${san_flags[@]+"${san_flags[@]}"} \
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
       "$helper_cpp" \
-      -L"$lib_dir" "$lib_arg" "${lib_deps[@]}" -Wl,-rpath,"$lib_dir" \
+      -L"$lib_dir" "$lib_arg" ${lib_deps[@]+"${lib_deps[@]}"} \
+      -Wl,-rpath,"$lib_dir" \
       -o "$helper_bin" > "$compile_log" 2>&1; then
     fail_case "$name" "failed to compile helper"
     sed -n '1,80p' "$compile_log"

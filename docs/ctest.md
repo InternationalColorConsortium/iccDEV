@@ -629,9 +629,12 @@ For repeatable agent-assisted work, use
      `Testing/CreateAllProfiles.bat`.
    - Profile validation: update `Testing/RunTests.sh` and
      `Testing/RunTests.bat`.
-   - Focused Linux regression: add or update a `.github/scripts/*.sh` script.
+   - Focused Unix regression: add or update a `.github/scripts/*.sh` script.
 2. Register the test in `Build/Cmake/Testing/CMakeLists.txt`.
-   - Use `iccdev_add_script_test()` for Linux shell tests.
+   - Use `iccdev_add_script_test()` for Unix shell tests. These scripts must be
+     compatible with macOS Bash 3.2 as well as current Linux Bash: do not use
+     `mapfile`, GNU-only utility flags, or unguarded empty-array expansion with
+     `set -u`.
    - Use `iccdev_add_windows_batch_test()` for Windows batch-backed tests.
    - Set labels and a timeout.
    - Add `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated

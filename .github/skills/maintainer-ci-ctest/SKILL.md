@@ -46,6 +46,10 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
+- Unix CTest shell harnesses must run under the Bash 3.2 shipped by macOS as
+  well as current Linux Bash. Avoid `mapfile`, GNU-only utility flags, and bare
+  empty-array expansion under `set -u`; keep the generated `timeout` fallback
+  free of orphaned sleepers and captured termination diagnostics.
 - Do not add hard-coded CTest suite totals to workflows, docs, or maintainer
   instructions; keep suite lists descriptive and let CTest discovery report the
   current total.
