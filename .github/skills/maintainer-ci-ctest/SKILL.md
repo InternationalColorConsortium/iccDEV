@@ -132,6 +132,10 @@ when practical.
   run. Use `ci-qa-pr` for comprehensive pre-PR validation, `ci-pr-action` for
   final PR-head validation, and the standalone
   path-scoped/manual `ci-regression-checks` workflow for ASAN/UBSAN coverage.
+- For source-coverage workflows, follow
+  `.github/skills/code-coverage-analysis/SKILL.md`. Use pooled signature-bearing
+  profraw names and `llvm-profdata --input-files`; never let `xargs` split one
+  logical report across repeated writes to the same output.
 
 ## Local Validation
 
@@ -176,6 +180,8 @@ For workflow YAML:
 ```bash
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML parse OK')"
 actionlint -no-color .github/workflows/<workflow>.yml
+python3 .github/scripts/check-workflow-fixed-output-batching.py \
+  .github/workflows/<workflow>.yml
 ```
 
 For Apple mobile core and simulator workflow changes on macOS:

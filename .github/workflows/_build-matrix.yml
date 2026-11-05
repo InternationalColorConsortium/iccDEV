@@ -65,6 +65,7 @@ jobs:
       os: ${{ matrix.os }}
       python-version: "3.14"
       run-full-tests: ${{ matrix.os == 'ubuntu-latest' }}
+      timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 45 }}
 
   sanitizer-builds:
     name: "Sanitizer ${{ matrix.name }}"

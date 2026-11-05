@@ -229,7 +229,7 @@ jobs:
   unix:
     name: Native MATLAB (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
@@ -238,10 +238,12 @@ jobs:
             runner: ubuntu-latest
             architecture: x86_64
             mex-extension: mexa64
+            timeout_minutes: 45
           - platform: macOS Apple Silicon
             runner: macos-15
             architecture: arm64
             mex-extension: mexmaca64
+            timeout_minutes: 60
     defaults:
       run:
         shell: bash --noprofile --norc {0}

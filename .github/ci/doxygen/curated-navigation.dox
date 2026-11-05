@@ -176,6 +176,7 @@ configuration. Link the `IccConnect2` target. See \ref IccConnect.h
 \page curatedmaintainertesting Test and Validation Guides
 
 - \subpage md_docs_2afl-fuzzing "AFL++ smoke fuzzing"
+- \subpage md_docs_2code-coverage "Code coverage and timing analysis"
 - \subpage md_docs_2maintainer-qa-scans "Maintainer QA scans"
 - \subpage md_docs_2matlab-bindings "MATLAB bindings and QA"
 - \subpage md_docs_2python-packaging-release "Python packaging release"

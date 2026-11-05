@@ -55,6 +55,10 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep corpus pruning runnable after a fuzz finding. Keep coverage an explicit
   manual option that emits a ClusterFuzzLite artifact without broadening
   repository permissions.
+- Before fuzzing, republish the latest valid exact-name corpus artifacts with
+  one-day retention. Use the GitHub artifact name filter so the pinned runner
+  does not paginate the repository-wide artifact history; preserve an existing
+  corpus and use an empty TAR only for a true cold start.
 - Keep one temporary CFL patch per open MSan issue. Attempt patches in order,
   report drift or already-integrated fixes, and continue the default workflow;
   reserve `--strict` for local patch-stack maintenance. Remove only the patch
@@ -100,6 +104,7 @@ bash -n .clusterfuzzlite/build.sh .github/ci/cfl/build.sh \
   .github/scripts/iccdev-clusterfuzzlite-config-tests.sh \
   .github/scripts/iccdev-clusterfuzzlite-target-tests.sh
 .github/scripts/iccdev-clusterfuzzlite-config-tests.sh
+.github/scripts/iccdev-cfl-artifact-refresh-tests.sh
 .github/scripts/iccdev-fuzz-patch-check-tests.sh
 .github/scripts/check-fuzz-patches.sh
 ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-(configuration|targets)$' \

@@ -37,12 +37,16 @@ on:
         description: "Run legacy native wheel smoke when no shared wheel matrix is used"
         type: boolean
         default: true
+      timeout-minutes:
+        description: "Maximum execution time after a runner is assigned"
+        type: number
+        default: 45
 
 jobs:
   build-test:
     name: "Build + Test (${{ inputs.os }}, Python ${{ inputs.python-version }})"
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ inputs.timeout-minutes }}
 
     defaults:
       run:

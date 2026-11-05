@@ -64,7 +64,13 @@ select `run_mode=full` for the complete matrix. Scheduled runs always use the
 full `address`, `undefined`, and `memory` matrix; libFuzzer is the engine for
 every matrix entry, not a fourth sanitizer. The nine full-mode group/sanitizer
 combinations run at most three at a time to stay within hosted-runner and
-artifact API limits. ICC, XML, and JSON
+artifact API limits. Before those jobs start, a bounded refresh step uses the
+GitHub artifact API's exact-name filter to republish the newest valid corpus for
+each selected target with one-day retention. This keeps the pinned
+ClusterFuzzLite runner from paginating the repository-wide artifact history,
+while preserving accumulated corpus inputs. A target with no valid prior
+artifact receives an empty TAR so its checked-in seed corpus can establish the
+first persistent artifact. ICC, XML, and JSON
 targets receive only the matching
 tracked seed family from `.github/ci/test-data/`, plus a format-specific
 dictionary and options file. `connectconfig` has a schema-shaped seed and a

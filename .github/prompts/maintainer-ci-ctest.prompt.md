@@ -101,6 +101,10 @@ Choose the smallest gate that proves the behavior:
   pinned unified image digests.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
+- Route LLVM source-coverage and timing changes through
+  `docs/code-coverage.md` and
+  `.github/skills/code-coverage-analysis/SKILL.md`. Reject unbounded globs or
+  `xargs` batches that repeatedly write one fixed report output.
 - For registry QA workflow runs, preserve `summary.md`, `results.tsv`, and
   `findings.txt` as the review source of truth. The workflow may retain bounded
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when

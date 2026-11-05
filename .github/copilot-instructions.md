@@ -250,6 +250,7 @@ Key safety rules:
 | Code review hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Reduce documentation noise | `.github/prompts/reduce-doc-noise.prompt.md` |
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
+| Coverage and timing analysis | `.github/prompts/code-coverage-analysis.prompt.md` |
 | Add a CLI tool | `.github/prompts/add-new-tool.prompt.md` |
 | iOS CLUT editor planning | `.github/prompts/ios-clut-editor.prompt.md` |
 | Contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
@@ -294,6 +295,7 @@ Key safety rules:
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Maintainer CI and CTest | `.github/skills/maintainer-ci-ctest/SKILL.md` |
+| Coverage and timing analysis | `.github/skills/code-coverage-analysis/SKILL.md` |
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |

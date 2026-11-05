@@ -404,7 +404,7 @@ jobs:
     name: "macOS arm64 Clang"
     needs: cache-policy
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - name: Checkout master
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

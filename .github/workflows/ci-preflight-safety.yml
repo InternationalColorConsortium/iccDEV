@@ -20,6 +20,8 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/scripts/**'
+      - '.github/tests/**'
+      - '.github/dependabot.yml'
       - '.github/codeql-queries/**'
       - '.github/codeql-config.yml'
       - '.github/zizmor.yml'
@@ -39,6 +41,8 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/scripts/**'
+      - '.github/tests/**'
+      - '.github/dependabot.yml'
       - '.github/codeql-queries/**'
       - '.github/codeql-config.yml'
       - '.github/zizmor.yml'
@@ -108,6 +112,8 @@ jobs:
           python3 -m venv /tmp/iccdev-preflight
           /tmp/iccdev-preflight/bin/python -m pip install --upgrade pip --quiet
           /tmp/iccdev-preflight/bin/python -m pip install \
+            'cibuildwheel==3.4.0' \
+            'pytest>=9.0.3,<10' \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
             'zizmor==1.31.1' \
@@ -124,9 +130,9 @@ jobs:
             # The digest is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
             #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
             #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.27.3"
+            CODEQL_VER="2.27.4"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="64518dc413c8e7b5733fee2489e830a899bb1e3f28c8873b5869d5cc90164c5c"
+            CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
             CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
@@ -135,6 +141,28 @@ jobs:
             tar xzf "${CODEQL_ARCHIVE}" -C /opt
             echo "/opt/codeql" >> "$GITHUB_PATH"
           fi
+
+      # preflight: allow-pr-script-execution reason=readonly-workflow-contract-tests
+      - name: Run workflow contract tests
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        working-directory: target
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          PYTHONDONTWRITEBYTECODE=1 \
+            /tmp/iccdev-preflight/bin/python -m pytest \
+            -p no:cacheprovider \
+            --rootdir . \
+            --import-mode=importlib \
+            .github/tests/test_mcp_release_package.py \
+            .github/tests/test_python_release_wheels.py \
+            .github/tests/test_wasm_workflow.py \
+            .github/tests/test_workflow_action_pins.py \
+            -q
 
       - name: Select pre-flight scanner
         shell: bash --noprofile --norc {0}

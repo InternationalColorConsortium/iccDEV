@@ -312,10 +312,12 @@ iccDEV uses clang source-based coverage (NOT gcov):
 
 ```bash
 # Generate coverage data
-LLVM_PROFILE_FILE=output_%m_%p.profraw iccDumpProfile profile.icc ALL
+LLVM_PROFILE_FILE=output_%4m.profraw iccDumpProfile profile.icc ALL
 
 # Merge profraw files
-llvm-profdata-18 merge -sparse *.profraw -o merged.profdata
+find . -maxdepth 1 -name 'output_*.profraw' -print | sort > profraw-inputs.txt
+llvm-profdata-18 merge -sparse --failure-mode=any --num-threads=1 \
+  --input-files=profraw-inputs.txt -o merged.profdata
 
 # Generate report
 llvm-cov-18 report Build/Tools/IccDumpProfile/iccDumpProfile \
@@ -325,6 +327,9 @@ llvm-cov-18 report Build/Tools/IccDumpProfile/iccDumpProfile \
 llvm-cov-18 show Build/Tools/IccDumpProfile/iccDumpProfile \
   -instr-profile=merged.profdata -format=html -output-dir=coverage-html
 ```
+
+Use `docs/code-coverage.md` and the repository matched-report helper when one
+run exercises more than one instrumented executable or shared library.
 
 ---
 

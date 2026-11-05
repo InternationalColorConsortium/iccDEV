@@ -13711,6 +13711,13 @@ if(NOT WIN32)
   endif()
 endif()
 
+set(ICCDEV_TEST_PROFILE_ENV "LLVM_PROFILE_FILE=/dev/null")
+if(ENABLE_COVERAGE)
+  # Coverage callers own the bounded profile pool destination. Leaving this
+  # unset here preserves LLVM_PROFILE_FILE through cmake -E env at test time.
+  set(ICCDEV_TEST_PROFILE_ENV)
+endif()
+
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
   "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
@@ -13735,7 +13742,7 @@ set(ICCDEV_TEST_ENV
   # carry their own -g DWARF, and debuginfod only ever supplied *system*
   # library debug info - while removing the network dependency from every test.
   "DEBUGINFOD_URLS="
-  "LLVM_PROFILE_FILE=/dev/null"
+  ${ICCDEV_TEST_PROFILE_ENV}
   "ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR}"
   "ICCDEV_TESTING_DIR=${ICCDEV_TESTING_DIR}"
   "ICCDEV_BUILD_DIR=${ICCDEV_SCRIPT_BUILD_DIR}"

@@ -23,7 +23,7 @@ jobs:
   build:
     name: Build Apple mobile static cores
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     defaults:
       run:

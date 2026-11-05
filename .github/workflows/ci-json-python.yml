@@ -65,6 +65,7 @@ jobs:
       python-version: ${{ matrix.python-version }}
       run-full-tests: false
       run-wheel-smoke: false
+      timeout-minutes: 60
 
   # ---------------------------------------------------------------
   # Windows: Build + Python wheel + MCP

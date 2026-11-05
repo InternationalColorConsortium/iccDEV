@@ -120,6 +120,24 @@ grep -q 'pattern' "$filepath"
 [[ "$value" =~ pattern ]]
 ```
 
+## Fixed-Output Batching
+
+Do not use `xargs` to invoke a report generator repeatedly when every child
+writes the same `-o` or `--output` path. GNU `xargs` may split one input stream
+into multiple commands below the operating-system argument limit, so the last
+child silently overwrites earlier output. Do not replace it with an unbounded
+shell glob, which can exceed the argument limit.
+
+For `llvm-profdata merge`, write a sorted input list and pass
+`--input-files=<path>`, or use unique staged outputs followed by one final
+merge. Apply the same reasoning to gcovr, lcov, genhtml, and other single-report
+producers. Streaming tools such as checksums remain safe when child stdout is
+collected by one outer redirection.
+
+The local preflight runs
+`.github/scripts/check-workflow-fixed-output-batching.py` across affected
+workflows.
+
 ## Output Sanitization
 
 Sanitize every write to `GITHUB_STEP_SUMMARY` or `GITHUB_OUTPUT`.
@@ -195,6 +213,21 @@ When maintaining GitHub Apps that create installation tokens, validate both the
 temporary `X-GitHub-Stateless-S2S-Token: enabled` and `disabled` request-header
 paths described in GitHub's changelog, then remove the override header after
 both token formats are accepted end-to-end.
+
+## Action Pin Ownership
+
+Workflow files are the sole source of truth for exact GitHub Action commit
+SHAs. Tests and scripts must assert the expected action identity, a lowercase
+40-character commit-pin shape, relevant inputs, and any required equality
+between corresponding steps. Do not copy a workflow's current action SHA into
+a test, script, document, prompt, skill, or agent file.
+
+All workflow references to the same `owner/repository` action must use one SHA
+unless a maintainer records a narrowly scoped exception. Run
+`.github/scripts/check-workflow-action-pins.py` to validate pin shape,
+repository-wide parity, Docker action digests, and the absence of mirrored
+pins. Dependabot updates workflow dependency references; do not add privileged
+write-back automation to modify assertions on Dependabot branches.
 
 ## Automated Scanner
 

@@ -32,6 +32,10 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${PREFLIGHT_SCAN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+FIXED_OUTPUT_BATCHING_CHECKER="$SCRIPT_DIR/check-workflow-fixed-output-batching.py"
+TARGET_FIXED_OUTPUT_BATCHING_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-fixed-output-batching.py"
+ACTION_PIN_CHECKER="$SCRIPT_DIR/check-workflow-action-pins.py"
+TARGET_ACTION_PIN_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-action-pins.py"
 cd "$REPO_ROOT"
 
 failures=0
@@ -134,6 +138,28 @@ run_workflow_bash_prologue_policy() {
     python3 .github/scripts/check-workflow-bash-prologue.py \
       "${workflow_files[@]}"
   fi
+}
+
+fixed_output_batching_checker_is_first_release() {
+  [ ! -f "$FIXED_OUTPUT_BATCHING_CHECKER" ] &&
+    [ "$FIXED_OUTPUT_BATCHING_CHECKER" != "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ] &&
+    [ -f "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ]
+}
+
+action_pin_checker_is_first_release() {
+  [ ! -f "$ACTION_PIN_CHECKER" ] &&
+    [ "$ACTION_PIN_CHECKER" != "$TARGET_ACTION_PIN_CHECKER" ] &&
+    [ -f "$TARGET_ACTION_PIN_CHECKER" ]
+}
+
+run_workflow_fixed_output_batching_policy() {
+  if fixed_output_batching_checker_is_first_release; then
+    echo "[SKIP] Trusted base lacks the fixed-output batching checker during its first release."
+    return 0
+  fi
+
+  python3 "$FIXED_OUTPUT_BATCHING_CHECKER" \
+    "${workflow_files[@]}"
 }
 
 workflow_trigger_names() {
@@ -844,6 +870,15 @@ run_codeql_python_analysis() {
   return "$status"
 }
 
+run_workflow_action_pin_policy() {
+  if action_pin_checker_is_first_release; then
+    echo "[SKIP] Trusted base lacks the workflow action pin checker during its first release."
+    return 0
+  fi
+
+  python3 "$ACTION_PIN_CHECKER" --root "$REPO_ROOT"
+}
+
 run_workflow_risk_subset() {
   local risk_failures=0
   local total_actions=0
@@ -1095,6 +1130,8 @@ for path in sys.argv[1:]:
 PY
 
   run_check "workflow Bash prologue policy" run_workflow_bash_prologue_policy
+  run_check "workflow fixed-output batching policy" \
+    run_workflow_fixed_output_batching_policy
 
   if command -v actionlint >/dev/null 2>&1; then
     run_check "actionlint" actionlint -no-color "${workflow_files[@]}"
@@ -1116,6 +1153,7 @@ PY
 
   run_check "workflow cache policy" run_workflow_cache_policy
   run_check "workflow security canaries" workflow_security_canaries
+  run_check "workflow action pin policy" run_workflow_action_pin_policy
   run_check "GitHub token format canaries" token_format_canaries
   run_check "local ci-risk-analysis subset" run_workflow_risk_subset
   if [ "$FAST_LANE" -eq 1 ]; then
@@ -1136,6 +1174,17 @@ if [ -f .github/scripts/check-workflow-bash-prologue.py ]; then
     python3 .github/scripts/check-workflow-bash-prologue.py --self-test
 else
   skip_or_fail "check-workflow-bash-prologue.py"
+fi
+
+if [ -f "$FIXED_OUTPUT_BATCHING_CHECKER" ]; then
+  run_check "workflow fixed-output batching checker fixtures" \
+    python3 "$FIXED_OUTPUT_BATCHING_CHECKER" --self-test
+elif fixed_output_batching_checker_is_first_release; then
+  echo "[SKIP] Trusted base lacks the fixed-output batching checker fixtures during their first release."
+  echo ""
+  skips=$((skips + 1))
+else
+  skip_or_fail "check-workflow-fixed-output-batching.py"
 fi
 
 if [ -f .github/scripts/check-license-notices.py ]; then
