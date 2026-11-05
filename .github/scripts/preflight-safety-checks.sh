@@ -34,6 +34,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${PREFLIGHT_SCAN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 FIXED_OUTPUT_BATCHING_CHECKER="$SCRIPT_DIR/check-workflow-fixed-output-batching.py"
 TARGET_FIXED_OUTPUT_BATCHING_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-fixed-output-batching.py"
+ACTION_PIN_CHECKER="$SCRIPT_DIR/check-workflow-action-pins.py"
+TARGET_ACTION_PIN_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-action-pins.py"
 cd "$REPO_ROOT"
 
 failures=0
@@ -142,6 +144,12 @@ fixed_output_batching_checker_is_first_release() {
   [ ! -f "$FIXED_OUTPUT_BATCHING_CHECKER" ] &&
     [ "$FIXED_OUTPUT_BATCHING_CHECKER" != "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ] &&
     [ -f "$TARGET_FIXED_OUTPUT_BATCHING_CHECKER" ]
+}
+
+action_pin_checker_is_first_release() {
+  [ ! -f "$ACTION_PIN_CHECKER" ] &&
+    [ "$ACTION_PIN_CHECKER" != "$TARGET_ACTION_PIN_CHECKER" ] &&
+    [ -f "$TARGET_ACTION_PIN_CHECKER" ]
 }
 
 run_workflow_fixed_output_batching_policy() {
@@ -863,7 +871,12 @@ run_codeql_python_analysis() {
 }
 
 run_workflow_action_pin_policy() {
-  python3 "$SCRIPT_DIR/check-workflow-action-pins.py" --root "$REPO_ROOT"
+  if action_pin_checker_is_first_release; then
+    echo "[SKIP] Trusted base lacks the workflow action pin checker during its first release."
+    return 0
+  fi
+
+  python3 "$ACTION_PIN_CHECKER" --root "$REPO_ROOT"
 }
 
 run_workflow_risk_subset() {

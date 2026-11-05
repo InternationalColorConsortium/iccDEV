@@ -177,7 +177,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_profileparse_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_profileparse_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_profileparse_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_profileparse_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -187,7 +187,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_cmmapply_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_cmmapply_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_cmmapply_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_cmmapply_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -197,7 +197,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_profilevisualize_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_profilevisualize_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_profilevisualize_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_profilevisualize_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -207,7 +207,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_writerserialize_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_writerserialize_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_writerserialize_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_writerserialize_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -217,7 +217,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_xmlparse_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_xmlparse_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_xmlparse_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_xmlparse_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -227,7 +227,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_jsonparse_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_jsonparse_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_jsonparse_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_jsonparse_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -237,7 +237,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_connectconfig_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_connectconfig_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_connectconfig_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_connectconfig_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -247,7 +247,7 @@ jobs:
         if: ${{ steps.prepare.outputs.icc_pawgreport_fuzzer == 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: cifuzz-corpus-icc_pawgreport_fuzzer
+          name: cifuzz-bootstrap-corpus-icc_pawgreport_fuzzer
           path: cfl-corpus-refresh/cifuzz-corpus-icc_pawgreport_fuzzer.tar
           if-no-files-found: error
           retention-days: 1
@@ -340,6 +340,34 @@ jobs:
           grep -Fqx "target_group=$EXPECTED_TARGET_GROUP" "$provenance"
           grep -Fqx "patch_mode=$EXPECTED_PATCH_MODE" "$provenance"
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"
+
+      - name: Download bootstrap corpora
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          pattern: cifuzz-bootstrap-corpus-*
+          path: cfl-corpus-bootstrap
+          merge-multiple: true
+
+      - name: Seed ClusterFuzzLite corpora
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          shopt -s nullglob
+          archives=(cfl-corpus-bootstrap/cifuzz-corpus-*.tar)
+          if [ "${#archives[@]}" -eq 0 ]; then
+            echo "[FAIL] No bootstrap corpus archives were downloaded" >&2
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
+            target="${archive##*/cifuzz-corpus-}"
+            target="${target%.tar}"
+            mkdir -p "cifuzz-corpus/$target"
+            tar -xf "$archive" -C "cifuzz-corpus/$target"
+          done
 
       - name: Run bounded batch fuzzing
         uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
