@@ -12,7 +12,10 @@ matching Clang 21 or 22 compilers, and repository workflow-governance rules.
 Keep CMM control bytes beyond the declared ICC payload so mutations do not
 corrupt the profile-size header. Keep a schema-shaped IccConnect seed, a
 dedicated config dictionary, and top-level plus nested configuration round
-trips. Require the complete canonical BSD-3-Clause notice derived from
+trips in reset and non-reset modes. Compare stable serialization, traverse a
+bounded set of later nested array elements, and keep config input length owned
+by the runner rather than a duplicate harness guard. Require the complete
+canonical BSD-3-Clause notice derived from
 `LICENSE.md` in every ICC-owned C/C++ harness source; verify it with
 `.github/scripts/check-license-notices.py`.
 Preserve the validated manual duration input from 2 through 45 whole minutes,

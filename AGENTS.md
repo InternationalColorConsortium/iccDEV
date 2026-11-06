@@ -181,7 +181,10 @@ Keep `cmmapply` controls outside the ICC header: an optional three-byte trailer
 selects direction, intent, and interpolation without corrupting the encoded
 profile size. Keep at least one schema-shaped IccConnect configuration seed in
 `.github/ci/test-data`, use the dedicated config dictionary, and preserve
-round-trip coverage for top-level and nested `CIccCfg*` objects.
+reset and non-reset round-trip coverage for top-level and nested `CIccCfg*`
+objects. Traverse a bounded set of later nested array elements directly, and
+leave the config input limit owned by the runner rather than duplicating it in
+the harness.
 
 Temporary CFL MSan workarounds live as individual issue patches under
 `.github/ci/fuzz-patches/cfl`. The default fuzz build attempts every patch and

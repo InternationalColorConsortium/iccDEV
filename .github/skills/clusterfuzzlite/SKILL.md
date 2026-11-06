@@ -44,8 +44,11 @@ Use this skill for `.clusterfuzzlite/**`,
 - Keep `cmmapply` control bytes outside the ICC header so direction, intent,
   and interpolation can mutate without corrupting the profile-size field.
 - Keep a schema-shaped IccConnect seed and dedicated config dictionary. Drive
-  `fromJson()`/`toJson()` round trips for top-level and nested `CIccCfg*`
-  objects before adding another configuration target.
+  reset and non-reset `fromJson()`/`toJson()` round trips for top-level and
+  nested `CIccCfg*` objects, compare stable serialization, and traverse a
+  bounded set of later nested array elements before adding another
+  configuration target. Keep input length runner-owned; do not add a second
+  fixed size guard inside the harness.
 - Keep the workflow limited to manual dispatch and the nightly schedule. Manual
   dispatch defaults to one `address`/`core` smoke job; `run_mode=full` and the
   schedule use all nine group/sanitizer combinations.

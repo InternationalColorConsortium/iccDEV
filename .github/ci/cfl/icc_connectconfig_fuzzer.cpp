@@ -34,7 +34,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-static constexpr size_t kMaxTextInputSize = 1024 * 1024;
+static constexpr size_t kMaxDirectArrayElements = 16;
 
 static const json &sectionOrRoot(const json &root, const char *name)
 {
@@ -51,7 +51,8 @@ template <typename T>
 static size_t exerciseRoundTrip(const json &value)
 {
   T parsed;
-  if (!parsed.fromJson(value, true))
+  parsed.reset();
+  if (!parsed.fromJson(value, false))
     return 0;
 
   json serialized;
@@ -59,15 +60,49 @@ static size_t exerciseRoundTrip(const json &value)
 
   T replayed;
   const bool replayed_ok = replayed.fromJson(serialized, true);
-  return serialized.dump().size() + static_cast<size_t>(replayed_ok);
+  json replayed_serialized;
+  if (replayed_ok)
+    replayed.toJson(replayed_serialized);
+
+  const bool updated_ok = replayed_ok && replayed.fromJson(value, false);
+  json updated_serialized;
+  if (updated_ok)
+    replayed.toJson(updated_serialized);
+
+  return serialized.dump().size() + replayed_serialized.dump().size() +
+      updated_serialized.dump().size() + static_cast<size_t>(replayed_ok) +
+      static_cast<size_t>(updated_ok) +
+      static_cast<size_t>(serialized == replayed_serialized);
+}
+
+template <typename T>
+static size_t exerciseArrayElements(const json &values)
+{
+  if (!values.is_array())
+    return 0;
+
+  size_t observations = 0;
+  size_t count = 0;
+  for (const auto &value : values) {
+    observations += exerciseRoundTrip<T>(value);
+    if (++count == kMaxDirectArrayElements)
+      break;
+  }
+  return observations;
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-  if (!data || !size || size > kMaxTextInputSize)
+  if (!data || !size)
     return 0;
 
-  json root = json::parse(data, data + size, nullptr, false);
+  json root;
+  try {
+    root = json::parse(data, data + size, nullptr, false);
+  } catch (...) {
+    return 0;
+  }
+
   if (root.is_discarded())
     return 0;
 
@@ -88,24 +123,19 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
   const json &profiles = sectionOrRoot(root, "profileSequence");
   observations += exerciseRoundTrip<CIccCfgProfileSequence>(profiles);
-  if (profiles.is_array() && !profiles.empty())
-    observations += exerciseRoundTrip<CIccCfgProfile>(profiles.front());
+  observations += exerciseArrayElements<CIccCfgProfile>(profiles);
 
   const json &search_profiles = sectionOrRoot(search_apply, "profileSequence");
   observations += exerciseRoundTrip<CIccCfgProfileSequence>(search_profiles);
-  if (search_profiles.is_array() && !search_profiles.empty()) {
-    observations += exerciseRoundTrip<CIccCfgProfile>(
-        search_profiles.front());
-  }
+  if (&search_profiles != &profiles)
+    observations += exerciseArrayElements<CIccCfgProfile>(search_profiles);
 
   const json &pcc_weights = sectionOrRoot(search_apply, "pccWeights");
-  if (pcc_weights.is_array() && !pcc_weights.empty())
-    observations += exerciseRoundTrip<CIccCfgPccWeight>(pcc_weights.front());
+  observations += exerciseArrayElements<CIccCfgPccWeight>(pcc_weights);
 
   const json &color_data = sectionOrRoot(root, "colorData");
   const json &data_entries = sectionOrRoot(color_data, "data");
-  if (data_entries.is_array() && !data_entries.empty())
-    observations += exerciseRoundTrip<CIccCfgDataEntry>(data_entries.front());
+  observations += exerciseArrayElements<CIccCfgDataEntry>(data_entries);
 
   volatile size_t result_sink = observations;
   (void)result_sink;

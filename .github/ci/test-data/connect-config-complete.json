@@ -40,6 +40,10 @@
     "dstEncoding": "16Bit",
     "dstImageFile": "output.tif",
     "dstPlanar": false,
+    "dstTileHeight": 16,
+    "dstTileWidth": 16,
+    "dstBigTiff": true,
+    "srcIfd": 0,
     "srcImageFile": "input.tif"
   },
   "profileSequence": [
