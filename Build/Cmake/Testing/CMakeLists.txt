@@ -2725,6 +2725,40 @@ function(iccdev_add_xml_lut_curve_count_test)
   endif()
 endfunction()
 
+function(iccdev_add_lut_stage_combinations_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccLutStageCombinationsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/lut-stage-combinations.cpp"
+  )
+  target_link_libraries(iccLutStageCombinationsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccLutStageCombinationsTest)
+
+  add_test(
+    NAME iccdev.lut-stage-combinations
+    COMMAND "$<TARGET_FILE:iccLutStageCombinationsTest>"
+  )
+  set_tests_properties(iccdev.lut-stage-combinations PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;validation;lut;issue-2972;regression"
+  )
+  if(WIN32)
+    set(_lut_stage_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccLutStageCombinationsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _lut_stage_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.lut-stage-combinations PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_lut_stage_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_xml_text_long_roundtrip_test)
   if(NOT TARGET "${TARGET_LIB_ICCXML}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13415,6 +13449,7 @@ if(WIN32)
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_xml_text_long_roundtrip_test()
   iccdev_add_xml_lut_curve_count_test()
+  iccdev_add_lut_stage_combinations_test()
   iccdev_add_hex_data_malformed_xml_test()
   iccdev_add_xml_strict_numeric_attrs_test()
   iccdev_add_hex_data_malformed_json_test()
@@ -13984,6 +14019,7 @@ iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_xml_text_long_roundtrip_test()
 iccdev_add_xml_lut_curve_count_test()
+iccdev_add_lut_stage_combinations_test()
 iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_xml_strict_numeric_attrs_test()
 iccdev_add_hex_data_malformed_json_test()

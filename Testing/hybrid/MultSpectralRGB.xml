@@ -23,38 +23,78 @@
 
     <AToB0Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>
+      <MCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </MCurves>
       <Matrix
         e1="1.0460623962367692" e2="-0.6556506343902677" e3="0.0915396065343777"
         e4="0.2594887792084490" e5="0.2438346180065346" e6="-0.0033157677040351"
         e7="-0.0248639366902691" e8="0.0314264772319392" e9="0.4054879469695348"
         e10="0.00000000" e11="0.00000000" e12="0.00000000"/>
+      <BCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </BCurves>
     </lutAtoBType> </AToB0Tag>
 
     <AToB1Tag> <lutAtoBType>
       <Channels InputChannels="3" OutputChannels="3"/>
+      <MCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </MCurves>
       <Matrix
         e1="1.0460623962367692" e2="-0.6556506343902677" e3="0.0915396065343777"
         e4="0.2594887792084490" e5="0.2438346180065346" e6="-0.0033157677040351"
         e7="-0.0248639366902691" e8="0.0314264772319392" e9="0.4054879469695348"
         e10="0.00000000" e11="0.00000000" e12="0.00000000"/>
+      <BCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </BCurves>
     </lutAtoBType> </AToB1Tag>
 
     <BToA0Tag> <lutBtoAType>
       <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </BCurves>
       <Matrix
         e1="0.5695817281202792" e2="1.5464996183667241" e3="-0.1159379807556900"
         e4="-0.6050362295056060" e5="2.4540587819155060" e6="0.1566553770971605"
         e7="0.0818179715745423" e8="-0.0953674557335681" e9="2.4469141590031867"
         e10="0.00000000" e11="0.00000000" e12="0.00000000"/>
+      <MCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </MCurves>
     </lutBtoAType> </BToA0Tag>
 
     <BToA1Tag> <lutBtoAType>
       <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </BCurves>
       <Matrix
         e1="0.5695817281202792" e2="1.5464996183667241" e3="-0.1159379807556900"
         e4="-0.6050362295056060" e5="2.4540587819155060" e6="0.1566553770971605"
         e7="0.0818179715745423" e8="-0.0953674557335681" e9="2.4469141590031867"
         e10="0.00000000" e11="0.00000000" e12="0.00000000"/>
+      <MCurves>
+        <Curve/>
+        <Curve/>
+        <Curve/>
+      </MCurves>
     </lutBtoAType> </BToA1Tag>
 
     <mediaWhitePointTag> <XYZArrayType>
