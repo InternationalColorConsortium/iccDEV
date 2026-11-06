@@ -88,10 +88,12 @@ sanitizer. After pruning, only a separate cleanup job receives `actions: write`;
 it preserves the newest same-run corpus for each of the eight exact target
 names and deletes only the superseded duplicates from that run.
 
-Local validation uses an OSS-Fuzz checkout:
+Local validation uses an OSS-Fuzz checkout. Give the external source directory
+a lowercase basename because the helper derives its Docker repository name
+from that basename, and Docker rejects uppercase repository names:
 
 ```bash
-iccdev_source=/path/to/iccDEV
+iccdev_source=/path/to/iccdev-clean-source
 source_sha="$(git -C "$iccdev_source" rev-parse HEAD)"
 source_digest="$("$iccdev_source/.github/scripts/iccdev-cfl-source-digest.sh" "$iccdev_source")"
 python3 infra/helper.py build_image --external --pull "$iccdev_source"

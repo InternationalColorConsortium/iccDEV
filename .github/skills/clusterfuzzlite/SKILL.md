@@ -78,11 +78,13 @@ in-process seam, structured seed, and distinct attribution boundary.
 
 ## Local Validation
 
-From an OSS-Fuzz checkout, run for each sanitizer in `address`, `undefined`,
-and `memory`:
+From an OSS-Fuzz checkout, use a clean external source directory whose basename
+is lowercase. The helper derives its Docker repository name from that basename,
+and Docker rejects uppercase repository names. Run for each sanitizer in
+`address`, `undefined`, and `memory`:
 
 ```bash
-iccdev_source=/path/to/iccDEV
+iccdev_source=/path/to/iccdev-clean-source
 source_sha="$(git -C "$iccdev_source" rev-parse HEAD)"
 source_digest="$("$iccdev_source/.github/scripts/iccdev-cfl-source-digest.sh" "$iccdev_source")"
 python3 infra/helper.py build_image --external --pull "$iccdev_source"
