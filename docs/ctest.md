@@ -270,6 +270,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.mluc-iso-code-regressions` | `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh` |
 | `iccdev.pcc-zero-illuminant-regressions` | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` |
 | `iccdev.iccconnect-search-cost-regressions` | `.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh` |
+| `iccdev.iccconnect-htos-selector` | `.github/ci/regression/iccconnect-htos-selector.cpp`; the IccConnect `useHToS` control is on unless a configuration sets it false (ICC.2:2023 K.2.9), and false stops the HDR-to-SDR transform in standard and search chains (#2981) |
 | `iccdev.cam-degenerate-regressions` | `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` |
 | `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh` |
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |

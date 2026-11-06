@@ -278,7 +278,8 @@ void Usage(FILE* stream)
   fprintf(stream, "    100 + Intent - Spectral Only\n");
   fprintf(stream, "    +1000 - Use Luminance based PCS adjustment\n");
   fprintf(stream, "   +10000 - Use V5 sub-profile if present\n");
-  fprintf(stream, "  +100000 - Use HToS tag if present\n");
+  fprintf(stream, "  +100000 - Use HDR-to-SDR (H2Sx) tag if indicated (default;\n");
+  fprintf(stream, "            \"useHToS\": false in a -cfg file turns it off)\n");
   fprintf(stream, " +1000000 - NamedColor over black (icSigNmclSpectralOverBlackMbr 'spcb')\n");
   fprintf(stream, " +2000000 - NamedColor over gray  (icSigNmclSpectralOverGrayMbr 'spcg')\n");
   // The two overprint codes read as additive flags, and #2190 was filed by a
