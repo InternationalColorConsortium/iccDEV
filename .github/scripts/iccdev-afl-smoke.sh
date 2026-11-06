@@ -147,6 +147,26 @@ if [ "$max_seed_bytes" -lt 1024 ]; then
     exit 2
 fi
 
+# AFL++ 5.04a rejects positive test-cache sizes below 128 MiB before it starts
+# the forkserver. A stale shell or container setting must not turn a bounded
+# smoke run into an unrelated setup failure. Keep valid caller choices, but
+# disable an invalid undersized cache instead of silently allocating more
+# memory for every selected target.
+afl_testcache_min_mb=128
+if [ -n "${AFL_TESTCACHE_SIZE:-}" ]; then
+    case "$AFL_TESTCACHE_SIZE" in
+        *[!0-9]*)
+            echo "ERROR: AFL_TESTCACHE_SIZE must be numeric" >&2
+            exit 2
+            ;;
+    esac
+    if [ "$AFL_TESTCACHE_SIZE" -gt 0 ] && [ "$AFL_TESTCACHE_SIZE" -lt "$afl_testcache_min_mb" ]; then
+        echo "WARNING: AFL_TESTCACHE_SIZE=$AFL_TESTCACHE_SIZE is below the AFL++ minimum; disabling the test cache" >&2
+        AFL_TESTCACHE_SIZE=0
+        export AFL_TESTCACHE_SIZE
+    fi
+fi
+
 case "$build_type" in
     Debug|Release|RelWithDebInfo|MinSizeRel)
         ;;

@@ -104,6 +104,12 @@ Local maintainer smoke:
 .github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 30000
 ```
 
+AFL++ 5.04a accepts `AFL_TESTCACHE_SIZE=0` or a cache of at least 128 MiB.
+The smoke driver preserves valid caller settings and converts an inherited
+positive value below 128 to `0`, with a warning, so stale local environment
+settings cannot abort before the forkserver starts. It rejects non-numeric
+values as configuration errors.
+
 The AFL and CFL smoke workflows default to applying their maintainer-local
 patch stacks before building. This branch therefore tests local fuzzing fixes
 before a developer promotes them to normal source PRs. Apply maintainer-local
