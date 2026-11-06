@@ -5312,6 +5312,46 @@ function(iccdev_add_unsupported_profile_class_test)
   endif()
 endfunction()
 
+# Issue #2973: CIccEvalCompare accepted the ICC.2 16-channel device-space boundary but stored
+# the sampled device pixel in a 15-element stack array.  A library caller using
+# nGran=2 stayed below the independent sample-count cap and wrote element 15 on
+# all 65,536 nodes.  Build the 15-channel reach control, 16-channel boundary,
+# and 17-channel refusal in memory; sanitizer lanes make the old mismatch red.
+function(iccdev_add_eval_roundtrip_device_channel_bound_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEvalRoundtripDeviceChannelBoundTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/eval-roundtrip-device-channel-bound.cpp"
+  )
+  target_link_libraries(iccEvalRoundtripDeviceChannelBoundTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEvalRoundtripDeviceChannelBoundTest)
+
+  add_test(
+    NAME iccdev.eval-roundtrip-device-channel-bound
+    COMMAND "$<TARGET_FILE:iccEvalRoundtripDeviceChannelBoundTest>"
+  )
+  set_tests_properties(iccdev.eval-roundtrip-device-channel-bound PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;cmm;eval;roundtrip;security;bounds;issue-2973;regression"
+  )
+  if(WIN32)
+    set(_eval_roundtrip_bound_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEvalRoundtripDeviceChannelBoundTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _eval_roundtrip_bound_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.eval-roundtrip-device-channel-bound PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_eval_roundtrip_bound_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2176: CIccXform::Begin() reported every failure of its IIccAdjustPCSXform hint as
 # icCmmStatIncorrectApply -- "Incorrect Apply object" -- which is false on all 26 of
 # CalcFactors()' failure paths: the apply object is well formed in every one and it is
@@ -13508,6 +13548,7 @@ if(WIN32)
   iccdev_add_xml_float_significant_digits_test()
   iccdev_add_tonemap_write_many_outputs_test()
   iccdev_add_unsupported_profile_class_test()
+  iccdev_add_eval_roundtrip_device_channel_bound_test()
   iccdev_add_pcs_adjust_status_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_pcs_xyzconvert_matrix_channels_test()
@@ -14079,6 +14120,7 @@ iccdev_add_segmented_curve_bounds_json_test()
 iccdev_add_xml_float_significant_digits_test()
 iccdev_add_tonemap_write_many_outputs_test()
 iccdev_add_unsupported_profile_class_test()
+iccdev_add_eval_roundtrip_device_channel_bound_test()
 iccdev_add_pcs_adjust_status_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_pcs_xyzconvert_matrix_channels_test()
@@ -15071,9 +15113,10 @@ if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
 endif()
 
 # Issue #2964: the file-backed SampledSegment and SingleSampledCurve readers must stop when
-# their sample table cannot be sized. The deterministic SingleSampledCurve cap
-# runs under every Unix tool build; a validated Linux LD_PRELOAD allocator DSO
-# also reaches the otherwise impractical SampledSegment allocation-failure path.
+# their sample table cannot be sized. The same Linux fault-injection DSO also
+# covers both CIccMpeXmlMatrix::ParseXml() SetSize() calls: full MatrixData and
+# the implicit zero-matrix form. The deterministic SingleSampledCurve cap runs
+# under every Unix tool build; allocator-failure cases are Linux-only.
 if(TARGET iccFromXml)
   iccdev_add_script_test(
     iccdev.xml-sampled-curve-setsize

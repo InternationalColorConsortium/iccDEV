@@ -1707,7 +1707,10 @@ bool CIccMpeXmlMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   pData = icXmlFindNode(pNode->children, "MatrixData");
   if (pData) {
-    SetSize(nInputChannels, nOutputChannels);
+    if (!SetSize(nInputChannels, nOutputChannels)) {
+      parseStr += "Unable to allocate MatrixElement data\n";
+      return false;
+    }
 
     icUInt32Number nMatrixEntries = (icUInt32Number)nInputChannels * nOutputChannels;
     if (!CIccFloatArray::ParseArray(m_pMatrix, nMatrixEntries, pData->children))
@@ -1727,7 +1730,10 @@ bool CIccMpeXmlMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
     }
   }
   else { //Having no MatrixData implies having a matrix full of zeros which is represented by m_pMatrix set to NULL
-    SetSize(0, nOutputChannels); //Initialize with m_pMatrix set to NULL
+    if (!SetSize(0, nOutputChannels)) { //Initialize with m_pMatrix set to NULL
+      parseStr += "Unable to allocate MatrixElement data\n";
+      return false;
+    }
     m_nInputChannels = nInputChannels; //Fix m_nInputChannels
   }
 
