@@ -122,6 +122,12 @@ when practical.
 - Do not use `|| true` around profile generation, CTest discovery, regression
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
+- Cache only one immutable download archive per entry, with its SHA-256 in the
+  exact key and verification before extraction. Use explicit restore/save
+  actions; PRs restore only and trusted events save only after a restore miss.
+  Never cache CTest, artifact, or release state. The manual Docker workflow may reuse only inline
+  metadata from a previously validated canonical image resolved to an immutable
+  digest; keep `type=gha` disabled and retain a no-cache dispatch option.
 - Sanitize all `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT` writes.
 - Check out the base ref's `.github/scripts` sparsely and source its sanitizer
   helpers for every workflow that executes PR-controlled source.
@@ -143,6 +149,7 @@ For focused workflow iteration, start with:
 
 ```bash
 .github/scripts/preflight-safety-checks.sh --fast-lane
+.github/scripts/check-workflow-cache-policy.sh .github/workflows
 ```
 
 This scans changed workflow/script surfaces without running CTest or local

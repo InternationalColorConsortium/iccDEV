@@ -405,7 +405,7 @@ jobs:
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
-      - name: "1b. Absolute Cache Policy Audit"
+      - name: "1b. Immutable Download Cache Policy Audit"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -432,9 +432,9 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 1b. Absolute Cache Policy Audit" >> "$RISK_REPORT_PATH"
+          echo "## 1b. Immutable Download Cache Policy Audit" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
-          echo "Actions cache and mutable build cache are banned for all workflows." >> "$RISK_REPORT_PATH"
+          echo "Only exact-key, checksum-addressed immutable download archives are allowed." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
 
           mapfile -t workflow_files < <(
@@ -442,13 +442,13 @@ jobs:
               \( -name '*.yml' -o -name '*.yaml' \) | sort
           )
           if [ "${#workflow_files[@]}" -eq 0 ]; then
-            echo "[HIGH] Absolute cache policy violation: no workflow files found" >> "$RISK_REPORT_PATH"
+            echo "[HIGH] Cache policy violation: no workflow files found" >> "$RISK_REPORT_PATH"
             exit 1
           fi
 
           cache_policy="$TRUSTED_SCRIPTS/check-workflow-cache-policy.sh"
           if [ ! -x "$cache_policy" ]; then
-            echo "[HIGH] Absolute cache policy violation: cache policy helper missing" >> "$RISK_REPORT_PATH"
+            echo "[HIGH] Cache policy violation: cache policy helper missing" >> "$RISK_REPORT_PATH"
             exit 1
           fi
 
@@ -459,12 +459,12 @@ jobs:
           set -e
 
           if [ "$policy_status" -eq 0 ]; then
-            echo "[OK] No workflow cache primitives detected" >> "$RISK_REPORT_PATH"
+            echo "[OK] Workflow caches satisfy the immutable-download policy" >> "$RISK_REPORT_PATH"
             echo "" >> "$RISK_REPORT_PATH"
             exit 0
           fi
 
-          echo "[HIGH] Absolute cache policy violation detected" >> "$RISK_REPORT_PATH"
+          echo "[HIGH] Cache policy violation detected" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           echo "<details><summary>Cache policy findings</summary>" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
@@ -1227,56 +1227,6 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
-          # H-6: workflow cache use is prohibited in every boundary.
-          CACHE_BOUNDARY_GAPS=0
-          while IFS= read -r wf; do
-            wf_base=$(basename "$wf")
-            if [[ "$wf_base" == "ci-pr-risk-security-analysis.yml" ]]; then
-              continue
-            fi
-            findings=$(python3 - "$wf" <<'PY'
-          import re
-          import sys
-          from pathlib import Path
-
-          path = Path(sys.argv[1])
-          lines = path.read_text(encoding="utf-8").splitlines()
-          findings = []
-
-          def clean(value):
-              return value.strip().strip("'\"").lower()
-
-          for index, line in enumerate(lines, start=1):
-              code = line.split("#", 1)[0]
-              if re.search(r"uses:\s*actions/cache@", code):
-                  findings.append(f"{path.name}:{index}: actions/cache")
-              if re.search(r"uses:\s*msys2/setup-msys2@", code):
-                  window = "\n".join(lines[index:index + 25])
-                  if not re.search(r"(?m)^\s+cache:\s*(false|0|no|off)\s*$", window, re.I):
-                      findings.append(f"{path.name}:{index}: msys2/setup-msys2 cache not disabled")
-              if re.search(r"cache-(from|to):\s*\S|restore-keys:\s*\S|save-always:\s*\S", code):
-                  findings.append(f"{path.name}:{index}: cache input")
-              match = re.search(r"^\s+cache:\s*(\S.*)$", code)
-              if match and clean(match.group(1)) not in {"false", "0", "no", "off"}:
-                  findings.append(f"{path.name}:{index}: cache input")
-
-          print("\n".join(findings))
-          PY
-          )
-            if [[ -n "$findings" ]]; then
-              while IFS= read -r finding; do
-                [[ -n "$finding" ]] || continue
-                CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
-                echo "[HIGH] Workflow cache prohibited: \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
-                echo "" >> "$RISK_REPORT_PATH"
-              done <<< "$findings"
-            fi
-          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
-          if [[ $CACHE_BOUNDARY_GAPS -eq 0 ]]; then
-            echo "[OK] No workflow cache use detected" >> "$RISK_REPORT_PATH"
-            echo "" >> "$RISK_REPORT_PATH"
-          fi
-
           # H-7: publish workflows must not consume broad artifact intake.
           PUBLISH_BOUNDARY_GAPS=0
           while IFS= read -r wf; do
@@ -1400,7 +1350,7 @@ jobs:
           echo "Runs pinned zizmor offline against workflow and composite-action definitions." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
 
-          ZIZMOR_VERSION="1.31.1"
+          ZIZMOR_VERSION="1.32.0"
           ZIZMOR_VENV="${RUNNER_TEMP}/zizmor-venv"
           ZIZMOR_JSON="${RUNNER_TEMP}/zizmor-findings.json"
           ZIZMOR_LOG="${RUNNER_TEMP}/zizmor.log"
@@ -2420,12 +2370,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact'
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload'
             '^\[HIGH\].*privileged workflow_dispatch publish permissions'
-            '^\[HIGH\].*write credentials with GHA cache'
-            '^\[HIGH\].*release workflow uses broad cache restore keys'
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
-            '^\[HIGH\] Absolute cache policy violation'
-            '^\[HIGH\] Workflow cache prohibited:'
+            '^\[HIGH\] Cache policy violation'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
@@ -2484,25 +2429,9 @@ jobs:
                 cause="Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
                 remediation="Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
                 ;;
-              *"write credentials with GHA cache"*)
-                cause="A write-capable job shares mutable GitHub Actions cache state without a master-only trust boundary."
-                remediation="Namespace caches by workflow role and restrict write-capable cache producers to master-only jobs."
-                ;;
-              *"release workflow uses broad cache restore keys"*)
-                cause="Release builds can restore cache entries from broader or lower-trust cache namespaces."
-                remediation="Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
-                ;;
-              *"actions/cache in a publish/write workflow boundary"*|*"Buildx GHA cache in a publish/write workflow boundary"*)
-                cause="A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
-                remediation="Remove Actions cache and mutable build cache from all workflows; rebuild release inputs from pinned refs and verified checksums."
-                ;;
-              *"Absolute cache policy violation"*)
-                cause="A workflow contains a cache primitive or does not explicitly disable an implicit cache control."
-                remediation="Remove cache primitives and set supported implicit cache toggles such as cache:false, cache-binary:false, or no-cache:true."
-                ;;
-              *"Workflow cache prohibited"*)
-                cause="A workflow can read or write mutable GitHub Actions cache state."
-                remediation="Remove workflow cache use entirely, or explicitly disable cache-capable setup actions with cache: false."
+              *"Cache policy violation"*)
+                cause="A cache is not limited to an exact-key, checksum-addressed immutable archive or crosses a prohibited trust boundary."
+                remediation="Use explicit restore/save actions for one verified archive, save only on trusted events, and keep caches out of publish jobs."
                 ;;
               *"downloads artifacts without an explicit name or pattern"*)
                 cause="A publish workflow can ingest unintended artifacts from the same run."
@@ -2640,12 +2569,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact'
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload'
             '^\[HIGH\].*privileged workflow_dispatch publish permissions'
-            '^\[HIGH\].*write credentials with GHA cache'
-            '^\[HIGH\].*release workflow uses broad cache restore keys'
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
-            '^\[HIGH\] Absolute cache policy violation'
-            '^\[HIGH\] Workflow cache prohibited:'
+            '^\[HIGH\] Cache policy violation'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
@@ -3485,43 +3409,6 @@ jobs:
             $report += "[OK] Privileged workflow_dispatch publish jobs are approved-ref/environment gated"
           }
 
-          # H-6: workflow cache use is prohibited in every boundary.
-          $cacheBoundaryGaps = 0
-          foreach ($wf in $workflows) {
-            if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
-            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $lines = @($content -split "`r?`n")
-            for ($i = 0; $i -lt $lines.Count; $i++) {
-              $code = ($lines[$i] -split '#', 2)[0]
-              if ($code -match 'uses:\s*actions/cache@') {
-                $cacheBoundaryGaps++
-                $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): actions/cache")``"
-              }
-              if ($code -match 'uses:\s*msys2/setup-msys2@') {
-                $end = [Math]::Min($lines.Count - 1, $i + 25)
-                $window = ($lines[$i..$end] -join "`n")
-                if ($window -notmatch '(?m)^\s+cache:\s*(false|0|no|off)\s*$') {
-                  $cacheBoundaryGaps++
-                  $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): msys2/setup-msys2 cache not disabled")``"
-                }
-              }
-              if ($code -match 'cache-(from|to):\s*\S|restore-keys:\s*\S|save-always:\s*\S') {
-                $cacheBoundaryGaps++
-                $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): cache input")``"
-              }
-              if ($code -match '^\s+cache:\s*(\S.*)$') {
-                $cacheValue = $Matches[1].Trim().Trim("'`"").ToLowerInvariant()
-                if (@('false', '0', 'no', 'off') -notcontains $cacheValue) {
-                  $cacheBoundaryGaps++
-                  $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): cache input")``"
-                }
-              }
-            }
-          }
-          if ($cacheBoundaryGaps -eq 0) {
-            $report += "[OK] No workflow cache use detected"
-          }
-
           # H-7: publish workflows must not consume broad artifact intake.
           $publishBoundaryGaps = 0
           foreach ($wf in $workflows) {
@@ -4245,7 +4132,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\] Workflow cache prohibited:',
+            '^\[HIGH\] Cache policy violation',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'
@@ -4288,9 +4175,9 @@ jobs:
             } elseif ($Finding -like "*privileged workflow_dispatch publish permissions*") {
               $cause = "Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
               $remediation = "Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
-            } elseif ($Finding -like "*Workflow cache prohibited*") {
-              $cause = "A workflow can read or write mutable GitHub Actions cache state."
-              $remediation = "Remove workflow cache use entirely, or explicitly disable cache-capable setup actions with cache: false."
+            } elseif ($Finding -like "*Cache policy violation*") {
+              $cause = "A cache is not limited to an exact-key, checksum-addressed immutable archive or crosses a prohibited trust boundary."
+              $remediation = "Use explicit restore/save actions for one verified archive, save only on trusted events, and keep caches out of publish jobs."
             } elseif ($Finding -like "*downloads artifacts without an explicit name or pattern*") {
               $cause = "A publish workflow can ingest unintended artifacts from the same run."
               $remediation = "Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
@@ -4411,7 +4298,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\] Workflow cache prohibited:',
+            '^\[HIGH\] Cache policy violation',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'

@@ -56,8 +56,8 @@ jobs:
           # GitHub has no ubuntu-latest arm64 label; preserve native wheel tests.
           - {id: linux-aarch64, os: ubuntu-24.04-arm, platform: linux, arch: aarch64, timeout_minutes: 90}
           - {id: macos-x86_64, os: macos-15-intel, platform: macos, arch: x86_64, timeout_minutes: 90}
-          - {id: macos-arm64, os: macos-15, platform: macos, arch: arm64, timeout_minutes: 105}
-          - {id: macos-universal2, os: macos-15, platform: macos, arch: universal2, timeout_minutes: 105}
+          - {id: macos-arm64, os: macos-latest, platform: macos, arch: arm64, timeout_minutes: 105}
+          - {id: macos-universal2, os: macos-latest, platform: macos, arch: universal2, timeout_minutes: 105}
           - {id: windows-amd64, os: windows-2022, platform: windows, arch: AMD64, timeout_minutes: 90}
           - {id: windows-arm64, os: windows-11-arm, platform: windows, arch: ARM64, timeout_minutes: 90}
     defaults:

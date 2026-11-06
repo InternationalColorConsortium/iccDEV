@@ -93,7 +93,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Assert no GitHub Actions cache primitives
+      - name: Check release cache boundary
         env:
           BASH_ENV: /dev/null
         run: |
@@ -403,6 +403,11 @@ jobs:
   macos:
     name: "macOS arm64 Clang"
     needs: cache-policy
+    # Pin to macos-15: this job builds the macOS MATLAB MEX gateway, and
+    # MATLAB's mex toolchain is not qualified for macOS 26 (current
+    # macos-latest), which fails the native MEX link with undefined
+    # _mexFunctionAdapter symbols. macos-15 is the newest MATLAB-supported
+    # Apple Silicon runner.
     runs-on: macos-15
     timeout-minutes: 75
     steps:

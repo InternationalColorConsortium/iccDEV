@@ -17,6 +17,11 @@ name: "_build-test-windows"
 permissions:
   contents: read
 
+env:
+  ICCDEV_VCPKG_EXPORT_URL: >-
+    https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-23241-libheif-deps/iccdev-windows-vcpkg-classic-libheif-3087493.zip
+  ICCDEV_VCPKG_EXPORT_SHA256: 9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
 on:
   workflow_call:
     inputs:
@@ -69,6 +74,13 @@ jobs:
       # ---------------------------------------------------------------
       # Phase 2: Fetch vcpkg dependencies
       # ---------------------------------------------------------------
+      - name: Restore pinned vcpkg archive
+        id: vcpkg-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: Fetch vcpkg dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -83,16 +95,25 @@ jobs:
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
 
-          Write-Host "Fetching vcpkg dependencies from release..."
-          Start-BitsTransfer -Source https://github.com/InternationalColorConsortium/iccDEV/releases/download/vcpkg-win-23241-libheif-deps/iccdev-windows-vcpkg-classic-libheif-3087493.zip -Destination "deps.zip"
-          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
-          if ($actualDigest -ne '9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca') {
+          $archive = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-export.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            Write-Host "Fetching vcpkg dependencies from release..."
+            Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination $archive
+          }
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+          if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
           Write-Host "Extracting dependencies..."
-          tar -xf deps.zip
-          Remove-Item deps.zip
+          tar -xf $archive
           Write-Host "[OK] Dependencies extracted"
+
+      - name: Save verified vcpkg archive
+        if: github.event_name == 'workflow_dispatch' && steps.vcpkg-archive.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
 
       # ---------------------------------------------------------------
       # Phase 3: Build iccDEV C++ tools (MSVC)

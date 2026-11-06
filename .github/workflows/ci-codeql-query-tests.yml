@@ -51,6 +51,7 @@ concurrency:
 
 jobs:
   query-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     name: CodeQL Query Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -60,6 +61,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Restore pinned CodeQL archive
+        id: codeql-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: /tmp/codeql-bundle-linux64.tar.gz
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
 
       - name: Install CodeQL CLI
         shell: bash --noprofile --norc {0}
@@ -81,13 +89,25 @@ jobs:
           CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
           CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
           CODEQL_URL="https://github.com/github/codeql-action/releases/download"
-          curl -fsSL --retry 3 \
-            -o "${CODEQL_ARCHIVE}" \
-            "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+          if [[ ! -f "${CODEQL_ARCHIVE}" ]]; then
+            curl -fsSL --retry 3 \
+              -o "${CODEQL_ARCHIVE}" \
+              "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+          fi
           printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
           tar xzf "${CODEQL_ARCHIVE}" -C /opt
           # Prepend, so a codeql already on the runner image cannot win.
           echo "/opt/codeql" >> "$GITHUB_PATH"
+
+      - name: Save verified CodeQL archive
+        if: >-
+          (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch') &&
+          steps.codeql-archive.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: /tmp/codeql-bundle-linux64.tar.gz
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
 
       - name: Install CodeQL pack dependencies
         shell: bash --noprofile --norc {0}

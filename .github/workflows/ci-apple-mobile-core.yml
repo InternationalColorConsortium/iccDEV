@@ -22,7 +22,10 @@ concurrency:
 jobs:
   build:
     name: Build Apple mobile static cores
-    runs-on: macos-latest
+    # Release artifacts are cross-compiled for explicit Apple SDK/architecture
+    # pairs, so use the less-constrained Intel pool for that caller. Standalone
+    # smoke keeps Apple Silicon because it launches arm64 simulator hosts.
+    runs-on: ${{ inputs.release-artifact && 'macos-15-intel' || 'macos-latest' }}
     timeout-minutes: 60
 
     defaults:

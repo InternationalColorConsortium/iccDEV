@@ -405,8 +405,8 @@ def test_shared_macos_wheel_lanes_use_supported_native_hosts():
     }
     assert lanes == {
         "macos-x86_64": ("macos-15-intel", "x86_64", 90),
-        "macos-arm64": ("macos-15", "arm64", 105),
-        "macos-universal2": ("macos-15", "universal2", 105),
+        "macos-arm64": ("macos-latest", "arm64", 105),
+        "macos-universal2": ("macos-latest", "universal2", 105),
     }
     assert shared_wheel_job()["timeout-minutes"] == "${{ matrix.timeout_minutes }}"
 
@@ -417,8 +417,15 @@ def test_macos_execution_timeouts_cover_runner_latency():
     assert release["macos"]["timeout-minutes"] == 75
 
     apple = load_workflow("ci-apple-mobile-core.yml")["jobs"]["build"]
-    assert apple["runs-on"] == "macos-latest"
+    assert apple["runs-on"] == (
+        "${{ inputs.release-artifact && 'macos-15-intel' || 'macos-latest' }}"
+    )
     assert apple["timeout-minutes"] == 60
+
+    pr_unix = load_workflow("ci-pr-unix.yml")["jobs"]["build"]
+    assert pr_unix["timeout-minutes"] == (
+        "${{ matrix.os == 'macos-latest' && 45 || 20 }}"
+    )
 
     unix = load_workflow("_build-test-unix.yml")
     timeout = unix[True]["workflow_call"]["inputs"]["timeout-minutes"]

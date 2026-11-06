@@ -917,8 +917,10 @@ rebase events.
 `.github/workflows/ci-latest-release.yml` builds the three shipped MEX
 variants with MATLAB R2023b. Linux release jobs use x86_64 MATLAB; the macOS
 release job uses the explicit Apple Silicon `macos-15` runner rather than a
-moving `macos-latest` image. Its 75-minute execution timeout begins after
-GitHub assigns a runner; it does not change GitHub's separate queue limit.
+moving `macos-latest` image, because MATLAB's mex toolchain is not qualified
+for macOS 26 (current `macos-latest`) and fails the native MEX link. Its
+75-minute execution timeout begins after GitHub assigns a runner; it does not
+change GitHub's separate queue limit.
 Each platform runs the MATLAB checks and examples from its staged bundle
 before artifact upload, and the release packaging job verifies the expected
 MEX extension and support files after artifact download.

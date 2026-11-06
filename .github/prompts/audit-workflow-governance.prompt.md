@@ -103,6 +103,14 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Green-run `##[error]`, `##[warning]`, and `CMake Warning` lines reviewed
 - [ ] Install/uninstall logs checked for duplicate manifest paths and missing files
 - [ ] Package-manager and cache warnings classified as fixed, deferred, or baseline
+- [ ] Each allowed cache contains one immutable archive, uses a literal exact
+      key containing its SHA-256, and re-verifies that digest before extraction
+- [ ] Pull requests cannot save Actions caches; low-trust metadata and package
+      or release workflows do not restore or save caches; trusted saves run
+      only after a restore miss
+- [ ] Docker cache imports resolve a previously validated canonical image to an
+      immutable digest, export only inline metadata, and retain a no-cache mode
+- [ ] Cache pilots record cold/warm elapsed time, hit status, and entry size
 - [ ] Matrix smoke-test skips reviewed for missing coverage
 
 ### 12. Comprehensive Matrix Coverage
