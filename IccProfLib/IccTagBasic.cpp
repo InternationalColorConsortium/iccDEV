@@ -5919,6 +5919,10 @@ bool CIccTagSparseMatrixArray::Interpolate(icFloatNumber *DstVector, icFloatNumb
     pos=0.0;
   if (pos>1.0)
     pos=1.0;
+  // NaN fails both tests above and would reach the unsigned cast below
+  // (undefined behaviour, #2975); treat it as 0, as CIccTagFloatNum does.
+  if (std::isnan(pos))
+    pos=0.0;
 
   icFloatNumber fpos = (icFloatNumber)(nMatrix-1) * pos;
   icUInt32Number iPos = (icUInt32Number)fpos;
@@ -6316,6 +6320,10 @@ bool CIccTagFixedNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
     pos=0.0;
   if (pos>1.0)
     pos=1.0;
+  // NaN fails both tests above and would reach the unsigned cast below
+  // (undefined behaviour, #2975); treat it as 0, as CIccTagFloatNum does.
+  if (std::isnan(pos))
+    pos=0.0;
 
   icFloatNumber fpos = (icFloatNumber)(nVector-1) * pos;
   icUInt32Number iPos = (icUInt32Number)fpos;
@@ -6922,6 +6930,10 @@ bool CIccTagNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber po
     pos=0.0;
   if (pos>1.0)
     pos=1.0;
+  // NaN fails both tests above and would reach the unsigned cast below
+  // (undefined behaviour, #2975); treat it as 0, as CIccTagFloatNum does.
+  if (std::isnan(pos))
+    pos=0.0;
 
   icFloatNumber fpos = (icFloatNumber)(nVector-1) * pos;
   icUInt32Number iPos = (icUInt32Number)fpos;
