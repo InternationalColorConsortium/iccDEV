@@ -2724,7 +2724,11 @@ jobs:
             iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
-            if ! grep -qE '^(\./)?THIRD-PARTY-NOTICES\.md$' <<< "$entries"; then
+            expected_notice='iccDEV-Testing/THIRD-PARTY-NOTICES.md'
+            if [ "$name" = 'iccdev-wasm-release' ]; then
+              expected_notice='THIRD-PARTY-NOTICES.md'
+            fi
+            if ! grep -Fxq "$expected_notice" <<< "$entries"; then
               echo "::error::$name omits third-party notices"
               exit 1
             fi
