@@ -156,12 +156,12 @@ def scalar(window, name):
     lines = window.splitlines()
     for index, line in enumerate(lines):
         block = re.match(
-            rf"^(\s+){re.escape(name)}:\s*[|>][-+]?\s*$",
+            rf"^(\s+)(-\s+)?{re.escape(name)}:\s*[|>][-+]?\s*$",
             line,
         )
         if not block:
             continue
-        base_indent = len(block.group(1))
+        base_indent = len(block.group(1)) + len(block.group(2) or "")
         values = []
         for candidate in lines[index + 1:]:
             indent = len(candidate) - len(candidate.lstrip(" "))
@@ -171,7 +171,10 @@ def scalar(window, name):
                 values.append(candidate.strip())
         return " ".join(values)
 
-    match = re.search(rf"(?m)^\s+{re.escape(name)}:\s*(\S[^\r\n]*)$", window)
+    match = re.search(
+        rf"(?m)^\s+(?:-\s+)?{re.escape(name)}:\s*(\S[^\r\n]*)$",
+        window,
+    )
     if match:
         value = match.group(1).strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
@@ -394,7 +397,7 @@ for number, code, lines in outside_run:
             restore_ids.setdefault(restore_id, []).append(number - 1)
 low_trust_names = r"(?:pull_request_target|workflow_run|issue_comment|issues)"
 low_trust_trigger = re.search(
-    rf"(?m)^\s{{0,4}}{low_trust_names}:\s*$",
+    rf"(?m)^\s{{0,4}}['\"]?{low_trust_names}['\"]?\s*:",
     outside_text,
 ) or re.search(
     rf"(?m)^\s{{0,4}}(?:on|['\"]on['\"]):[^\r\n]*\b{low_trust_names}\b",

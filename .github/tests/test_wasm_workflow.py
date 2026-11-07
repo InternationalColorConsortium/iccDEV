@@ -402,18 +402,64 @@ def test_cache_policy_scanner_rejects_unbound_or_late_verification(
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
 @pytest.mark.parametrize(
-    ("verification_control", "extraction_control"),
+    (
+        "verification_header",
+        "verification_control",
+        "extraction_header",
+        "extraction_control",
+    ),
     [
         (
+            "      - name: Verify archive\n",
             "        if: steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "      - name: Extract archive\n",
             "",
         ),
-        ("        continue-on-error: true\n", ""),
-        ("", "        if: always()\n"),
+        (
+            "      - name: Verify archive\n",
+            "        continue-on-error: true\n",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - name: Verify archive\n",
+            "",
+            "      - name: Extract archive\n",
+            "        if: always()\n",
+        ),
+        (
+            "      - if: steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - continue-on-error: true\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - if: >-\n"
+            "          steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - name: Verify archive\n",
+            "",
+            "      - if: always()\n",
+            "",
+        ),
     ],
 )
 def test_cache_policy_scanner_requires_mandatory_verification(
-    verification_control, extraction_control, tmp_path
+    verification_header,
+    verification_control,
+    extraction_header,
+    extraction_control,
+    tmp_path,
 ):
     action_pin = "0" * 40
     archive_digest = "a" * 64
@@ -430,14 +476,14 @@ def test_cache_policy_scanner_requires_mandatory_verification(
         "        with:\n"
         "          path: /tmp/dependencies.zip\n"
         f"          key: iccdev-dependencies-{archive_digest}\n"
-        "      - name: Verify archive\n"
+        f"{verification_header}"
         f"{verification_control}"
         "        run: |\n"
         "          set -euo pipefail\n"
         "          ARCHIVE=/tmp/dependencies.zip\n"
         f"          ARCHIVE_SHA256={archive_digest}\n"
         "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
-        "      - name: Extract archive\n"
+        f"{extraction_header}"
         f"{extraction_control}"
         "        run: unzip /tmp/dependencies.zip\n"
     )
@@ -586,6 +632,14 @@ def test_cache_policy_scanner_allows_only_validated_image_cache(
         ),
         (
             "on: [pull_request_target]\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on:\n  pull_request_target: {}\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on:\n  'workflow_run': {workflows: [CI], types: [completed]}\n",
             "actions/cache is forbidden on low-trust triggers",
         ),
         (
