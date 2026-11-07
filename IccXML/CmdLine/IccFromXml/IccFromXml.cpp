@@ -55,9 +55,9 @@
 // in this main() already returns (#2387).
 static void Usage(FILE *out)
 {
-  fprintf(out, "IccFromXml built with IccProfLib Version " ICCPROFLIBVER ", IccLibXML Version " ICCLIBXMLVER "\n\n");
-  fprintf(out, "Usage: IccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}\n");
-  fprintf(out, "       IccFromXml -h | --help\n");
+  fprintf(out, "iccFromXml built with IccProfLib Version " ICCPROFLIBVER ", IccLibXML Version " ICCLIBXMLVER "\n\n");
+  fprintf(out, "Usage: iccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}\n");
+  fprintf(out, "       iccFromXml -h | --help\n");
 }
 
 // True for the option forms that ask for the usage screen rather than a conversion.
@@ -144,14 +144,14 @@ int main(int argc, char* argv[])
   // bare `iccFromXml` did the same.  Splitting them is what the report asks for: the
   // screen is identical, the status is not (#2387).
   //
-  // ONLY the lone-argument form is a help request.  Scanning every argv position for a
-  // help flag looked harmless and was not: `iccFromXml in.xml out.icc -h` then returned
-  // 0 having written no profile at all, where it previously ignored the flag and
-  // converted.  That is the exact "exit 0 while doing something else" contract
-  // violation this change exists to remove, reintroduced one argument to the right.  A
-  // help flag mixed into a conversion now falls through to the option loop below and is
-  // refused as unrecognised, which is a malformed invocation rather than a silent no-op.
-  if (argc == 2 && isHelpRequest(argv[1])) {
+  // A help request is a help flag in the FIRST position, whatever follows it:
+  // `iccFromXml -h in.xml` asks for help before naming any conversion (#2976), and
+  // used to try to open a file called "-h".  A help flag AFTER the operands is not
+  // one: scanning every argv position made `iccFromXml in.xml out.icc -h` return 0
+  // having written no profile, the "exit 0 while doing something else" violation
+  // #2387 removed.  That form still falls through to the option loop below and is
+  // refused as unrecognised.
+  if (argc >= 2 && isHelpRequest(argv[1])) {
     Usage(stdout);
     return EXIT_SUCCESS;
   }
