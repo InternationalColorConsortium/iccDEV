@@ -269,6 +269,18 @@ def powershell_archive_verification(text, archive_name, digest, workflow_text):
     return use_position is None or checksum.start() < use_position
 
 
+def verification_step_is_required(text):
+    if scalar(text, "if"):
+        return False
+    continue_on_error = scalar(text, "continue-on-error").lower()
+    return continue_on_error in {"", "false"}
+
+
+def step_can_run_after_failure(text):
+    condition = scalar(text, "if")
+    return bool(re.search(r"\b(?:always|failure|cancelled)\s*\(", condition))
+
+
 def archive_verification_exists(lines, action_index, operation, path, digest, workflow_text):
     archive_name = path.rsplit("/", 1)[-1]
     if not archive_name or "${{" in archive_name or not re.search(
@@ -277,21 +289,24 @@ def archive_verification_exists(lines, action_index, operation, path, digest, wo
         return False
 
     action_start, action_end = step_bounds(lines, action_index)
-    preceding_use = False
+    verified_before_use = False
     for start, end, text in steps_in_same_job(lines, action_index):
         if operation == "restore" and start < action_end:
             continue
         if operation == "save" and end > action_start:
             continue
-        verified = bash_archive_verification(text, archive_name, digest, workflow_text)
-        verified = verified or powershell_archive_verification(
-            text, archive_name, digest, workflow_text
+        verified = verification_step_is_required(text) and (
+            bash_archive_verification(text, archive_name, digest, workflow_text)
+            or powershell_archive_verification(
+                text, archive_name, digest, workflow_text
+            )
         )
-        if verified and not preceding_use:
-            return True
+        if verified:
+            verified_before_use = True
         if first_archive_use(text) is not None:
-            preceding_use = True
-    return False
+            if not verified_before_use or step_can_run_after_failure(text):
+                return False
+    return verified_before_use
 
 
 def cache_action_findings(
@@ -334,14 +349,14 @@ def cache_action_findings(
             r"github\.event_name\s*==\s*['\"]([a-z_]+)['\"]",
             condition,
         ))
-        trusted_expression = rf"{trusted_term}(?:\s*\|\|\s*{trusted_term})*"
+        trusted_expression = (
+            rf"(?:{trusted_term}|"
+            rf"\({trusted_term}(?:\s*\|\|\s*{trusted_term})*\))"
+        )
         restore_miss = (
             r"steps\.([A-Za-z0-9_-]+)\.outputs\.cache-hit\s*!=\s*['\"]true['\"]"
         )
-        safe_save_condition = (
-            rf"(?:\({trusted_expression}\)|{trusted_expression})"
-            rf"\s*&&\s*{restore_miss}"
-        )
+        safe_save_condition = rf"{trusted_expression}\s*&&\s*{restore_miss}"
         if "github.event_name" not in condition or not named_events:
             findings.append("cache save requires an explicit trusted-event condition")
         elif not named_events <= trusted_events:
@@ -377,13 +392,28 @@ for number, code, lines in outside_run:
         restore_id = scalar(step_window(lines, number - 1), "id")
         if restore_id:
             restore_ids.setdefault(restore_id, []).append(number - 1)
+low_trust_names = r"(?:pull_request_target|workflow_run|issue_comment|issues)"
 low_trust_trigger = re.search(
-    r"(?m)^\s{0,4}(pull_request_target|workflow_run|issue_comment|issues):\s*$",
+    rf"(?m)^\s{{0,4}}{low_trust_names}:\s*$",
+    outside_text,
+) or re.search(
+    rf"(?m)^\s{{0,4}}(?:on|['\"]on['\"]):[^\r\n]*\b{low_trust_names}\b",
     outside_text,
 )
+write_scopes = (
+    r"(?:contents|packages|attestations|artifact-metadata|id-token|actions|"
+    r"pull-requests|issues|statuses|checks|deployments|pages)"
+)
 write_boundary = re.search(
-    r"(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token|actions|"
-    r"pull-requests|issues|statuses|checks|deployments|pages):\s*write\s*$",
+    rf"(?m)^\s+['\"]?{write_scopes}['\"]?:\s*['\"]?write['\"]?\s*$",
+    outside_text,
+) or re.search(
+    rf"(?m)^\s*['\"]?permissions['\"]?:\s*['\"]?write-all['\"]?\s*$",
+    outside_text,
+) or re.search(
+    rf"(?m)^\s*['\"]?permissions['\"]?:\s*\{{[^\r\n]*"
+    rf"['\"]?{write_scopes}['\"]?\s*:\s*['\"]?write['\"]?"
+    rf"(?=\s*[,}}])",
     outside_text,
 )
 safe_docker_cache_contract = (
