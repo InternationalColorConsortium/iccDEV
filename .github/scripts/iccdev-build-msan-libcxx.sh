@@ -11,8 +11,8 @@ usage()
 }
 
 prefix=""
-llvm_commit="1ab49a973e210e97d61e5db6557180dcb92c3e98"
-libxml2_commit="3d840e17858de03a09fba8b202e3a89267d5795a"
+llvm_commit="ca7933e47d3a3451d81e72ac174dcb5aa28b59d1"
+libxml2_commit="96498992efa48d52b0e8b83058bd88dbdaf153c1"
 jobs="${BUILD_JOBS:-$(nproc)}"
 build_libxml2=1
 

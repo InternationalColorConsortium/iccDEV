@@ -402,18 +402,64 @@ def test_cache_policy_scanner_rejects_unbound_or_late_verification(
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
 @pytest.mark.parametrize(
-    ("verification_control", "extraction_control"),
+    (
+        "verification_header",
+        "verification_control",
+        "extraction_header",
+        "extraction_control",
+    ),
     [
         (
+            "      - name: Verify archive\n",
             "        if: steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "      - name: Extract archive\n",
             "",
         ),
-        ("        continue-on-error: true\n", ""),
-        ("", "        if: always()\n"),
+        (
+            "      - name: Verify archive\n",
+            "        continue-on-error: true\n",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - name: Verify archive\n",
+            "",
+            "      - name: Extract archive\n",
+            "        if: always()\n",
+        ),
+        (
+            "      - if: steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - continue-on-error: true\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - if: >-\n"
+            "          steps.dependency-archive.outputs.cache-hit != 'true'\n",
+            "",
+            "      - name: Extract archive\n",
+            "",
+        ),
+        (
+            "      - name: Verify archive\n",
+            "",
+            "      - if: always()\n",
+            "",
+        ),
     ],
 )
 def test_cache_policy_scanner_requires_mandatory_verification(
-    verification_control, extraction_control, tmp_path
+    verification_header,
+    verification_control,
+    extraction_header,
+    extraction_control,
+    tmp_path,
 ):
     action_pin = "0" * 40
     archive_digest = "a" * 64
@@ -430,14 +476,14 @@ def test_cache_policy_scanner_requires_mandatory_verification(
         "        with:\n"
         "          path: /tmp/dependencies.zip\n"
         f"          key: iccdev-dependencies-{archive_digest}\n"
-        "      - name: Verify archive\n"
+        f"{verification_header}"
         f"{verification_control}"
         "        run: |\n"
         "          set -euo pipefail\n"
         "          ARCHIVE=/tmp/dependencies.zip\n"
         f"          ARCHIVE_SHA256={archive_digest}\n"
         "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
-        "      - name: Extract archive\n"
+        f"{extraction_header}"
         f"{extraction_control}"
         "        run: unzip /tmp/dependencies.zip\n"
     )
@@ -589,6 +635,26 @@ def test_cache_policy_scanner_allows_only_validated_image_cache(
             "actions/cache is forbidden on low-trust triggers",
         ),
         (
+            "on:\n  pull_request_target: {}\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on:\n  'workflow_run': {workflows: [CI], types: [completed]}\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on: {workflow_run: {workflows: [CI], types: [completed]}}\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on: pull_request_target\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
+            "on:\n  - issues\n",
+            "actions/cache is forbidden on low-trust triggers",
+        ),
+        (
             "on:\n  workflow_dispatch:\n",
             "cached archive SHA-256 must be verified before extraction or saving",
         ),
@@ -622,6 +688,141 @@ def test_cache_policy_scanner_rejects_unsafe_cache(
     output = result.stdout + result.stderr
     assert result.returncode != 0
     assert diagnostic in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+@pytest.mark.parametrize(
+    ("header", "root_indent"),
+    [
+        ('on: ["pull_request_\\u0074arget"]\n', ""),
+        ('"o\\u006e": {pull_request_target: {}}\n', ""),
+        ("on:\n  {\n    pull_request_target: {}\n  }\n", ""),
+        ("on:\n  pull_request_target: {}\n", "  "),
+        (
+            "on: {workflow_dispatch: {inputs: {label: {type: string, "
+            "default: build(}}}, pull_request_target: {}}\n",
+            "",
+        ),
+        (
+            "on: {workflow_dispatch: {inputs: {label: {type: string, "
+            "default: it's ready}}}, pull_request_target: {}}\n",
+            "",
+        ),
+        ("on: {pull_request_target}\n", ""),
+    ],
+)
+def test_cache_policy_scanner_rejects_obscured_low_trust_triggers(
+    header, root_indent, tmp_path
+):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        f"{header}"
+        "jobs:\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - uses: actions/cache/restore@"
+        f"{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.tar.gz\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify archive\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=/tmp/dependencies.tar.gz\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | "
+        "sha256sum -c -\n"
+    )
+    if root_indent:
+        workflow = "\n".join(
+            root_indent + line if line else line
+            for line in workflow.splitlines()
+        ) + "\n"
+    assert isinstance(yaml.safe_load(workflow), dict)
+
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "actions/cache is forbidden on low-trust triggers" in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+@pytest.mark.parametrize(
+    ("permissions", "trigger", "job_name"),
+    [
+        (
+            "permissions:\n  issues: read\n",
+            "on:\n  workflow_dispatch:\n    inputs:\n      issues:\n"
+            "        required: false\n        type: string\n",
+            "test",
+        ),
+        (
+            "permissions:\n  'issues': read\n",
+            "on:\n  workflow_dispatch:\n",
+            "test",
+        ),
+        (
+            "permissions: {issues: read}\n",
+            "on: {workflow_dispatch: {inputs: {issues: {required: false}}}}\n",
+            "test",
+        ),
+        (
+            "permissions: {contents: read}\n",
+            "on: workflow_dispatch\n",
+            "issues",
+        ),
+        (
+            "permissions: {contents: read}\n",
+            "on: {\n  workflow_dispatch: {\n    inputs: "
+            "{issues: {required: false}}\n  }\n}\n",
+            "test",
+        ),
+    ],
+)
+def test_cache_policy_scanner_scopes_trigger_names_to_on_mapping(
+    permissions, trigger, job_name, tmp_path
+):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        f"{permissions}"
+        f"{trigger}"
+        "jobs:\n"
+        f"  {job_name}:\n"
+        "    steps:\n"
+        "      - id: dependency-archive\n"
+        f"        uses: actions/cache/restore@{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify archive\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=/tmp/dependencies.zip\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
+    )
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "[OK] Cache policy" in output
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")

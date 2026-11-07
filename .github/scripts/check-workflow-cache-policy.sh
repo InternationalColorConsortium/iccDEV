@@ -46,6 +46,7 @@ for workflow in "${workflow_files[@]}"; do
   # Capture the scanner result before reading it. The process-substitution
   # redirection fails on macOS Bash 3.2, allowing a false [OK] result.
   matches=$(python3 - "$workflow" <<'PY'
+import json
 import re
 import sys
 from pathlib import Path
@@ -156,12 +157,12 @@ def scalar(window, name):
     lines = window.splitlines()
     for index, line in enumerate(lines):
         block = re.match(
-            rf"^(\s+){re.escape(name)}:\s*[|>][-+]?\s*$",
+            rf"^(\s+)(-\s+)?{re.escape(name)}:\s*[|>][-+]?\s*$",
             line,
         )
         if not block:
             continue
-        base_indent = len(block.group(1))
+        base_indent = len(block.group(1)) + len(block.group(2) or "")
         values = []
         for candidate in lines[index + 1:]:
             indent = len(candidate) - len(candidate.lstrip(" "))
@@ -171,13 +172,204 @@ def scalar(window, name):
                 values.append(candidate.strip())
         return " ".join(values)
 
-    match = re.search(rf"(?m)^\s+{re.escape(name)}:\s*(\S[^\r\n]*)$", window)
+    match = re.search(
+        rf"(?m)^\s+(?:-\s+)?{re.escape(name)}:\s*(\S[^\r\n]*)$",
+        window,
+    )
     if match:
         value = match.group(1).strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
             value = value[1:-1]
         return value
     return ""
+
+
+def decode_yaml_scalar(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return json.loads(value)
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1].replace("''", "'")
+    return value
+
+
+def quoted_scalar_starts(value, index):
+    previous = value[:index].rstrip()
+    if not previous or previous[-1] in "[{,:":
+        return True
+    if previous[-1] != "?":
+        return False
+    before_indicator = previous[:-1].rstrip()
+    return not before_indicator or before_indicator[-1] in "[{,"
+
+
+def top_level_separator_index(value, separator):
+    depth = 0
+    quote = ""
+    escaped = False
+    for index, character in enumerate(value):
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif (
+                character == quote == "'"
+                and index + 1 < len(value)
+                and value[index + 1] == "'"
+            ):
+                escaped = True
+            elif character == quote:
+                quote = ""
+            continue
+        if character in {"'", '"'} and quoted_scalar_starts(value, index):
+            quote = character
+        elif character in "[{":
+            depth += 1
+        elif character in "]}":
+            depth = max(0, depth - 1)
+        elif character == separator and depth == 0:
+            return index
+    return -1
+
+
+def split_top_level(value, separator):
+    parts = []
+    start = 0
+    while start <= len(value):
+        relative = top_level_separator_index(value[start:], separator)
+        if relative < 0:
+            parts.append(value[start:].strip())
+            break
+        end = start + relative
+        parts.append(value[start:end].strip())
+        start = end + 1
+    return [part for part in parts if part]
+
+
+def flow_depth(value):
+    depth = 0
+    quote = ""
+    escaped = False
+    for index, character in enumerate(value):
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif (
+                character == quote == "'"
+                and index + 1 < len(value)
+                and value[index + 1] == "'"
+            ):
+                escaped = True
+            elif character == quote:
+                quote = ""
+            continue
+        if character in {"'", '"'} and quoted_scalar_starts(value, index):
+            quote = character
+        elif character in "[{":
+            depth += 1
+        elif character in "]}":
+            depth -= 1
+    return depth
+
+
+def inline_trigger_names(value):
+    value = value.strip()
+    if value.startswith("[") and value.endswith("]"):
+        return {
+            decode_yaml_scalar(item)
+            for item in split_top_level(value[1:-1], ",")
+        }
+    if value.startswith("{") and value.endswith("}"):
+        names = set()
+        for item in split_top_level(value[1:-1], ","):
+            separator = top_level_separator_index(item, ":")
+            if separator >= 0:
+                names.add(decode_yaml_scalar(item[:separator]))
+            else:
+                names.add(decode_yaml_scalar(item))
+        return names
+    return {decode_yaml_scalar(value)} if value else set()
+
+
+def workflow_trigger_names(text):
+    lines = text.splitlines()
+    root_indents = [
+        len(line) - len(line.lstrip(" "))
+        for line in lines
+        if line.strip()
+        and line.strip() not in {"---", "..."}
+        and not line.lstrip().startswith("%")
+    ]
+    if not root_indents:
+        return set()
+    root_indent = min(root_indents)
+
+    on_index = -1
+    on_value = ""
+    for index, line in enumerate(lines):
+        indent = len(line) - len(line.lstrip(" "))
+        if indent != root_indent:
+            continue
+        entry = line.strip()
+        separator = top_level_separator_index(entry, ":")
+        if separator >= 0 and decode_yaml_scalar(entry[:separator]) == "on":
+            on_index = index
+            on_value = entry[separator + 1:].strip()
+            break
+    if on_index < 0:
+        return set()
+
+    if on_value:
+        while flow_depth(on_value) > 0 and on_index + 1 < len(lines):
+            on_index += 1
+            on_value += " " + lines[on_index].strip()
+        return inline_trigger_names(on_value)
+
+    first_child = next(
+        (
+            index
+            for index in range(on_index + 1, len(lines))
+            if lines[index].strip()
+        ),
+        -1,
+    )
+    if first_child < 0:
+        return set()
+    first_indent = len(lines[first_child]) - len(lines[first_child].lstrip(" "))
+    if first_indent <= root_indent:
+        return set()
+    first_value = lines[first_child].strip()
+    if first_value.startswith(("{", "[")):
+        flow_value = first_value
+        flow_index = first_child
+        while flow_depth(flow_value) > 0 and flow_index + 1 < len(lines):
+            flow_index += 1
+            flow_value += " " + lines[flow_index].strip()
+        return inline_trigger_names(flow_value)
+
+    names = set()
+    event_indent = None
+    for line in lines[on_index + 1:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= root_indent:
+            break
+        if event_indent is None:
+            event_indent = indent
+        if indent != event_indent:
+            continue
+        entry = line.strip()
+        if entry.startswith("- "):
+            entry = entry[2:].strip()
+        separator = top_level_separator_index(entry, ":")
+        if separator >= 0:
+            entry = entry[:separator]
+        names.add(decode_yaml_scalar(entry))
+    return names
 
 
 def digest_env_names(workflow_text, digest):
@@ -392,14 +584,8 @@ for number, code, lines in outside_run:
         restore_id = scalar(step_window(lines, number - 1), "id")
         if restore_id:
             restore_ids.setdefault(restore_id, []).append(number - 1)
-low_trust_names = r"(?:pull_request_target|workflow_run|issue_comment|issues)"
-low_trust_trigger = re.search(
-    rf"(?m)^\s{{0,4}}{low_trust_names}:\s*$",
-    outside_text,
-) or re.search(
-    rf"(?m)^\s{{0,4}}(?:on|['\"]on['\"]):[^\r\n]*\b{low_trust_names}\b",
-    outside_text,
-)
+low_trust_names = {"pull_request_target", "workflow_run", "issue_comment", "issues"}
+low_trust_trigger = bool(workflow_trigger_names(outside_text) & low_trust_names)
 write_scopes = (
     r"(?:contents|packages|attestations|artifact-metadata|id-token|actions|"
     r"pull-requests|issues|statuses|checks|deployments|pages)"
