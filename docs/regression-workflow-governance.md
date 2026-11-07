@@ -406,6 +406,11 @@ For unified `Dockerfile` publishing:
 
 1. Build and smoke the target image locally; cached development builds are
    permitted, but the final pre-push proof must use no cache.
+   The manual Docker workflow defaults to a digest-pinned inline cache from its
+   last validated integration image, falls back to `latest`, and performs a
+   cold build when neither exists. It exposes `use_build_cache=false` for an
+   explicit clean hosted rebuild and does not use the GitHub Actions cache
+   service or a separate mutable cache image.
 2. Publish through the maintainer-controlled container release path.
 3. Record the published immutable SHA tag, digest, and source revision from the
    release output.
