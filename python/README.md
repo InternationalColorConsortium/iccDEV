@@ -201,14 +201,20 @@ except iccdev.IccCmmError as exc:
 | `validate_profile(bytes)` | Validate ICC bytes and return status plus report |
 | `validate_profile_file(path)` | Validate an ICC file and return status plus report |
 | `icc_to_xml(profile)` | Convert ICC path or bytes to XML text using `iccToXml` |
-| `icc_from_xml(xml)` | Convert XML text/path/bytes to ICC profile bytes using `iccFromXml` |
+| `icc_from_xml(xml)` | Convert XML text/path/bytes to ICC profile bytes using `iccFromXml`; sidecars disabled by default |
 | `icc_to_json(profile)` | Convert ICC path or bytes to JSON text using `iccToJson` |
-| `icc_from_json(json)` | Convert JSON text/path/object to ICC profile bytes using `iccFromJson` |
+| `icc_from_json(json)` | Convert JSON text/path/object to ICC profile bytes using `iccFromJson`; file imports disabled by default |
 | `dump_profile(profile, mode="ALL")` | Run `iccDumpProfile` for an ICC path or bytes |
 | `round_trip(profile)` | Run `iccRoundTrip` for an ICC path or bytes |
 | `heif_dump(image, output_dir=None)` | Report HEIF ICC properties and optionally extract raw profiles |
 | `find_tool(tool)` | Resolve a supported iccDEV command-line tool |
 | `available_tools()` | Return discovered CLI-backed helper tools |
+
+For trusted local documents that need sidecar files, pass
+`allow_file_includes=True` to `icc_from_xml` or
+`allow_file_imports=True` to `icc_from_json`. Both options require a boolean.
+These helpers require matching native tools that recognize the import-policy
+flags; older iccDEV binaries fail the conversion rather than ignoring them.
 
 ### IccProfile
 

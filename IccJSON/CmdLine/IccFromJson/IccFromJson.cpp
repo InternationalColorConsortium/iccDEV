@@ -39,6 +39,7 @@
 #include "IccProfLibVer.h"
 #include "IccFileUtil.h"
 #include "IccLibJSONVer.h"
+#include "IccJsonConfig.h"
 #include <cstring>
 #include <cstdlib>
 #include <string>
@@ -57,7 +58,7 @@
 static void Usage(FILE *out)
 {
   fprintf(out, "IccFromJson built with IccProfLib Version " ICCPROFLIBVER ", IccLibJSON Version " ICCLIBJSONVER "\n\n");
-  fprintf(out, "Usage: IccFromJson json_file saved_profile_file {-noid}\n");
+  fprintf(out, "Usage: IccFromJson json_file saved_profile_file {-noid -allow-file-imports -no-file-imports}\n");
   fprintf(out, "       IccFromJson -h | --help\n");
 }
 
@@ -96,9 +97,16 @@ int main(int argc, char* argv[])
   std::string reason;
 
   bool bNoId = false;
+  bool bAllowFileImports = false;
   for (int i = 3; i < argc; i++) {
     if (!ICC_STRICMP(argv[i], "-noid")) {
       bNoId = true;
+    }
+    else if (!ICC_STRICMP(argv[i], "-no-file-imports")) {
+      bAllowFileImports = false;
+    }
+    else if (!ICC_STRICMP(argv[i], "-allow-file-imports")) {
+      bAllowFileImports = true;
     }
     else {
       // An unrecognised option used to be skipped in silence, so the "-no-id"
@@ -110,6 +118,11 @@ int main(int argc, char* argv[])
       return EXIT_FAILURE;
     }
   }
+
+  // File imports remain disabled for library and CLI callers by default.
+  // A trusted local CLI invocation can opt in; service callers explicitly
+  // pass -no-file-imports for uploaded JSON.
+  g_IccJsonAllowFileImports = bAllowFileImports;
 
   // On stderr, like the XML twin: this returned EXIT_FAILURE already but answered
   // on stdout, so a caller that separates the streams saw nothing (#2384).

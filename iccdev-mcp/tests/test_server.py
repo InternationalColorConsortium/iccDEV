@@ -725,7 +725,8 @@ def test_pawg_report_passes_resolved_profile(monkeypatch, tmp_path):
 
 
 def test_apply_profiles_config_args(monkeypatch):
-    """MCP stdio apply_profiles should support raw documented CLI args."""
+    """MCP stdio routes explicitly trusted raw arguments to the wrapper."""
+    monkeypatch.setenv("ICCDEV_MCP_ALLOW_RAW_CLI_ARGS", "1")
     captured = {}
 
     def fake_run_apply_profiles_args(config_args):

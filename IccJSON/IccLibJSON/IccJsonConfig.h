@@ -57,7 +57,7 @@ typedef enum {
 // Library-wide flag: permit `"imports": [{"file": "..."}]` and similar
 // file-loader paths in IccLibJSON. Off by default because the JSON is
 // usually attacker-controlled in library/service/WASM contexts. The
-// iccFromJson CLI tool flips this on after argument parsing.
+// iccFromJson CLI enables it only with -allow-file-imports.
 extern bool g_IccJsonAllowFileImports;
 
 #endif // _ICCJSONCONFIG_H

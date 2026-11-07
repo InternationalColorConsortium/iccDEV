@@ -30,7 +30,8 @@ try:
     from starlette.responses import HTMLResponse, JSONResponse, Response
     from starlette.routing import Route
     from starlette.datastructures import UploadFile
-    from starlette.formparsers import MultiPartException
+    from starlette.formparsers import MultiPartException, MultiPartParser
+    from starlette.concurrency import run_in_threadpool
     HAS_STARLETTE = True
 except ImportError:
     HAS_STARLETTE = False
@@ -43,16 +44,22 @@ except ImportError:
 
 from iccdev_mcp import __version__, cli_tools, profiles
 from iccdev_mcp.server import NativeBindingsUnavailable
+from iccdev_mcp.upload_store import (
+    UploadQuotaExceeded, default_upload_dir, store_upload,
+)
 
 # Maximum upload size: 20 MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_MULTIPART_BYTES = MAX_UPLOAD_BYTES + 64 * 1024
+MAX_UPLOAD_TOTAL_BYTES = 100 * 1024 * 1024
+MAX_UPLOAD_FILES = 256
+UPLOAD_RETENTION_SECONDS = 24 * 60 * 60
 
 # Maximum JSON request body size: 10 MB
 MAX_JSON_BYTES = 10 * 1024 * 1024
 
 # Upload temp directory
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "iccdev-mcp-uploads"
+UPLOAD_DIR = default_upload_dir()
 
 _FILE_KINDS = {
     "profile": ("*.icc", "*.icm", "*.ICC", "*.ICM"),
@@ -337,12 +344,12 @@ const TOOLS = {
   from_xml: { label: 'XML to ICC', method: 'POST', path: '/api/from-xml', desc: 'Run iccFromXml on an XML file and return an ICC blob as base64.', fields: [{ name: 'xml_path', label: 'XML path', type: 'testing_file', kind: 'xml', required: true }] },
   from_json: { label: 'JSON to ICC', method: 'POST', path: '/api/from-json', desc: 'Run iccFromJson on a JSON file and return an ICC blob as base64.', fields: [{ name: 'json_path', label: 'JSON path', type: 'testing_file', kind: 'json', required: true }] },
   from_cube: { label: 'Cube to ICC', method: 'POST', path: '/api/from-cube', desc: 'Run iccFromCube on a .cube LUT.', fields: [{ name: 'cube_path', label: '.cube path', type: 'testing_file', kind: 'cube', required: true }] },
-  apply_profiles: { label: 'Apply profiles', method: 'POST', path: '/api/apply-profiles', desc: 'Apply profile sequence to a TIFF input. Use config args for exact documented CLI forms such as -cfg config.json.', fields: [{ name: 'config_args', label: 'Raw CLI args JSON array', type: 'json', value: '[]' }, { name: 'input_tiff', label: 'Input TIFF', type: 'testing_file', kind: 'tiff' }, { name: 'profiles', label: 'Profiles JSON array', type: 'json', value: '[]' }, { name: 'intents', label: 'Profile intents JSON array', type: 'json', value: '[]' }, { name: 'encoding', label: 'Encoding', type: 'select', value: '1', options: ['0', '1', '2', '4'] }, { name: 'compress', label: 'Compress', type: 'select', value: '0', options: ['0', '1'] }, { name: 'planar', label: 'Planar', type: 'select', value: '0', options: ['0', '1'] }, { name: 'embed', label: 'Embed output ICC', type: 'select', value: '1', options: ['0', '1'] }, { name: 'interpolation', label: 'Interpolation', type: 'select', value: '0', options: ['0', '1'] }] },
-  apply_named_cmm: { label: 'Apply named CMM', method: 'POST', path: '/api/apply-named-cmm', desc: 'Run iccApplyNamedCmm with config args.', fields: [{ name: 'config_args', label: 'Config args JSON array', type: 'json', value: '[]', required: true }] },
+  apply_profiles: { label: 'Apply profiles', method: 'POST', path: '/api/apply-profiles', desc: 'Apply profiles to a TIFF. Raw config args require trusted server opt-in.', fields: [{ name: 'config_args', label: 'Raw CLI args JSON array (trusted mode)', type: 'json', value: '[]' }, { name: 'input_tiff', label: 'Input TIFF', type: 'testing_file', kind: 'tiff' }, { name: 'profiles', label: 'Profiles JSON array', type: 'json', value: '[]' }, { name: 'intents', label: 'Profile intents JSON array', type: 'json', value: '[]' }, { name: 'encoding', label: 'Encoding', type: 'select', value: '1', options: ['0', '1', '2', '4'] }, { name: 'compress', label: 'Compress', type: 'select', value: '0', options: ['0', '1'] }, { name: 'planar', label: 'Planar', type: 'select', value: '0', options: ['0', '1'] }, { name: 'embed', label: 'Embed output ICC', type: 'select', value: '1', options: ['0', '1'] }, { name: 'interpolation', label: 'Interpolation', type: 'select', value: '0', options: ['0', '1'] }] },
+  apply_named_cmm: { label: 'Apply named CMM', method: 'POST', path: '/api/apply-named-cmm', desc: 'Run iccApplyNamedCmm with trusted server opt-in.', fields: [{ name: 'config_args', label: 'Config args JSON array (trusted mode)', type: 'json', value: '[]', required: true }] },
   create_link: { label: 'Create device link', method: 'POST', path: '/api/create-link', desc: 'Create a device link from profile paths.', fields: [{ name: 'profiles', label: 'Profiles JSON array', type: 'json', value: '[]', required: true }] },
   v5_to_v4: { label: 'V5 display to V4', method: 'POST', path: '/api/v5-to-v4', desc: 'Convert v5 display and observer profiles to v4.', fields: [{ name: 'display_profile', label: 'Display profile', type: 'profile', required: true }, { name: 'observer_profile', label: 'Observer profile', type: 'profile', required: true }] },
   spec_sep: { label: 'Combine spectral TIFFs', method: 'POST', path: '/api/spec-sep', desc: 'Combine numbered grayscale TIFF files; the literal prefix plus each channel number names an input.', fields: [{ name: 'input_prefix', label: 'Literal channel filename prefix', type: 'text', required: true }, { name: 'start', label: 'First channel', type: 'number', value: '1', required: true }, { name: 'end', label: 'Last channel', type: 'number', value: '10', required: true }, { name: 'increment', label: 'Channel increment', type: 'number', value: '1', required: true }, { name: 'compress', label: 'Compression (0=none, 1=LZW)', type: 'number', value: '0' }, { name: 'planar', label: 'Planar (0=interleaved, 1=separate)', type: 'number', value: '0' }, { name: 'profile', label: 'Optional matching ICC profile', type: 'profile' }, { name: 'tile_width', label: 'Tile width (0=strips)', type: 'number', value: '0' }, { name: 'tile_height', label: 'Tile height (0=strips)', type: 'number', value: '0' }, { name: 'bigtiff', label: 'BigTIFF', type: 'select', valueType: 'boolean', value: 'false', options: ['false', 'true'] }] },
-  apply_search: { label: 'Apply search', method: 'POST', path: '/api/apply-search', desc: 'Run iccApplySearch with config args.', fields: [{ name: 'config_args', label: 'Config args JSON array', type: 'json', value: '[]', required: true }] },
+  apply_search: { label: 'Apply search', method: 'POST', path: '/api/apply-search', desc: 'Run iccApplySearch with trusted server opt-in.', fields: [{ name: 'config_args', label: 'Config args JSON array (trusted mode)', type: 'json', value: '[]', required: true }] },
   upload: { label: 'Upload file', method: 'UPLOAD', path: '/api/upload', desc: 'Upload ICC, image, XML, JSON, or cube input for follow-up tool calls.', fields: [{ name: 'file', label: 'File', type: 'file', required: true }] }
 };
 let currentTool = 'health';
@@ -1151,7 +1158,10 @@ async def api_upload(request: Request) -> JSONResponse:
     content_length = request.headers.get("content-length")
     if content_length:
         try:
-            if int(content_length) > MAX_MULTIPART_BYTES:
+            length = int(content_length)
+            if length < 0:
+                return _error("Invalid Content-Length header", 400)
+            if length > MAX_MULTIPART_BYTES:
                 return _error(
                     f"File too large (max {MAX_UPLOAD_BYTES // 1024 // 1024} MB)",
                     413,
@@ -1163,12 +1173,25 @@ async def api_upload(request: Request) -> JSONResponse:
     if "multipart/form-data" not in content_type:
         return _error("Content-Type must be multipart/form-data")
 
+    async def bounded_stream():
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > MAX_MULTIPART_BYTES:
+                # MultiPartParser closes spooled files for this exception on
+                # every supported Starlette version.
+                raise MultiPartException("maximum size exceeded")
+            yield chunk
+
     try:
-        form = await request.form(
+        parser = MultiPartParser(
+            request.headers,
+            bounded_stream(),
             max_files=1,
             max_fields=1,
             max_part_size=MAX_UPLOAD_BYTES + 1,
         )
+        form = await parser.parse()
     except MultiPartException as e:
         if "maximum size" in str(e):
             return _error(
@@ -1189,18 +1212,25 @@ async def api_upload(request: Request) -> JSONResponse:
                 413,
             )
 
-        # Sanitize filename: use UUID prefix to prevent collisions and path games
+        # Sanitize filename and use a full UUID plus exclusive creation.
         filename = getattr(upload, "filename", "upload.icc") or "upload.icc"
         safe_name = Path(filename.replace("\\", "/")).name
         safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", safe_name)
         if not safe_name or safe_name in {".", ".."} or safe_name.startswith("."):
             safe_name = "upload.icc"
-        safe_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+        safe_name = f"{uuid.uuid4().hex}_{safe_name[:100]}"
 
-        # Save to temp directory
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        dest = UPLOAD_DIR / safe_name
-        dest.write_bytes(content)
+        try:
+            dest = await run_in_threadpool(
+                store_upload, UPLOAD_DIR, safe_name, content,
+                max_total_bytes=MAX_UPLOAD_TOTAL_BYTES,
+                max_file_count=MAX_UPLOAD_FILES,
+                retention_seconds=UPLOAD_RETENTION_SECONDS,
+            )
+        except UploadQuotaExceeded:
+            return _error("Upload storage quota exceeded", 507)
+        except OSError:
+            return _error("Upload could not be stored", 500)
 
         return _json({
             "uploaded": True,
@@ -1454,6 +1484,8 @@ async def api_apply_profiles(request: Request) -> JSONResponse:
             return _error("config_args must contain only strings")
         try:
             return _json(cli_tools.run_apply_profiles_args(config_args))
+        except ValueError as e:
+            return _error(str(e), 400)
         except Exception as e:
             return _error(str(e), 500)
 
@@ -1521,6 +1553,8 @@ async def api_apply_named_cmm(request: Request) -> JSONResponse:
     try:
         result = cli_tools.run_apply_named_cmm(config_args)
         return _json(result)
+    except ValueError as e:
+        return _error(str(e), 400)
     except Exception as e:
         return _error(str(e), 500)
 
@@ -1650,6 +1684,8 @@ async def api_apply_search(request: Request) -> JSONResponse:
     try:
         result = cli_tools.run_apply_search(config_args)
         return _json(result)
+    except ValueError as e:
+        return _error(str(e), 400)
     except Exception as e:
         return _error(str(e), 500)
 

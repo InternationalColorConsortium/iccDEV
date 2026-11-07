@@ -868,6 +868,11 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
 
   // External file
   if (j.contains("file") && j["file"].is_string()) {
+    if (!g_IccJsonAllowFileImports) {
+      parseStr += "TintArrayElement file imports are disabled\n";
+      delete pTag;
+      return false;
+    }
     std::string filename = j["file"].get<std::string>();
     std::string format   = "text";
     jGetString(j, "format", format);

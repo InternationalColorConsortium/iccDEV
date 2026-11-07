@@ -31,6 +31,9 @@ function exercise_round_trip(profile_path, expected_major)
   assert(isequal(profile_bytes(:), source_bytes(:)), ...
     'IccJSON round trip changed the checked-in ICC.%d profile bytes.', ...
     expected_major - 3);
+  trusted_bytes = iccdev.from_json(json_text, 'AllowFileImports', true);
+  assert(isequal(trusted_bytes(:), profile_bytes(:)), ...
+    'Explicit trusted file-import mode changed inline JSON conversion.');
   assert_icc_profile_structure(profile_bytes, expected_major);
 
   json_path = [tempname '.json'];

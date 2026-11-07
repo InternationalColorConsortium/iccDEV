@@ -8,11 +8,14 @@ profile shape. Detailed tag examples live in [ICC JSON tag types](iccjson-tag-ty
 
 ```bash
 iccToJson src_profile.icc dest_profile.json [-indent=N]
-iccFromJson src_profile.json dest_profile.icc [-noid]
+iccFromJson src_profile.json dest_profile.icc [-noid] [-allow-file-imports]
 ```
 
 - `-indent=N`: pretty-print with N spaces of indentation (default: 2, clamped to 0-20)
 - `-noid`: suppress writing the profile ID into the saved file
+- `-allow-file-imports`: permit sidecar files in trusted local JSON; imports
+  are disabled by default. `-no-file-imports` explicitly enforces that default
+  for applications invoking the CLI.
 
 ## Input Size Limit
 

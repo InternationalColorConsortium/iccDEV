@@ -14,6 +14,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .upload_store import default_upload_dir
+
 
 def _find_testing_dir() -> Optional[Path]:
     """Locate the iccDEV Testing/ directory."""
@@ -84,7 +86,7 @@ def _get_allowed_bases() -> list[Path]:
         bases.append(testing.resolve())
 
     # Upload temp directory
-    upload_dir = Path(tempfile.gettempdir()) / "iccdev-mcp-uploads"
+    upload_dir = default_upload_dir()
     bases.append(upload_dir.resolve())
 
     # System temp for tool outputs

@@ -278,14 +278,22 @@ def icc_to_xml(profile: bytes | str | os.PathLike[str], *, timeout: int = 60) ->
         return output_path.read_text(encoding="utf-8", errors="replace")
 
 
-def icc_from_xml(xml: bytes | str | os.PathLike[str], *, timeout: int = 60) -> bytes:
-    """Convert XML text, XML bytes, or an XML path to ICC profile bytes using iccFromXml."""
+def icc_from_xml(
+    xml: bytes | str | os.PathLike[str],
+    *,
+    allow_file_includes: bool = False,
+    timeout: int = 60,
+) -> bytes:
+    """Convert XML to ICC bytes; sidecar reads require trusted opt-in."""
+    if type(allow_file_includes) is not bool:
+        raise TypeError("allow_file_includes must be a boolean")
 
     with tempfile.TemporaryDirectory(prefix="iccdev-cli-") as tmp:
         work_dir = Path(tmp)
         input_path = _input_path(work_dir, xml, ".xml")
         output_path = work_dir / "output.icc"
-        _run_tool("iccFromXml", input_path, output_path, timeout=timeout)
+        args = () if allow_file_includes else ("-no-file-includes",)
+        _run_tool("iccFromXml", input_path, output_path, *args, timeout=timeout)
         return output_path.read_bytes()
 
 
@@ -300,8 +308,15 @@ def icc_to_json(profile: bytes | str | os.PathLike[str], *, timeout: int = 60) -
         return output_path.read_text(encoding="utf-8", errors="replace")
 
 
-def icc_from_json(json_data: bytes | str | os.PathLike[str] | Any, *, timeout: int = 60) -> bytes:
-    """Convert JSON text, JSON data, or a JSON path to ICC profile bytes using iccFromJson."""
+def icc_from_json(
+    json_data: bytes | str | os.PathLike[str] | Any,
+    *,
+    allow_file_imports: bool = False,
+    timeout: int = 60,
+) -> bytes:
+    """Convert JSON to ICC bytes; sidecar reads require trusted opt-in."""
+    if type(allow_file_imports) is not bool:
+        raise TypeError("allow_file_imports must be a boolean")
 
     if not isinstance(json_data, (bytes, str, os.PathLike)):
         json_data = json.dumps(json_data, indent=2)
@@ -310,7 +325,8 @@ def icc_from_json(json_data: bytes | str | os.PathLike[str] | Any, *, timeout: i
         work_dir = Path(tmp)
         input_path = _input_path(work_dir, json_data, ".json")
         output_path = work_dir / "output.icc"
-        _run_tool("iccFromJson", input_path, output_path, timeout=timeout)
+        flag = "-allow-file-imports" if allow_file_imports else "-no-file-imports"
+        _run_tool("iccFromJson", input_path, output_path, flag, timeout=timeout)
         return output_path.read_bytes()
 
 

@@ -8,9 +8,9 @@ single index for common command shapes and shared option tables.
 | Tool | Purpose | Example |
 |------|---------|---------|
 | `iccToXml` | Convert ICC binary to XML | `iccToXml input.icc output.xml` |
-| `iccFromXml` | Convert XML to ICC binary | `iccFromXml input.xml output.icc -v=SampleIccRELAX.rng` |
+| `iccFromXml` | Convert XML to ICC binary; `-no-file-includes` blocks sidecar reads | `iccFromXml input.xml output.icc -v=SampleIccRELAX.rng` |
 | `iccToJson` | Convert ICC binary to JSON | `iccToJson input.icc output.json -indent=2` |
-| `iccFromJson` | Convert JSON to ICC binary | `iccFromJson input.json output.icc` |
+| `iccFromJson` | Convert JSON to ICC binary; local sidecar reads require `-allow-file-imports` | `iccFromJson input.json output.icc` |
 | `iccDumpProfile` | Dump and validate ICC profile contents | `iccDumpProfile -v profile.icc ALL` |
 | `iccDumpProfile` | Emit gated QA evidence flags | `iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc` |
 | `iccProfilePlot` | Emit data-first profile graphs and CLUT rasters | `iccProfilePlot profile.icc list` |
