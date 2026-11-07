@@ -13,3 +13,7 @@ installed formulae.
 
 Redistributors must keep those upstream notices with any bundled third-party
 binaries.
+
+The Doxygen HTML archive includes browser assets emitted by Doxygen, including
+MIT-licensed Doxygen scripts and jQuery. Their upstream copyright and license
+notices remain in the generated JavaScript files.

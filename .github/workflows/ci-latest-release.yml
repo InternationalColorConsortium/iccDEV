@@ -2117,6 +2117,12 @@ jobs:
             echo "::error::Anonymous namespace references leaked into generated HTML"
             exit 1
           fi
+          cp LICENSE.md docs/generated/html/LICENSE.md
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md \
+            docs/generated/html/THIRD-PARTY-NOTICES.md
+          cmp -s LICENSE.md docs/generated/html/LICENSE.md
+          cmp -s Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md \
+            docs/generated/html/THIRD-PARTY-NOTICES.md
           echo "Full iccDEV Doxygen HTML generation complete"
           find docs/generated/html -maxdepth 1 -printf '%p\n' |
             sort |
@@ -2593,8 +2599,10 @@ jobs:
             iccdev-linux-gcc \
             iccdev-linux-clang \
             iccdev-macos-clang \
+            iccdev-apple-mobile-core \
             iccdev-windows-msvc \
-            iccdev-wasm-release; do
+            iccdev-wasm-release \
+            iccdev-doxygen-html; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
             if ! grep -qE '(^|/)LICENSE(\.md)?$' <<< "$entries"; then
@@ -2602,6 +2610,13 @@ jobs:
               exit 1
             fi
           done
+
+          doxygen_archive="release-assets/iccdev-doxygen-html.zip"
+          doxygen_entries="$(unzip -Z1 "$doxygen_archive")"
+          if ! grep -Fxq 'THIRD-PARTY-NOTICES.md' <<< "$doxygen_entries"; then
+            echo "::error::iccdev-doxygen-html omits third-party notices"
+            exit 1
+          fi
 
           for name in \
             iccdev-linux-gcc \
