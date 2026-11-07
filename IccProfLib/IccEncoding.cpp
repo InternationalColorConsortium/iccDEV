@@ -650,7 +650,13 @@ icStatusEncConvert icConvertEncodingProfile(CIccProfilePtr &newIcc, CIccProfile 
       if (pNameTag && (!szName || strcmp((const char*)szName, (const char*)szRefName)))
         return icEncConvertBadProfile;
 
-      CIccProfile *pBaseIcc = IIccEncProfileCacheHandler::GetHandler()->GetEncodingProfile(szRefName);
+      // GetHandler() allocates the default handler with nothrow new; without
+      // it the reference cannot be looked up, which is not the same as a
+      // reference the registry does not know.
+      IIccEncProfileCacheHandler *pCacheHandler = IIccEncProfileCacheHandler::GetHandler();
+      if (!pCacheHandler)
+        return icEncConvertMemoryError;
+      CIccProfile *pBaseIcc = pCacheHandler->GetEncodingProfile(szRefName);
       if (!pBaseIcc) {
         CIccTag *pOwnParams = pEncodeIcc->FindTagOfType(icSigColorEncodingParamsTag, icSigTagStructType);
         if (!pOwnParams)
