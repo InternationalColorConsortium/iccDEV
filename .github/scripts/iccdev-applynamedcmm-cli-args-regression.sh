@@ -287,22 +287,18 @@ assert_cfg_lacks() {
   fi
 }
 
-# useHToS is asserted as a decode result only. Nothing downstream consumes it
-# (AddXform takes no HToS argument and CheckPCSRangeConversions injects the
-# transform unconditionally), so these cases pin which columns the parser reads
-# -- they are not evidence that the HToS selector does anything at apply time.
-#
-# The two flags are a crossing pair, for the same reason the encoding cases
-# above are: asserting only that +100000 sets HToS would still pass with the
-# columns fused, and asserting only that it leaves V5 clear would pass if the
-# export had silently stopped emitting either field. Each arm has to show one
-# flag present and the other absent, and the third arm has to show both, before
-# "independent" is pinned rather than merely "not always equal".
+# These cases pin which columns the parser reads. useHToS is on by default
+# (ICC.2:2023 K.2.9 makes it a control that can only disable the HDR-to-SDR
+# conversion), and -exportcfg writes it only when it is false, so +100000 is
+# no longer visible in the export (#2981). What is left to pin is that the
+# hundred-thousands column is still consumed: +100000 must not reach the V5
+# column, and no intent code may turn the conversion off. The separate
+# iccdev.iccconnect-htos-selector CTest checks the injection itself.
 HTOS_CFG="$OUTDIR/intent-htos-only.cfg.json"
 rm -f "$HTOS_CFG"
 run_expect_success intent-htos-only "$APPLY" -exportcfg "$HTOS_CFG" "$DATA" 0 1 "$SRGB" 100000
-assert_cfg_has   "$HTOS_CFG" '"useHToS": true' \
-  "intent-htos-only did not set useHToS for +100000"
+assert_cfg_lacks "$HTOS_CFG" '"useHToS": false' \
+  "intent-htos-only turned useHToS off for +100000"
 assert_cfg_lacks "$HTOS_CFG" '"useV5SubProfile": true' \
   "intent-htos-only set useV5SubProfile: the HToS column is bleeding into the V5 column"
 
@@ -311,14 +307,14 @@ rm -f "$V5_CFG"
 run_expect_success intent-v5-only "$APPLY" -exportcfg "$V5_CFG" "$DATA" 0 1 "$SRGB" 10000
 assert_cfg_has   "$V5_CFG" '"useV5SubProfile": true' \
   "intent-v5-only did not set useV5SubProfile for +10000"
-assert_cfg_lacks "$V5_CFG" '"useHToS": true' \
-  "intent-v5-only set useHToS for a code that does not carry it"
+assert_cfg_lacks "$V5_CFG" '"useHToS": false' \
+  "intent-v5-only turned useHToS off"
 
 BOTH_CFG="$OUTDIR/intent-htos-and-v5.cfg.json"
 rm -f "$BOTH_CFG"
 run_expect_success intent-htos-and-v5 "$APPLY" -exportcfg "$BOTH_CFG" "$DATA" 0 1 "$SRGB" 110000
-assert_cfg_has "$BOTH_CFG" '"useHToS": true' \
-  "intent-htos-and-v5 did not set useHToS for +110000"
+assert_cfg_lacks "$BOTH_CFG" '"useHToS": false' \
+  "intent-htos-and-v5 turned useHToS off for +110000"
 assert_cfg_has "$BOTH_CFG" '"useV5SubProfile": true' \
   "intent-htos-and-v5 did not set useV5SubProfile for +110000"
 

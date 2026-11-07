@@ -360,6 +360,18 @@ public:
   virtual const char *GetHintType() const { return "CIccLuminanceMatchingHint"; }
 };
 
+class ICCPROFLIB_API CIccUseHToSHint : public IIccCreateXformHint
+{
+public:
+  CIccUseHToSHint(bool bUseHToS) : m_bUseHToS(bUseHToS) {}
+
+  virtual const char *GetHintType() const { return "CIccUseHToSHint"; }
+  bool UseHToS() const { return m_bUseHToS; }
+
+private:
+  bool m_bUseHToS;
+};
+
 
 
 //forward reference to CIccXform used by CIccApplyXform
@@ -547,6 +559,7 @@ public:
   virtual bool NeedsDstPcsAdjust() const;
 
   bool LuminanceMatching() { return m_bLuminanceMatching; }
+  bool UseHToS() const { return m_bUseHToS; }
 
   virtual IIccProfileConnectionConditions *GetConnectionConditions() const { return m_pConnectionConditions; }
 
@@ -604,6 +617,7 @@ protected:
   bool m_bAbsToRel;
   icMCSConnectionType m_nMCS;
   bool m_bLuminanceMatching;
+  bool m_bUseHToS;
   
 	// track PCS adjustments
 	IIccAdjustPCSXform* m_pAdjustPCS;

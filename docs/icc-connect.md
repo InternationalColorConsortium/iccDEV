@@ -58,6 +58,14 @@ passed to `CreateStandard` or `CreateSearch` are not retained by the library,
 but they must stay valid for the duration of the call, which performs `Begin()`
 before returning.
 
+Each configured profile stage carries a `useHToS` processing control, true
+unless the configuration sets it false. When true, an extended-range source
+followed by a non-extended profile gets the rendering-intent-appropriate ICC.2
+HDR-to-SDR (`H2Sx`) transform injected after it; when false, IccConnect
+disables that conversion for the stage, as ICC.2:2023 Annex K.2.9 permits.
+Direct `CIccCmm` callers that pass no `CIccUseHToSHint` keep the automatic
+ICC.2 behaviour (ICC.2:2023 7.2.13, 8.14, 9.2.85 to 9.2.88).
+
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call

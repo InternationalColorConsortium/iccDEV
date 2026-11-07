@@ -799,7 +799,9 @@ void CIccCfgProfile::reset()
   m_adjustPcsLuminance = false;
   m_useD2BxB2Dx = false;
   m_useBPC = false;
-  m_useHToS = false;
+  // ICC.2:2023 K.2.9: the HDR-to-SDR range conversion applies when the
+  // profile flags indicate it; this control can only turn it off (#2981).
+  m_useHToS = true;
   m_useV5SubProfile = false;
   m_interpolation = icInterpTetrahedral;
   m_nOverprint = icNamedColorOverWhite;
@@ -1043,8 +1045,8 @@ void CIccCfgProfile::toJson(json& j) const
     j["adjustPcsLuminance"] = m_adjustPcsLuminance;
   if (m_useBPC)
     j["useBPC"] = m_useBPC;
-  if (m_useHToS)
-    j["useHToS"] = m_useHToS;
+  if (!m_useHToS)
+    j["useHToS"] = false;
   if (m_useV5SubProfile)
     j["useV5SubProfile"] = m_useV5SubProfile;
   if (m_useD2BxB2Dx)
@@ -1156,12 +1158,9 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         nIntent = nIntent % 1000000;
       }
-      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
-      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
-      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
-      // is present regardless of any flag.  Left as-is here -- wiring it
-      // through is a library API change, not part of this decode fix (#2190).
-      pProf->m_useHToS = (nIntent / 100000) != 0;
+      // +100000 asks for the ICC.2 HDR-to-SDR (H2Sx) range conversion, which
+      // is already the default (m_useHToS starts true): only "useHToS": false
+      // in a -cfg file turns it off (ICC.2:2023 K.2.9, #2981).
       // Strip the HToS digit before the V5 sub-profile digit is read.  Without
       // this the "/ 10000" below still sees the hundred-thousands column, so any
       // code carrying +100000 forced m_useV5SubProfile true as well and there was
@@ -1476,12 +1475,9 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
           return 0;
         nIntent = nIntent % 1000000;
       }
-      // Recorded, but nothing downstream consumes it: m_useHToS reaches only
-      // toJson(), CIccCmm::AddXform() has no HToS parameter, and
-      // CheckPCSRangeConversions() injects the HToS transform whenever the tag
-      // is present regardless of any flag.  Left as-is here -- wiring it
-      // through is a library API change, not part of this decode fix (#2190).
-      pProf->m_useHToS = (nIntent / 100000) != 0;
+      // +100000 asks for the ICC.2 HDR-to-SDR (H2Sx) range conversion, which
+      // is already the default (m_useHToS starts true): only "useHToS": false
+      // in a -cfg file turns it off (ICC.2:2023 K.2.9, #2981).
       // Strip the HToS digit before the V5 sub-profile digit is read.  Without
       // this the "/ 10000" below still sees the hundred-thousands column, so any
       // code carrying +100000 forced m_useV5SubProfile true as well and there was
