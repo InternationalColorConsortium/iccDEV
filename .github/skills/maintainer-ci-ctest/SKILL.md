@@ -46,6 +46,10 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
+- Unix CTest shell harnesses must run under the Bash 3.2 shipped by macOS as
+  well as current Linux Bash. Avoid `mapfile`, GNU-only utility flags, and bare
+  empty-array expansion under `set -u`; keep the generated `timeout` fallback
+  free of orphaned sleepers and captured termination diagnostics.
 - Do not add hard-coded CTest suite totals to workflows, docs, or maintainer
   instructions; keep suite lists descriptive and let CTest discovery report the
   current total.
@@ -89,7 +93,8 @@ when practical.
   Its full scope runs
   Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
   the regression container, non-sanitized GCC core tool tests, profile builds,
-  a representative CTest corpus, and Windows.
+  representative CTest coverage in both macOS Release/LTO and Debug, and
+  Windows.
   Its tool-test caller excludes `pr-extended` CTests; the reusable tool
   workflow always excludes `ci-infrastructure` and `clusterfuzzlite` CTests.
   It does not replace exhaustive pre-PR screening or local preflight.

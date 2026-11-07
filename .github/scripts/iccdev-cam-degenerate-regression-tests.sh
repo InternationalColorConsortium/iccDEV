@@ -130,7 +130,6 @@ run_cam_degenerate_helper() {
   local lib_dir="$BUILD_DIR/IccProfLib"
   local lib_arg=""
   local lib_deps=()
-  local san_flags=()
   local run_ec=0
 
   TOTAL=$((TOTAL + 1))
@@ -174,13 +173,12 @@ run_cam_degenerate_helper() {
   # "set -u" and an empty array expansion is an unbound-variable error in the
   # bash 3.2 that ships as /bin/bash on macOS. SAN_FLAGS is empty whenever the
   # build enabled no sanitizers at all.
-  san_flags=(${SAN_FLAGS[@]+"${SAN_FLAGS[@]}"})
-
-  if ! "$CXX" -std=c++17 "${san_flags[@]}" \
+  if ! "$CXX" -std=c++17 ${SAN_FLAGS[@]+"${SAN_FLAGS[@]}"} \
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
       "$helper_cpp" \
-      -L"$lib_dir" "$lib_arg" "${lib_deps[@]}" -Wl,-rpath,"$lib_dir" \
+      -L"$lib_dir" "$lib_arg" ${lib_deps[@]+"${lib_deps[@]}"} \
+      -Wl,-rpath,"$lib_dir" \
       -o "$helper_bin" > "$compile_log" 2>&1; then
     fail_case "$name" "failed to compile helper"
     sed -n '1,80p' "$compile_log"
@@ -291,7 +289,8 @@ run_cam_divzero_helper() {
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
       "$helper_cpp" "$cam_cpp" \
-      -L"$lib_dir" "$lib_arg" "${lib_deps[@]}" -Wl,-rpath,"$lib_dir" \
+      -L"$lib_dir" "$lib_arg" ${lib_deps[@]+"${lib_deps[@]}"} \
+      -Wl,-rpath,"$lib_dir" \
       -o "$helper_bin" > "$compile_log" 2>&1; then
     fail_case "$name" "failed to compile helper"
     sed -n '1,80p' "$compile_log"

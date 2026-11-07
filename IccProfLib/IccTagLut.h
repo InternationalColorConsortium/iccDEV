@@ -68,7 +68,7 @@ class ICCPROFLIB_API CIccCurve : public CIccTag
 public:
   CIccCurve() {}
   virtual CIccTag *NewCopy() const { return new CIccCurve; } 
-  virtual ~CIccCurve() {}
+  virtual ~CIccCurve();
 
   virtual void DumpLut(std::string & /*sDescription*/, const icChar * /*szName*/,
     icColorSpaceSignature /*csSig*/, int /*nIndex*/, int /*nVerboseness*/) {}

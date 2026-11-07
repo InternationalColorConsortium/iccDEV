@@ -1049,6 +1049,12 @@ typedef CIccTagFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType> CIccTagS15
 */
 typedef CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagU16Fixed16;
 
+// Keep the shared library as the single owner of these specializations.  In
+// particular, their RTTI must not be instantiated privately in a tool or an
+// extension library that uses dynamic_cast across a dylib boundary.
+extern template class ICCPROFLIB_API CIccTagFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType>;
+extern template class ICCPROFLIB_API CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType>;
+
 /**
 ****************************************************************************
 * Class: CIccTagNum

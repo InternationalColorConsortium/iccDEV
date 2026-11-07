@@ -103,7 +103,7 @@ compile_ec=0
   "$HELPER_SRC" \
   -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
   "$PROFLIB" \
-  "${LINK_EXTRA[@]}" \
+  ${LINK_EXTRA[@]+"${LINK_EXTRA[@]}"} \
   -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || compile_ec=$?
 
 if [ "$compile_ec" -ne 0 ]; then

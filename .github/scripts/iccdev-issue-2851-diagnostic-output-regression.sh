@@ -94,7 +94,7 @@ check_report() {
     fail "$name: sanitizer report"
   fi
   if [ "$FAILURES" -ne 0 ]; then
-    sed 's/^/    /' "$log" | cat -A | head -20
+    sed -n '1,20l' "$log" | sed 's/^/    /'
   fi
 }
 
