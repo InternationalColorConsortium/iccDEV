@@ -162,6 +162,13 @@ public:
     IIccProfileConnectionConditions* pPcc,
     icXformLutType nLutType,
     bool bUseD2BxB2DxTags);
+  void SetDstInitProfile(CIccProfile* pProfile,
+    icRenderingIntent nIntent,
+    icXformInterp nInterp,
+    IIccProfileConnectionConditions* pPcc,
+    icXformLutType nLutType,
+    bool bUseD2BxB2DxTags,
+    bool bAdjustPcsLuminance);
 
   //Note ownership of pPCC object is passed to the CMM on success (it will delete these objects)
   icStatusCMM AttachPCC(IIccProfileConnectionConditions* pPCC, icFloatNumber dWeight);
@@ -200,6 +207,8 @@ public:
 
 protected:
 
+  icStatusCMM AddDstInitXform(CIccCmm* pCmm);
+
   int m_nAttached=0;
   bool m_bUsesBounds;
   icFloatNumber m_fOverBoundsCost;
@@ -215,6 +224,8 @@ protected:
   icXformLutType m_nSrcLutType;
   bool m_bSrcUseD2BxB2DxTags;
   bool m_bSrcUseHToS = true;
+  bool m_bSrcUseBPC = false;
+  bool m_bSrcAdjustPcsLuminance = false;
 
   CIccProfile* m_pDstProfile=nullptr;
   icRenderingIntent m_nDstIntent;
@@ -223,6 +234,8 @@ protected:
   icXformLutType m_nDstLutType;
   bool m_bDstUseD2BxB2DxTags;
   bool m_bDstUseHToS = true;
+  bool m_bDstUseBPC = false;
+  bool m_bDstAdjustPcsLuminance = false;
 
   CIccProfile* m_pDstInitProfile = nullptr;
   icRenderingIntent m_nDstInitIntent;
@@ -230,6 +243,7 @@ protected:
   IIccProfileConnectionConditions* m_pDstInitPcc = nullptr;
   icXformLutType m_nDstInitLutType;
   bool m_bDstInitUseD2BxB2DxTags;
+  bool m_bDstInitAdjustPcsLuminance = false;
 
   CIccProfile* m_pMidProfile=nullptr;
   icRenderingIntent m_nMidIntent;
@@ -238,6 +252,8 @@ protected:
   icXformLutType m_nMidLutType;
   bool m_bMidUseD2BxB2DxTags;
   bool m_bMidUseHToS = true;
+  bool m_bMidUseBPC = false;
+  bool m_bMidAdjustPcsLuminance = false;
 
   CIccCmmPtrArray m_dst_to_mid;
   CIccCmmPtrArray m_src_to_mid;

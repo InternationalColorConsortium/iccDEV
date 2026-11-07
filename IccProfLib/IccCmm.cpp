@@ -9957,6 +9957,13 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
       pProfile->FindTag(icSigHToS2Tag);
       pProfile->FindTag(icSigHToS3Tag);
     }
+    // A PCS adjustment such as BPC builds transforms from this profile in
+    // Begin() too. Read every tag that can be read; one that cannot is left
+    // for Begin() to report only if the adjustment actually needs it.
+    if (pHintManager && pHintManager->GetHint("CIccCreateAdjustPCSXformHint")) {
+      for (TagEntryList::iterator i = pProfile->m_Tags.begin(); i != pProfile->m_Tags.end(); i++)
+        pProfile->FindTag(*i);
+    }
     pProfile->CopyAttach(nullptr);
   }
 
