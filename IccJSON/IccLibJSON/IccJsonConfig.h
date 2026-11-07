@@ -56,8 +56,10 @@ typedef enum {
 
 // Library-wide flag: permit `"imports": [{"file": "..."}]` and similar
 // file-loader paths in IccLibJSON. Off by default because the JSON is
-// usually attacker-controlled in library/service/WASM contexts. The
-// iccFromJson CLI enables it only with -allow-file-imports.
+// usually attacker-controlled in library/service/WASM contexts. Use the
+// setter from callers outside IccJSON; Windows DLL clients cannot link to
+// this data symbol through WINDOWS_EXPORT_ALL_SYMBOLS.
 extern bool g_IccJsonAllowFileImports;
+void IccJsonSetAllowFileImports(bool allow);
 
 #endif // _ICCJSONCONFIG_H

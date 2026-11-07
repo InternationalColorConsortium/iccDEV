@@ -133,16 +133,16 @@ void tintFileImport()
   };
   std::string err;
   CIccMpeJsonTintArray blocked;
-  g_IccJsonAllowFileImports = false;
+  IccJsonSetAllowFileImports(false);
   check(!blocked.ParseJson(j, err), "tint file import refused by default");
   check(err.find("disabled") != std::string::npos,
         "tint file import refusal explains the policy");
 
   err.clear();
   CIccMpeJsonTintArray allowed;
-  g_IccJsonAllowFileImports = true;
+  IccJsonSetAllowFileImports(true);
   check(allowed.ParseJson(j, err), "tint file import accepts trusted CLI mode");
-  g_IccJsonAllowFileImports = false;
+  IccJsonSetAllowFileImports(false);
   std::remove(filename);
 }
 

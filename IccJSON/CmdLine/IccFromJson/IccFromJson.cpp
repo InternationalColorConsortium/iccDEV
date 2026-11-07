@@ -122,7 +122,7 @@ int main(int argc, char* argv[])
   // File imports remain disabled for library and CLI callers by default.
   // A trusted local CLI invocation can opt in; service callers explicitly
   // pass -no-file-imports for uploaded JSON.
-  g_IccJsonAllowFileImports = bAllowFileImports;
+  IccJsonSetAllowFileImports(bAllowFileImports);
 
   // On stderr, like the XML twin: this returned EXIT_FAILURE already but answered
   // on stdout, so a caller that separates the streams saw nothing (#2384).
