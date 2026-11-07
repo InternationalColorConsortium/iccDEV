@@ -25,7 +25,7 @@
     behind isInitialized().
 
     Usage:
-      createsearch-embedded-profile <profile.icc>
+      createsearch-embedded-profile <search-profile.icc> <bpc-profile.icc>
 
     Exit codes:
       0 - embedded and file-path search chains agree, and parsing behaves
@@ -63,16 +63,35 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "IccConnect.h"
-#include "IccCmmConfig.h"
-#include "IccUtil.h"
-
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
+
+#include "IccConnect.h"
+#include "IccCmmSearch.h"
+#include "IccCmmConfig.h"
+#include "IccUtil.h"
+
+// The search sub-chains are protected members of CIccCmmSearch. A pointer to
+// member formed inside a derived class reaches them in standard C++, without
+// an access macro or a test-only accessor; the class is never instantiated.
+struct SearchSubChains : public CIccCmmSearch
+{
+  static CIccCmm* MidToDst(CIccCmmSearch* search)
+  {
+    return (search->*(&SearchSubChains::m_mid_to_dst)).get();
+  }
+  static CIccCmm* FirstDstToMid(CIccCmmSearch* search)
+  {
+    const CIccCmmPtrArray& chains = search->*(&SearchSubChains::m_dst_to_mid);
+    return chains.empty() ? nullptr : chains[0].get();
+  }
+};
 
 // The search minimises a numerical cost, so two chains that differ only in how
 // the source profile was attached still have to agree bit-for-bit only up to
@@ -133,13 +152,15 @@ static const int kNumSamples = (int)(sizeof(kSamples) / sizeof(kSamples[0]));
 
 int main(int argc, char** argv)
 {
-  if (argc != 2) {
-    std::fprintf(stderr, "usage: %s <profile.icc>\n",
+  if (argc != 3) {
+    std::fprintf(stderr,
+                 "usage: %s <search-profile.icc> <bpc-profile.icc>\n",
                  argv[0] ? argv[0] : "createsearch-embedded-profile");
     return 2;
   }
 
   const char* profilePath = argv[1];
+  const char* bpcProfilePath = argv[2];
   int failures = 0;
 
   // ------------------------------------------------------------------
@@ -190,6 +211,156 @@ int main(int argc, char** argv)
   CIccCfgSearchApply fileCfg;
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
   fileCfg.m_profiles.push_back(MakeStage(profilePath));
+
+  // #2978: initial interpolation is independent of the final profile's
+  // interpolation in JSON.  Cross the two values so this fails if
+  // CreateSearch accidentally takes the final stage's value again.
+  {
+    json cfg;
+    json stage;
+    stage["iccFile"] = profilePath;
+    stage["intent"] = "relative";
+    stage["interpolation"] = "tetrahedral";
+    cfg["profileSequence"].push_back(stage);
+    cfg["profileSequence"].push_back(stage);
+    cfg["initial"]["intent"] = "relative";
+    cfg["initial"]["interpolation"] = "linear";
+
+    CIccCfgSearchApply distinctInterpolation;
+    const bool parsed = distinctInterpolation.fromJson(cfg, true);
+    failures += check(parsed && distinctInterpolation.isInitialized() &&
+                        distinctInterpolation.m_interpolationInitial == icInterpLinear &&
+                        distinctInterpolation.m_profiles.back()->m_interpolation ==
+                          icInterpTetrahedral,
+                      "search config keeps initial and final interpolation distinct");
+
+    if (parsed) {
+      std::string sInterpolationErr;
+      std::unique_ptr<CIccConnectCmm> initialInterpolationCmm(
+        CIccConnectCmm::CreateSearch(distinctInterpolation, nullptr, 0, 1,
+                                     &sInterpolationErr));
+      if (!initialInterpolationCmm || !initialInterpolationCmm->GetSearchCmm()) {
+        std::fprintf(stderr,
+                     "createsearch-embedded-profile: FAIL  distinct initial "
+                     "interpolation CreateSearch: %s\n",
+                     sInterpolationErr.empty() ? "no error reported" :
+                       sInterpolationErr.c_str());
+        failures++;
+      }
+      else {
+        CIccCmmSearch* search = initialInterpolationCmm->GetSearchCmm();
+        CIccCmm* initial = SearchSubChains::MidToDst(search);
+        CIccXform* initialXform = initial ? initial->GetLastXform() : nullptr;
+        failures += check(
+          initialXform && initialXform->GetInterp() == icInterpLinear,
+          "CreateSearch applies searchApply.initial.interpolation");
+      }
+    }
+  }
+
+  // #2979: the initial PCS-luminance selector must reach the xform hint, not
+  // stop at config parsing and serialization.  Inspect the initial sub-chain's
+  // last xform after CreateSearch has called Begin().
+  {
+    json cfg;
+    json stage;
+    stage["iccFile"] = profilePath;
+    stage["intent"] = "relative";
+    cfg["profileSequence"].push_back(stage);
+    cfg["profileSequence"].push_back(stage);
+    cfg["initial"]["intent"] = "relative";
+    cfg["initial"]["adjustPcsLuminance"] = true;
+
+    CIccCfgSearchApply adjustedInitial;
+    const bool parsed = adjustedInitial.fromJson(cfg, true);
+    failures += check(parsed && adjustedInitial.isInitialized() &&
+                        adjustedInitial.m_adjustPcsLuminanceInitial,
+                      "search config parses initial PCS-luminance adjustment");
+
+    if (parsed) {
+      std::string sAdjustmentErr;
+      std::unique_ptr<CIccConnectCmm> adjustedInitialCmm(
+        CIccConnectCmm::CreateSearch(adjustedInitial, nullptr, 0, 1,
+                                     &sAdjustmentErr));
+      if (!adjustedInitialCmm || !adjustedInitialCmm->GetSearchCmm()) {
+        std::fprintf(stderr,
+                     "createsearch-embedded-profile: FAIL  adjusted initial "
+                     "CreateSearch: %s\n",
+                     sAdjustmentErr.empty() ? "no error reported" :
+                       sAdjustmentErr.c_str());
+        failures++;
+      }
+      else {
+        CIccCmmSearch* search = adjustedInitialCmm->GetSearchCmm();
+        CIccCmm* initial = SearchSubChains::MidToDst(search);
+        CIccXform* initialXform = initial ? initial->GetLastXform() : nullptr;
+        failures += check(initialXform && initialXform->LuminanceMatching(),
+                          "CreateSearch applies initial PCS-luminance hint");
+      }
+    }
+  }
+
+  // #2980: file-backed search stages must retain their BPC and PCS-luminance
+  // hints when CIccCmmSearch expands them into forward and reverse sub-chains.
+  {
+    CIccCfgSearchApply bpcCfg;
+    CIccCfgProfilePtr bpcStage = MakeStage(bpcProfilePath);
+    bpcStage->m_useBPC = true;
+    bpcCfg.m_profiles.push_back(bpcStage);
+    bpcCfg.m_profiles.push_back(MakeStage(bpcProfilePath));
+
+    std::string sBpcErr;
+    std::unique_ptr<CIccConnectCmm> bpc(
+      CIccConnectCmm::CreateSearch(bpcCfg, nullptr, 0, 1, &sBpcErr));
+    if (!bpc || !bpc->GetSearchCmm()) {
+      std::fprintf(stderr,
+                   "createsearch-embedded-profile: FAIL  BPC stage hint: %s\n",
+                   sBpcErr.empty() ? "no error reported" : sBpcErr.c_str());
+      failures++;
+    }
+    else {
+      CIccCmmSearch* search = bpc->GetSearchCmm();
+      CIccCmm* forward = SearchSubChains::MidToDst(search);
+      CIccCmm* reverse = SearchSubChains::FirstDstToMid(search);
+      failures += check(forward && forward->GetFirstXform() &&
+                          forward->GetFirstXform()->NeedAdjustPCS(),
+                        "file-backed source stage retains BPC hint");
+      failures += check(reverse && reverse->GetLastXform() &&
+                          reverse->GetLastXform()->NeedAdjustPCS(),
+                        "reverse sub-chain retains source BPC hint");
+    }
+  }
+  {
+    CIccCfgSearchApply luminanceCfg;
+    luminanceCfg.m_profiles.push_back(MakeStage(profilePath));
+    CIccCfgProfilePtr luminanceStage = MakeStage(profilePath);
+    luminanceStage->m_adjustPcsLuminance = true;
+    luminanceCfg.m_profiles.push_back(luminanceStage);
+
+    std::string sLuminanceErr;
+    std::unique_ptr<CIccConnectCmm> luminance(
+      CIccConnectCmm::CreateSearch(luminanceCfg, nullptr, 0, 1,
+                                   &sLuminanceErr));
+    if (!luminance || !luminance->GetSearchCmm()) {
+      std::fprintf(stderr,
+                   "createsearch-embedded-profile: FAIL  PCS-luminance stage "
+                   "hint: %s\n",
+                   sLuminanceErr.empty() ? "no error reported" :
+                     sLuminanceErr.c_str());
+      failures++;
+    }
+    else {
+      CIccCmmSearch* search = luminance->GetSearchCmm();
+      CIccCmm* forward = SearchSubChains::MidToDst(search);
+      CIccCmm* reverse = SearchSubChains::FirstDstToMid(search);
+      failures += check(forward && forward->GetLastXform() &&
+                          forward->GetLastXform()->LuminanceMatching(),
+                        "file-backed destination retains PCS-luminance hint");
+      failures += check(reverse && reverse->GetFirstXform() &&
+                          reverse->GetFirstXform()->LuminanceMatching(),
+                        "reverse sub-chain retains destination luminance hint");
+    }
+  }
 
   std::string sEmbeddedErr;
   std::unique_ptr<CIccConnectCmm> embedded(

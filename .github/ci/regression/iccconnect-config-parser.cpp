@@ -114,6 +114,35 @@ int main()
                       "search apply rejects non-finite PCC weight");
   }
 
+  // Initial-destination transforms have no BPC member or xform-hint channel,
+  // so accepting the packed BPC column would record a request that
+  // SetDstInitProfile cannot apply.
+  {
+    CIccCfgSearchApply search;
+    const char* args[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-INIT", "40"
+    };
+    failures += check(search.fromArgs(args, 7, true) == 0,
+                      "search apply rejects unsupported initial BPC");
+  }
+
+  // The same selector remains valid on ordinary profile stages, where the
+  // profile configuration has a BPC field.  Keep a positive control so the
+  // initial-only rejection cannot narrow the whole search sequence.
+  {
+    CIccCfgSearchApply search;
+    const char* args[] = {
+      "1", "target.icc", "40", "src.icc", "1", "-INIT", "1"
+    };
+    const bool parsed = search.fromArgs(args, 7, true) == 7 &&
+                        search.m_profiles.size() == 2;
+    bool flags = false;
+    if (parsed)
+      flags = search.m_profiles[0]->m_useBPC;
+    failures += check(parsed && flags,
+                      "search apply retains BPC on ordinary profile stages");
+  }
+
   // #1860: -INIT was matched with stricmp where the profile loop breaks out of
   // the sequence but with strcmp where the initializer is consumed.  A lowercase
   // "-init" therefore ended the profile loop and then fell through to the

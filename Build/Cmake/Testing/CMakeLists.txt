@@ -578,14 +578,22 @@ function(iccdev_add_createsearch_embedded_profile_test)
 
   # sRGB_D65_MAT.icc is a tracked v5 matrix/TRC profile, so a profile->itself
   # search converges quickly and the run stays well inside the timeout below.
+  # The same helper also inspects the initialized search CMM to keep
+  # searchApply.initial.interpolation distinct from the final profile setting
+  # (#2978); that assertion needs no interpolation-sensitive fixture.
+  # The same helper inspects the initialized destination sub-chain to prove
+  # searchApply.initial.adjustPcsLuminance reaches its xform hint (#2979).
   set(_createsearch_embedded_profile
     "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc")
+  set(_createsearch_bpc_profile
+    "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc")
 
   if(WIN32)
     add_test(
       NAME iccdev.createsearch-embedded-profile
       COMMAND "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
         "${_createsearch_embedded_profile}"
+        "${_createsearch_bpc_profile}"
     )
   else()
     add_test(
@@ -595,6 +603,7 @@ function(iccdev_add_createsearch_embedded_profile_test)
         ${ICCDEV_TEST_ENV}
         "$<TARGET_FILE:iccCreateSearchEmbeddedProfileTest>"
         "${_createsearch_embedded_profile}"
+        "${_createsearch_bpc_profile}"
     )
   endif()
   # A Nelder-Mead search runs per sample and the helper drives five chains
@@ -604,7 +613,7 @@ function(iccdev_add_createsearch_embedded_profile_test)
   set_tests_properties(iccdev.createsearch-embedded-profile PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 300
-    LABELS "iccdev;iccconnect;cmmsearch;embedded;regression"
+    LABELS "iccdev;iccconnect;cmmsearch;embedded;issue-2978;issue-2979;issue-2980;regression"
   )
   if(WIN32)
     set(_createsearch_embedded_windows_env_mods

@@ -66,6 +66,21 @@ disables that conversion for the stage, as ICC.2:2023 Annex K.2.9 permits.
 Direct `CIccCmm` callers that pass no `CIccUseHToSHint` keep the automatic
 ICC.2 behaviour (ICC.2:2023 7.2.13, 8.14, 9.2.85 to 9.2.88).
 
+For `CreateSearch`, `searchApply.initial.interpolation` configures the optional
+destination initializer independently of the final profile stage's
+`interpolation`. A mixed configuration retains both values; the initializer is
+not forced to use the final stage's interpolation.
+
+For `CreateSearch`, `searchApply.initial.adjustPcsLuminance` attaches a
+`CIccLuminanceMatchingHint` to the optional destination initializer. The
+existing six-argument `CIccCmmSearch::SetDstInitProfile()` remains available;
+the additive overload accepts the adjustment flag used by the config factory.
+
+For `CreateSearch`, each profile stage's `useBPC` and
+`adjustPcsLuminance` selectors are retained when the search CMM expands that
+stage into its forward and reverse sub-chains. This applies equally to embedded
+and file-backed profiles.
+
 ### Error Reporting
 
 The library never writes to `stderr`. To learn *why* a factory call

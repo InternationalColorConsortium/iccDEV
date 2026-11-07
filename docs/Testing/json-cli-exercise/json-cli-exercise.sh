@@ -1240,7 +1240,9 @@ else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL search cli: unitFloat (exit=$rc)"; f
 
 # 26c: BPC intent (40)
 TOTAL=$((TOTAL+1))
-output=$("$SEARCH" "/tmp/test-cli-data.txt" 3 1 "Testing/Display/sRGB_D65_MAT.icc" 40 "Testing/Display/sRGB_D65_MAT.icc" 40 -INIT 40 2>&1)
+# BPC (40) on both profile stages; -INIT takes a plain intent, because the
+# initializer has no BPC channel and refuses 40 + intent (#2977).
+output=$("$SEARCH" "/tmp/test-cli-data.txt" 3 1 "Testing/Display/sRGB_D65_MAT.icc" 40 "Testing/Display/sRGB_D65_MAT.icc" 40 -INIT 0 2>&1)
 rc=$?
 asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
 if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL search cli: BPC (exit=$rc)"
