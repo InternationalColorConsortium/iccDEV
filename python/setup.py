@@ -588,7 +588,7 @@ with open(os.path.join(os.path.dirname(__file__), "README.md"), encoding="utf-8"
 
 setup(
     name="iccdev",
-    version="0.1.1",
+    version="0.1.2",
     description="Python bindings for RefIccMAX (iccDEV) - ICC color profile library",
     long_description=long_description,
     long_description_content_type="text/markdown",
