@@ -472,6 +472,65 @@ std::vector<RawTag> SortedUniqueTagRegions(const RawProfile &raw)
   }
   return unique;
 }
+
+// A stretch of file bytes claimed by one or more private tags. sig names the
+// tag when exactly one tag claims the stretch.
+struct PrivateRegion {
+  size_t begin = 0;
+  size_t end = 0;
+  icTagSignature sig = (icTagSignature)0;
+  size_t nTags = 0;
+};
+
+// The private-tag byte ranges, sorted and with overlaps merged, each tag
+// limited to its first perTagLimit bytes before merging.
+std::vector<PrivateRegion> SortedMergedPrivateTagRegions(const RawProfile &raw,
+                                                         size_t perTagLimit)
+{
+  // A malformed table can point thousands of private tags at overlapping file
+  // bytes. S12 and S13 need to inspect every byte claimed by a private tag,
+  // not rescan the same bytes once per directory entry (#2988). Ranges that
+  // only touch stay separate, so a scan cannot match a signature across a tag
+  // boundary.
+  std::vector<PrivateRegion> tags;
+  tags.reserve(raw.tags.size());
+  for (const RawTag &tag : raw.tags) {
+    if (!IsSpecTag(tag.sig) && tag.size && TagInBounds(tag, raw.data.size())) {
+      PrivateRegion region;
+      region.begin = tag.offset;
+      region.end = region.begin + std::min((size_t)tag.size, perTagLimit);
+      region.sig = tag.sig;
+      region.nTags = 1;
+      tags.push_back(region);
+    }
+  }
+
+  std::sort(tags.begin(), tags.end(), [](const PrivateRegion &a, const PrivateRegion &b) {
+    if (a.begin != b.begin) {
+      return a.begin < b.begin;
+    }
+    return a.end > b.end;
+  });
+
+  std::vector<PrivateRegion> merged;
+  merged.reserve(tags.size());
+  for (const PrivateRegion &tag : tags) {
+    if (!merged.empty() && tag.begin < merged.back().end) {
+      PrivateRegion &last = merged.back();
+      last.end = std::max(last.end, tag.end);
+      last.nTags++;
+      continue;
+    }
+    merged.push_back(tag);
+  }
+  return merged;
+}
+
+std::string PrivateRegionName(const PrivateRegion &region)
+{
+  return region.nTags == 1 ? "private tag " + SigString(region.sig)
+                           : "private tag data";
+}
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
@@ -805,8 +864,11 @@ bool HasAsciiSignatureCaseInsensitive(const RawProfile &raw, const char *sig,
   return false;
 }
 
+// The most bytes one ScanMalwareRange() call reads from begin.
+const size_t kMaxMalwareScan = (size_t)10 * 1024 * 1024;
+
 bool ScanMalwareRange(const RawProfile &raw, size_t begin, size_t end,
-                      std::string &detail)
+                      std::string &detail, size_t maxScan = kMaxMalwareScan)
 {
   static const unsigned char elf[] = {0x7f, 'E', 'L', 'F'};
   static const unsigned char mz[] = {'M', 'Z'};
@@ -838,8 +900,11 @@ bool ScanMalwareRange(const RawProfile &raw, size_t begin, size_t end,
     {gzip, sizeof(gzip), "embedded gzip stream", ValidateGzipHeader}
   };
 
-  const size_t kMaxScan = (size_t)10 * 1024 * 1024;
-  size_t scanEnd = std::min(end, begin + kMaxScan);
+  // end can be below begin: the whole-file scan starts at 128 even when a
+  // truncated file is shorter than that, and then nothing is scanned.
+  size_t scanEnd = end;
+  if (end > begin && end - begin > maxScan)
+    scanEnd = begin + maxScan;
   for (const Sig &sig : sigs) {
     std::string offset;
     if (HasSignature(raw, sig.bytes, sig.len, sig.validate, begin, scanEnd, offset)) {
@@ -909,13 +974,16 @@ bool HasRepeatedPattern(const RawProfile &raw, size_t begin, size_t end,
 
 bool ScanPrivateTagsForMalware(const RawProfile &raw, std::string &detail)
 {
-  for (const RawTag &tag : raw.tags) {
-    if (IsSpecTag(tag.sig) || !TagInBounds(tag, raw.data.size())) {
-      continue;
-    }
+  // Each tag used to be scanned from its own offset up to kMaxMalwareScan
+  // bytes. Merge those windows rather than whole tags, and scan each merged
+  // window in full: a tag that starts inside a larger one is still scanned
+  // from its own start, and the total is bounded by the file size.
+  const std::vector<PrivateRegion> regions =
+    SortedMergedPrivateTagRegions(raw, kMaxMalwareScan);
+  for (const PrivateRegion &region : regions) {
     std::string local;
-    if (ScanMalwareRange(raw, tag.offset, (size_t)tag.offset + tag.size, local)) {
-      detail = "private tag " + SigString(tag.sig) + ": " + local;
+    if (ScanMalwareRange(raw, region.begin, region.end, local, SIZE_MAX)) {
+      detail = PrivateRegionName(region) + ": " + local;
       return true;
     }
   }
@@ -925,18 +993,17 @@ bool ScanPrivateTagsForMalware(const RawProfile &raw, std::string &detail)
 
 bool ScanPrivateTagsForNops(const RawProfile &raw, std::string &detail)
 {
-  for (const RawTag &tag : raw.tags) {
-    if (IsSpecTag(tag.sig) || !TagInBounds(tag, raw.data.size())) {
-      continue;
-    }
-    const size_t begin = tag.offset;
-    const size_t end = begin + tag.size;
+  const std::vector<PrivateRegion> regions =
+    SortedMergedPrivateTagRegions(raw, SIZE_MAX);
+  for (const PrivateRegion &region : regions) {
+    const size_t begin = region.begin;
+    const size_t end = region.end;
     int run = 0;
     for (size_t i = begin; i < end; ++i) {
       if (raw.data[i] == 0x90) {
         ++run;
         if (run >= 16) {
-          detail = "x86 NOP sled in private tag " + SigString(tag.sig);
+          detail = "x86 NOP sled in " + PrivateRegionName(region);
           return true;
         }
       }
@@ -958,7 +1025,7 @@ bool ScanPrivateTagsForNops(const RawProfile &raw, std::string &detail)
         HasRepeatedPattern(raw, begin, end, armNopBe, sizeof(armNopBe), 16, local, "ARM NOP") ||
         HasRepeatedPattern(raw, begin, end, aarch64NopLe, sizeof(aarch64NopLe), 16, local, "AArch64 NOP") ||
         HasRepeatedPattern(raw, begin, end, aarch64NopBe, sizeof(aarch64NopBe), 16, local, "AArch64 NOP")) {
-      detail = "private tag " + SigString(tag.sig) + ": " + local;
+      detail = PrivateRegionName(region) + ": " + local;
       return true;
     }
   }
