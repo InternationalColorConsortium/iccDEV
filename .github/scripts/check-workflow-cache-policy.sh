@@ -46,6 +46,7 @@ for workflow in "${workflow_files[@]}"; do
   # Capture the scanner result before reading it. The process-substitution
   # redirection fails on macOS Bash 3.2, allowing a false [OK] result.
   matches=$(python3 - "$workflow" <<'PY'
+import json
 import re
 import sys
 from pathlib import Path
@@ -183,10 +184,12 @@ def scalar(window, name):
     return ""
 
 
-def strip_yaml_quotes(value):
+def decode_yaml_scalar(value):
     value = value.strip()
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-        return value[1:-1]
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return json.loads(value)
+    if len(value) >= 2 and value[0] == value[-1] == "'":
+        return value[1:-1].replace("''", "'")
     return value
 
 
@@ -254,7 +257,7 @@ def inline_trigger_names(value):
     value = value.strip()
     if value.startswith("[") and value.endswith("]"):
         return {
-            strip_yaml_quotes(item)
+            decode_yaml_scalar(item)
             for item in split_top_level(value[1:-1], ",")
         }
     if value.startswith("{") and value.endswith("}"):
@@ -262,20 +265,35 @@ def inline_trigger_names(value):
         for item in split_top_level(value[1:-1], ","):
             separator = top_level_separator_index(item, ":")
             if separator >= 0:
-                names.add(strip_yaml_quotes(item[:separator]))
+                names.add(decode_yaml_scalar(item[:separator]))
         return names
-    return {strip_yaml_quotes(value)} if value else set()
+    return {decode_yaml_scalar(value)} if value else set()
 
 
 def workflow_trigger_names(text):
     lines = text.splitlines()
+    root_indents = [
+        len(line) - len(line.lstrip(" "))
+        for line in lines
+        if line.strip()
+        and line.strip() not in {"---", "..."}
+        and not line.lstrip().startswith("%")
+    ]
+    if not root_indents:
+        return set()
+    root_indent = min(root_indents)
+
     on_index = -1
     on_value = ""
     for index, line in enumerate(lines):
-        match = re.match(r"^(?:on|['\"]on['\"])\s*:\s*(.*)$", line)
-        if match:
+        indent = len(line) - len(line.lstrip(" "))
+        if indent != root_indent:
+            continue
+        entry = line.strip()
+        separator = top_level_separator_index(entry, ":")
+        if separator >= 0 and decode_yaml_scalar(entry[:separator]) == "on":
             on_index = index
-            on_value = match.group(1).strip()
+            on_value = entry[separator + 1:].strip()
             break
     if on_index < 0:
         return set()
@@ -286,13 +304,35 @@ def workflow_trigger_names(text):
             on_value += " " + lines[on_index].strip()
         return inline_trigger_names(on_value)
 
+    first_child = next(
+        (
+            index
+            for index in range(on_index + 1, len(lines))
+            if lines[index].strip()
+        ),
+        -1,
+    )
+    if first_child < 0:
+        return set()
+    first_indent = len(lines[first_child]) - len(lines[first_child].lstrip(" "))
+    if first_indent <= root_indent:
+        return set()
+    first_value = lines[first_child].strip()
+    if first_value.startswith(("{", "[")):
+        flow_value = first_value
+        flow_index = first_child
+        while flow_depth(flow_value) > 0 and flow_index + 1 < len(lines):
+            flow_index += 1
+            flow_value += " " + lines[flow_index].strip()
+        return inline_trigger_names(flow_value)
+
     names = set()
     event_indent = None
     for line in lines[on_index + 1:]:
         if not line.strip():
             continue
         indent = len(line) - len(line.lstrip(" "))
-        if indent == 0:
+        if indent <= root_indent:
             break
         if event_indent is None:
             event_indent = indent
@@ -304,7 +344,7 @@ def workflow_trigger_names(text):
         separator = top_level_separator_index(entry, ":")
         if separator >= 0:
             entry = entry[:separator]
-        names.add(strip_yaml_quotes(entry))
+        names.add(decode_yaml_scalar(entry))
     return names
 
 

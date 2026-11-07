@@ -692,6 +692,53 @@ def test_cache_policy_scanner_rejects_unsafe_cache(
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
 @pytest.mark.parametrize(
+    ("header", "root_indent"),
+    [
+        ('on: ["pull_request_\\u0074arget"]\n', ""),
+        ('"o\\u006e": {pull_request_target: {}}\n', ""),
+        ("on:\n  {\n    pull_request_target: {}\n  }\n", ""),
+        ("on:\n  pull_request_target: {}\n", "  "),
+    ],
+)
+def test_cache_policy_scanner_rejects_encoded_low_trust_triggers(
+    header, root_indent, tmp_path
+):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        f"{header}"
+        "jobs:\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - uses: actions/cache/restore@"
+        f"{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.tar.gz\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+    )
+    if root_indent:
+        workflow = "\n".join(
+            root_indent + line if line else line
+            for line in workflow.splitlines()
+        ) + "\n"
+    assert isinstance(yaml.safe_load(workflow), dict)
+
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "actions/cache is forbidden on low-trust triggers" in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+@pytest.mark.parametrize(
     ("permissions", "trigger", "job_name"),
     [
         (
