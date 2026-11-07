@@ -1753,8 +1753,10 @@ jobs:
             const fs = require("fs");
             const path = "wasm-stage/package.json";
             const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
-            if (!pkg.files.includes("third-party-licenses/")) {
-              pkg.files.push("third-party-licenses/");
+            for (const entry of ["THIRD-PARTY-NOTICES.md", "third-party-licenses/"]) {
+              if (!pkg.files.includes(entry)) {
+                pkg.files.push(entry);
+              }
             }
             fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
           '
@@ -2875,6 +2877,22 @@ jobs:
             echo "::error::Staged npm package version does not match npm_version"
             exit 1
           fi
+          for required in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [[ ! -s "$required" ]]; then
+              echo "::error::Staged npm package omits $required"
+              exit 1
+            fi
+          done
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            notice=""
+            if [[ -d "third-party-licenses/$dependency" ]]; then
+              notice="$(find "third-party-licenses/$dependency" -maxdepth 1 -type f -size +0c -print -quit)"
+            fi
+            if [[ -z "$notice" ]]; then
+              echo "::error::Staged npm package omits $dependency license metadata"
+              exit 1
+            fi
+          done
           npm pack --dry-run --json >/dev/null
 
           mkdir -p "$GITHUB_WORKSPACE/npm-iccdev"
@@ -2888,6 +2906,10 @@ jobs:
           archive_entries="$(tar -tzf "$tarball")"
           if ! grep -Fqx "package/package.json" <<< "$archive_entries"; then
             echo "::error::npm package tarball does not contain package.json"
+            exit 1
+          fi
+          if ! grep -Fqx "package/THIRD-PARTY-NOTICES.md" <<< "$archive_entries"; then
+            echo "::error::npm package tarball omits THIRD-PARTY-NOTICES.md"
             exit 1
           fi
           if ! grep -q '^package/third-party-licenses/' <<< "$archive_entries"; then
@@ -3054,6 +3076,23 @@ jobs:
           PACKAGE_VERSION="$NPM_VERSION" node -e \
             'const pkg = require(process.argv[1] + "/package.json"); if (pkg.version !== process.env.PACKAGE_VERSION) process.exit(1);' \
             "$npm_environment/package"
+          for required in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [[ ! -s "$npm_environment/package/$required" ]]; then
+              echo "::error::Published npm package omits $required"
+              exit 1
+            fi
+          done
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            notice=""
+            dependency_dir="$npm_environment/package/third-party-licenses/$dependency"
+            if [[ -d "$dependency_dir" ]]; then
+              notice="$(find "$dependency_dir" -maxdepth 1 -type f -size +0c -print -quit)"
+            fi
+            if [[ -z "$notice" ]]; then
+              echo "::error::Published npm package omits $dependency license metadata"
+              exit 1
+            fi
+          done
 
       - name: Summary Report
         if: always()
