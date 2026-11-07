@@ -10150,12 +10150,21 @@ icStatusCMM CIccCmm::CheckPCSRangeConversions()
       if (last->ptr->IsInput() && last->ptr->IsExtendedPCS() && IsSpaceColorimetricPCS(last->ptr->GetDstSpace()) &&
         !next->ptr->IsExtendedPCS()) {
         CIccProfile* pProfile = last->ptr->GetProfilePtr();
-        CIccTag* pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());
-        if (!pTag) {
+        CIccTag* pTag = NULL;
+        if (pProfile->m_Header.deviceClass == icSigAbstractClass) {
+          // ICC.2:2023 8.14.3: an abstract profile uses HdrToSdr0Tag only.
           pTag = pProfile->FindTag(icSigHToS0Tag);
-          if (!pTag) {
+        }
+        else {
+          // ICC.2:2023 8.14.2 and 8.14.7: the tag for the rendering intent,
+          // then HdrToSdr0Tag, HdrToSdr1Tag and HdrToSdr3Tag.
+          pTag = pProfile->FindTag(icSigHToS0Tag + last->ptr->GetIntent());
+          if (!pTag)
+            pTag = pProfile->FindTag(icSigHToS0Tag);
+          if (!pTag)
             pTag = pProfile->FindTag(icSigHToS1Tag);
-          }
+          if (!pTag)
+            pTag = pProfile->FindTag(icSigHToS3Tag);
         }
         //If we find the HToSxTag then create a transform for it and inject it into the transform list
         if (pTag) {
