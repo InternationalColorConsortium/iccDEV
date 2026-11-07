@@ -42,6 +42,11 @@ Reject compiler pairs outside matching Clang 21 or Clang 22. The packaged
 AFL++ wrapper is paired with 21, while the workflow rebuild is paired with 22;
 do not silently fall back to an older system Clang.
 
+Treat `AFL_TESTCACHE_SIZE` as inherited operator input. Keep `0` and values of
+at least 128 MiB, reject non-numeric values, and normalize positive values
+below the AFL++ 5.04a minimum to `0` with a warning so the smoke reaches the
+forkserver without multiplying memory use across parallel targets.
+
 The target sets differ per lane, and are not interchangeable.
 
 - **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` -- see

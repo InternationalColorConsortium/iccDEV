@@ -31,10 +31,12 @@ Use `.github/skills/clusterfuzzlite/SKILL.md` and
 10. Keep temporary MSan workarounds in individual issue patches. Default fuzz
     builds warn and continue past drifted or integrated patches; use strict mode
     only when maintaining the patch inventory.
-11. Keep CMM controls outside the ICC profile-size header, exercise top-level
-    and nested config round trips, and require the complete BSD-3-Clause
-    notice derived from `LICENSE.md` in every owned C/C++ harness source.
-    Verify it with `.github/scripts/check-license-notices.py`.
+11. Keep CMM controls outside the ICC profile-size header. Exercise top-level
+    and nested config round trips in reset and non-reset modes, compare stable
+    serialization, traverse bounded later array elements, and keep config
+    input length runner-owned. Require the complete BSD-3-Clause notice derived
+    from `LICENSE.md` in every owned C/C++ harness source. Verify it with
+    `.github/scripts/check-license-notices.py`.
 12. Strengthen existing targets before adding multi-profile CMM, serializer,
     or V5 display-observer targets. Require an instrumented MSan boundary before
     adding image or carrier dependencies.

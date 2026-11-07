@@ -213,6 +213,17 @@ Every edited workflow `run:` block must keep these properties:
 - Runner-reduction changes must preserve trusted-base sanitizer sourcing,
   sanitize every `GITHUB_OUTPUT` value, and retain path-gated validation for
   container changes.
+- Actions-service workflow cache is limited to exact-key, checksum-addressed
+  immutable download archives. Pull requests restore only; trusted push,
+  schedule, and manual jobs may save after verification and only on a restore
+  miss. Keep release, build output, package tree, compiler, CTest, and artifact
+  paths uncached. The
+  manual Docker workflow may import inline cache metadata only from a previously
+  validated canonical image resolved to an immutable digest, and may export it
+  only inside the candidate image.
+- Treat a cache as a measured pilot. Compare a cold trusted run with a warm
+  rerun, record cache size and hit status, and remove a cache that adds service
+  churn without a material elapsed-time reduction.
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the

@@ -73,6 +73,13 @@ jobs:
             run(fullfile('matlab', 'examples', 'colorimetry_issue_1475.m'))
           generate-summary: false
 
+      - name: Restore pinned vcpkg archive
+        id: vcpkg-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: Fetch pinned vcpkg dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -88,8 +95,10 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
-          $archive = Join-Path $env:RUNNER_TEMP 'vcpkg-exported-deps.zip'
-          Invoke-WebRequest -Uri $env:ICCDEV_VCPKG_EXPORT_URL -OutFile $archive
+          $archive = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-export.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            Invoke-WebRequest -Uri $env:ICCDEV_VCPKG_EXPORT_URL -OutFile $archive
+          }
           $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
@@ -98,13 +107,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "vcpkg export extraction failed with exit code $LASTEXITCODE"
           }
-          Remove-Item -LiteralPath $archive -Force
-
           $toolchain = Join-Path $env:GITHUB_WORKSPACE `
             'scripts\buildsystems\vcpkg.cmake'
           if (-not (Test-Path $toolchain -PathType Leaf)) {
             throw "Exported vcpkg CMake toolchain not found: $toolchain"
           }
+
+      - name: Save verified vcpkg archive
+        if: github.event_name == 'workflow_dispatch' && steps.vcpkg-archive.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
 
       - name: Configure and build current iccDEV source
         env:
@@ -240,6 +254,10 @@ jobs:
             mex-extension: mexa64
             timeout_minutes: 45
           - platform: macOS Apple Silicon
+            # Pin to macos-15: MATLAB's mex toolchain is not qualified for
+            # macOS 26 (current macos-latest) and fails the native MEX link
+            # with undefined _mexFunctionAdapter symbols. macos-15 is the
+            # newest MATLAB-supported Apple Silicon runner.
             runner: macos-15
             architecture: arm64
             mex-extension: mexmaca64

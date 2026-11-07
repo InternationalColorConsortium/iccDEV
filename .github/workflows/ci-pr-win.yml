@@ -217,7 +217,16 @@ jobs:
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
 
+      - name: Restore pinned vcpkg archive
+        id: vcpkg-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: Install dependencies
+        # The exact-key cache holds only the release archive; this step always
+        # verifies its pinned SHA-256 before extraction.
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -233,14 +242,25 @@ jobs:
           pwd
           git branch
           git status
-          Write-Host "========= Fetching Deps from Releases... ================`n"
-          Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination 'deps.zip'
-          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          $archive = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-export.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            Write-Host "========= Fetching Deps from Releases... ================`n"
+            Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination $archive
+          }
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
           Write-Host "========= Extracting Dependencies ...    ================`n"
-          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
+          Expand-Archive -LiteralPath $archive -DestinationPath . -Force
+
+      - name: Save verified vcpkg archive
+        if: github.event_name == 'workflow_dispatch' && steps.vcpkg-archive.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: CMake Configure
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -774,6 +794,13 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
+      - name: Restore pinned vcpkg archive
+        id: vcpkg-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: Install dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -787,12 +814,15 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination 'deps.zip'
-          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          $archive = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-export.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination $archive
+          }
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
-          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
+          Expand-Archive -LiteralPath $archive -DestinationPath . -Force
 
       - name: Configure and build ClangCL tools
         env:
@@ -1099,6 +1129,13 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
+      - name: Restore pinned vcpkg archive
+        id: vcpkg-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/iccdev-vcpkg-export.zip
+          key: iccdev-vcpkg-windows-9b051a50f152f616986e735d618a2f5ade2cf5443c680216894f2897dbbf5eca
+
       - name: Install dependencies
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -1112,12 +1149,15 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination 'deps.zip'
-          $actualDigest = (Get-FileHash -LiteralPath 'deps.zip' -Algorithm SHA256).Hash
+          $archive = Join-Path $env:RUNNER_TEMP 'iccdev-vcpkg-export.zip'
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            Start-BitsTransfer -Source $env:ICCDEV_VCPKG_EXPORT_URL -Destination $archive
+          }
+          $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
           if ($actualDigest -ne $env:ICCDEV_VCPKG_EXPORT_SHA256) {
             throw "vcpkg export digest mismatch: $actualDigest"
           }
-          Expand-Archive -LiteralPath 'deps.zip' -DestinationPath . -Force
+          Expand-Archive -LiteralPath $archive -DestinationPath . -Force
 
       - name: Run Windows Release performance report
         env:

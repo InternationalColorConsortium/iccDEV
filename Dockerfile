@@ -40,10 +40,11 @@ RUN for attempt in 1 2 3; do \
       if apt-get -o Acquire::Retries=3 update \
        && apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
     afl++=4.33c-1.1ubuntu1 \
+    apt=3.2.1ubuntu0.1 \
     bash=5.3-2ubuntu1 \
     binutils=2.46-3ubuntu2 \
     build-essential=12.12ubuntu2.26.04.2 \
-    ca-certificates=20260816ubuntu0.26.04.1 \
+    ca-certificates=20260816ubuntu0.26.04.2 \
     clang-21=1:21.1.8-6ubuntu1 \
     clang-22=1:22.1.2-1ubuntu1 \
     clang-tidy-22=1:22.1.2-1ubuntu1 \
@@ -68,6 +69,7 @@ RUN for attempt in 1 2 3; do \
     grep=3.12-1 \
     gpgv=2.4.8-4ubuntu3.1 \
     jq=1.8.1-4ubuntu2 \
+    libapt-pkg7.0=3.2.1ubuntu0.1 \
     libbrotli-dev=${BROTLI_VERSION} \
     libbrotli1=${BROTLI_VERSION} \
     libclang-rt-22-dev=1:22.1.2-1ubuntu1 \
@@ -91,7 +93,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.3 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.3 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-42.42 \
+    linux-perf=7.0.0-43.43 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \
@@ -126,7 +128,9 @@ RUN for attempt in 1 2 3; do \
       sleep "$((attempt * 10))"; \
     done \
  && apt-get check \
- && command -v cloc doxygen dot find sort lscpu unzip \
+ && for tool in cloc doxygen dot find sort lscpu unzip; do \
+      command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }; \
+    done \
  && test -f /usr/include/valgrind/memcheck.h \
  && sed -i 's/^#geninfo_unexecuted_blocks = 0$/geninfo_unexecuted_blocks = 1/' /etc/lcovrc \
  && grep -Fx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc \

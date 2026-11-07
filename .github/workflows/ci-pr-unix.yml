@@ -79,7 +79,7 @@ jobs:
   build:
     name: "${{ matrix.os }} - ${{ matrix.compiler }} - ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 45 || 20 }}
     concurrency:
       group: pr-unix-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
       cancel-in-progress: true

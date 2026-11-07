@@ -4,9 +4,9 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Last Updated: 2026-10-30 UTC
-#               Refresh source pin for port revision 2.3.2.4#2
-#               Fixups following BeyondRGB PR-418
+# Last Updated: 2026-11-06 UTC
+#               Refresh source pin for port revision 2.3.2.4#3
+#               Pin to bcf7cb62 (#2986)
 # Remark:       vcpkg CI targets Windows 2022 (x64-windows)
 #
 # portfile.cmake - vcpkg port for iccDEV (RefIccMAX)
@@ -42,8 +42,8 @@ else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
-        REF 1b5dfdbb2a06b49e28fd494933f3457fdee5c556
-        SHA512 cd3b36797db36acb4a7786537fbab81d29863f9c01b4c299aa9b873b8cca856a555f7b264391bb29858a30fc4e776d4760f877bac731cd6e469d5a4d089a66da
+        REF bcf7cb621a295402b52ecf1458f05aa3ae343e2f
+        SHA512 7365833abe268399b16919df96f9ae16258c316900564b550dc06008a7cc756e7f6c1b6320e4125c6712729121718ae3ed837488f76b989d47b5919a0be37871
         HEAD_REF master
     )
 endif()

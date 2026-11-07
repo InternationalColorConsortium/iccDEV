@@ -36,6 +36,7 @@ FIXED_OUTPUT_BATCHING_CHECKER="$SCRIPT_DIR/check-workflow-fixed-output-batching.
 TARGET_FIXED_OUTPUT_BATCHING_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-fixed-output-batching.py"
 ACTION_PIN_CHECKER="$SCRIPT_DIR/check-workflow-action-pins.py"
 TARGET_ACTION_PIN_CHECKER="$REPO_ROOT/.github/scripts/check-workflow-action-pins.py"
+CACHE_POLICY_CHECKER="$SCRIPT_DIR/check-workflow-cache-policy.sh"
 cd "$REPO_ROOT"
 
 failures=0
@@ -66,7 +67,7 @@ skip_or_fail() {
 }
 
 HADOLINT_IMAGE="${PREFLIGHT_HADOLINT_IMAGE:-hadolint/hadolint@sha256:fdf19d026b54834f88c62774fdf2a61ff3b586a42632e5070674d41a796bfdf3}"
-TRIVY_IMAGE="${PREFLIGHT_TRIVY_IMAGE:-aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c}"
+TRIVY_IMAGE="${PREFLIGHT_TRIVY_IMAGE:-aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb}"
 TRIVY_CACHE_DIR="${PREFLIGHT_TRIVY_CACHE_DIR:-${TMPDIR:-/tmp}/iccdev-trivy-cache-$$}"
 
 run_hadolint() {
@@ -125,7 +126,7 @@ run_doxygen_check() {
 }
 
 run_workflow_cache_policy() {
-  .github/scripts/check-workflow-cache-policy.sh "${workflow_files[@]}"
+  "$CACHE_POLICY_CHECKER" "${workflow_files[@]}"
 }
 
 run_workflow_bash_prologue_policy() {
@@ -480,7 +481,6 @@ def job_context(workflow, job):
 
 failures = 0
 warnings = 0
-cache_publish = 0
 artifact_intake = 0
 artifact_publish = 0
 auth_canaries = 0
@@ -492,7 +492,6 @@ reviewed_pr_script_exceptions = 0
 yaml_anchor_canaries = 0
 package_install_canaries = 0
 reviewed_package_install_exceptions = 0
-workflow_cache_canaries = 0
 
 all_workflows = {}
 for workflow_path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
@@ -558,61 +557,6 @@ for path in sys.argv[1:]:
             block = with_block(step)
             label = step_label(path, job_name, index, step)
             pr_context = bool(workflow_triggers(workflow) & {"pull_request", "pull_request_target"})
-
-            if uses.startswith("actions/cache@"):
-                print(f"[FAIL] {label}: actions/cache is prohibited", file=sys.stderr)
-                failures += 1
-                workflow_cache_canaries += 1
-                cache_publish += 1
-
-            if uses.startswith("docker/build-push-action@"):
-                for key in ("cache-from", "cache-to"):
-                    cache_value = str(block.get(key, "")).strip()
-                    if cache_value:
-                        print(f"[FAIL] {label}: Docker Buildx {key} is prohibited",
-                              file=sys.stderr)
-                        failures += 1
-                        workflow_cache_canaries += 1
-                        if key == "cache-to":
-                            cache_publish += 1
-
-            if uses.startswith("msys2/setup-msys2@"):
-                if str(block.get("cache", "")).strip().lower() not in {"false", "0", "no", "off"}:
-                    print(f"[FAIL] {label}: msys2/setup-msys2 cache must be disabled with cache: false",
-                          file=sys.stderr)
-                    failures += 1
-                    workflow_cache_canaries += 1
-
-            for cache_key in ("cache", "restore-keys", "save-always"):
-                if cache_key not in block:
-                    continue
-                cache_value = str(block.get(cache_key, "")).strip().lower()
-                if cache_key == "cache" and cache_value in {"", "false", "0", "no", "off"}:
-                    continue
-                print(f"[FAIL] {label}: workflow cache input {cache_key} is prohibited",
-                      file=sys.stderr)
-                failures += 1
-                workflow_cache_canaries += 1
-                if cache_key == "save-always":
-                    cache_publish += 1
-
-            for cache_key in ("cache-binary", "cache-dependency-path"):
-                if cache_key not in block:
-                    continue
-                cache_value = str(block.get(cache_key, "")).strip().lower()
-                if cache_key == "cache-binary" and cache_value in {"", "false", "0", "no", "off"}:
-                    continue
-                print(f"[FAIL] {label}: workflow cache input {cache_key} is prohibited",
-                      file=sys.stderr)
-                failures += 1
-                workflow_cache_canaries += 1
-
-            if str(block.get("no-cache", "")).strip().lower() == "false":
-                print(f"[FAIL] {label}: Docker Buildx no-cache:false is prohibited",
-                      file=sys.stderr)
-                failures += 1
-                workflow_cache_canaries += 1
-                cache_publish += 1
 
             if uses.startswith("actions/download-artifact@") and publish_context:
                 if "name" not in block and "pattern" not in block:
@@ -687,8 +631,6 @@ for path in sys.argv[1:]:
                     failures += 1
                     package_install_canaries += 1
 
-print(f"cache publish canaries: {cache_publish}")
-print(f"workflow cache canaries: {workflow_cache_canaries}")
 print(f"artifact intake canaries: {artifact_intake}")
 print(f"artifact publish canaries: {artifact_publish}")
 print(f"untrusted PR artifact canaries: {untrusted_artifacts}")

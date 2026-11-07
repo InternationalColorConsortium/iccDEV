@@ -1,0 +1,14 @@
+{
+  "imageFiles": {
+    "srcImageFile": "input.tif",
+    "dstImageFile": "output.tif",
+    "srcIfd": 0,
+    "dstEncoding": "sameAsSource",
+    "dstCompression": "sameAsSource",
+    "dstPlanar": true,
+    "dstEmbedIcc": false,
+    "dstTileWidth": 16,
+    "dstTileHeight": 32,
+    "dstBigTiff": true
+  }
+}

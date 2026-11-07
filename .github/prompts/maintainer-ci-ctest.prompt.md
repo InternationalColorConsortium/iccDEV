@@ -69,6 +69,10 @@ Choose the smallest gate that proves the behavior:
   multi-platform MEX and container lanes consume scarce runner capacity.
 - Risk analysis: `ci-risk-analysis-gate` is manual-dispatch only; use it for
   the explicit final Linux and Windows workflow-security audit.
+- Cache policy: use only exact-key, checksum-addressed immutable download
+  archives. PR jobs restore only; trusted events may save after verification.
+  Keep compiler output, CTest state, artifacts, releases, and publish jobs
+  uncached, and retain a pilot only after a cold/warm timing comparison.
 - CTest suite: cross-platform tool/profile behavior that belongs in the normal
   local and CI test surface.
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or

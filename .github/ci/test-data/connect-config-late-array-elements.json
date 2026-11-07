@@ -1,0 +1,48 @@
+{
+  "profileSequence": [
+    null,
+    {
+      "iccFile": "late-profile.icc",
+      "intent": "absolute",
+      "transform": "namedSpectralOnGray",
+      "interpolation": "linear",
+      "iccEnvVars": [
+        {
+          "name": "late",
+          "value": 1.0
+        }
+      ]
+    }
+  ],
+  "searchApply": {
+    "profileSequence": [
+      false,
+      {
+        "iccFile": "late-search-profile.icc",
+        "intent": "saturation",
+        "transform": "namedDevice"
+      }
+    ],
+    "pccWeights": [
+      null,
+      {
+        "pccFile": "late-pcc.icc",
+        "weight": -1.0
+      }
+    ]
+  },
+  "colorData": {
+    "data": [
+      null,
+      {
+        "n": "late",
+        "v": [0.0, 0.5, 1.0],
+        "sn": "source",
+        "sv": [1.0, 0.5, 0.0],
+        "i": 1,
+        "l": "late element",
+        "d": ["first", "second"]
+      }
+    ]
+  }
+}

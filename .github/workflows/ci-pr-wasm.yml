@@ -63,7 +63,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
 
-      - name: Assert no GitHub Actions cache primitives
+      - name: Check immutable download cache policy
         env:
           BASH_ENV: /dev/null
         run: |

@@ -260,6 +260,9 @@ fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
 grep -Fqx "$fuzzer_template" "$adapter"
 grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
 grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+grep -Fq 'afl_testcache_min_mb=128' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+grep -Fq 'AFL_TESTCACHE_SIZE=0' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
+grep -Fq 'export AFL_TESTCACHE_SIZE' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 
 for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
   grep -q '^  workflow_dispatch:$' "$smoke_workflow"

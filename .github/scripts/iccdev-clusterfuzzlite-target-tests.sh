@@ -54,15 +54,41 @@ for family in profile xml json config; do
 done
 
 config_seed="$repo_root/.github/ci/test-data/connect-config-complete.json"
+config_image_seed="$repo_root/.github/ci/test-data/connect-config-image-extended.json"
+config_late_seed="$repo_root/.github/ci/test-data/connect-config-late-array-elements.json"
 if [ ! -s "$config_seed" ]; then
   echo "[FAIL] Missing schema-shaped IccConnect configuration seed" >&2
   exit 1
 fi
+for config_fixture in "$config_image_seed" "$config_late_seed"; do
+  if [ ! -s "$config_fixture" ]; then
+    echo "[FAIL] Missing focused IccConnect configuration seed: $config_fixture" >&2
+    exit 1
+  fi
+done
 for key in dataFiles imageFiles connect createLink profileSequence \
     searchApply pccWeights colorData; do
   grep -Fq "\"$key\"" "$config_seed"
   grep -Fq "\\\"$key\\\"" "$cfl_dir/icc_config_fuzzer.dict"
 done
+for key in srcType srcSpace srcFile dstType dstFile dstEncoding dstPrecision \
+    dstDigits debugCalc srcImageFile dstImageFile srcIfd dstCompression \
+    dstPlanar dstEmbedIcc dstTileWidth dstTileHeight dstBigTiff threads \
+    useSearch linkFile linkGridSize linkMaxRange linkMinRange linkPrecision \
+    linkTitle linkType useSourceTransform iccFile pccFile intent transform \
+    interpolation adjustPcsLuminance useV5SubProfile useD2BxB2Dx useBPC \
+    useHToS iccEnvVars pccEnvVars weight space encoding srcEncoding n v sn \
+    sv i l d name value; do
+  grep -Fq "\\\"$key\\\"" "$cfl_dir/icc_config_fuzzer.dict"
+done
+for key in srcIfd dstTileWidth dstTileHeight dstBigTiff; do
+  grep -Fq "\"$key\"" "$config_seed"
+  grep -Fq "\"$key\"" "$config_image_seed"
+done
+grep -Fq '"late-profile.icc"' "$config_late_seed"
+grep -Fq '"late-search-profile.icc"' "$config_late_seed"
+grep -Fq '"late-pcc.icc"' "$config_late_seed"
+grep -Fq '"late element"' "$config_late_seed"
 
 cmmapply="$cfl_dir/icc_cmmapply_fuzzer.cpp"
 grep -Fq 'readBigEndian32(data + 64)' "$cmmapply"
@@ -76,10 +102,23 @@ fi
 
 connectconfig="$cfl_dir/icc_connectconfig_fuzzer.cpp"
 for config_type in CIccCfgDataApply CIccCfgImageApply CIccCfgConnectOptions \
-    CIccCfgCreateLink CIccCfgProfile CIccCfgProfileSequence CIccCfgPccWeight \
-    CIccCfgSearchApply CIccCfgDataEntry CIccCfgColorData; do
+    CIccCfgCreateLink CIccCfgProfileSequence CIccCfgSearchApply \
+    CIccCfgColorData; do
   grep -Fq "exerciseRoundTrip<$config_type>" "$connectconfig"
 done
+grep -Fq 'kMaxDirectArrayElements = 16' "$connectconfig"
+grep -Fq 'parsed.reset()' "$connectconfig"
+grep -Fq 'parsed.fromJson(value, false)' "$connectconfig"
+grep -Fq 'replayed.fromJson(serialized, true)' "$connectconfig"
+grep -Fq 'replayed.fromJson(value, false)' "$connectconfig"
+grep -Fq 'serialized == replayed_serialized' "$connectconfig"
+grep -Fq 'exerciseArrayElements<CIccCfgProfile>' "$connectconfig"
+grep -Fq 'exerciseArrayElements<CIccCfgPccWeight>' "$connectconfig"
+grep -Fq 'exerciseArrayElements<CIccCfgDataEntry>' "$connectconfig"
+if grep -Fq 'kMaxTextInputSize' "$connectconfig"; then
+  echo "[FAIL] Connect config input length must remain runner-owned" >&2
+  exit 1
+fi
 
 xmlparse="$cfl_dir/icc_xmlparse_fuzzer.cpp"
 grep -Fq 'xmlSetGenericErrorFunc(nullptr, discardXmlDiagnostic)' "$xmlparse"

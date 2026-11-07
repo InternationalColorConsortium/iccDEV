@@ -95,6 +95,13 @@ jobs:
           git fetch --no-tags --prune origin '+refs/heads/master:refs/remotes/origin/master'
           git rev-parse --verify origin/master >/dev/null
 
+      - name: Restore pinned CodeQL archive
+        id: codeql-archive
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: /tmp/codeql-bundle-linux64.tar.gz
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
+
       # preflight: allow-package-install reason=security-tool-bootstrap
       - name: Install pre-flight tools
         shell: bash --noprofile --norc {0}
@@ -116,31 +123,39 @@ jobs:
             'pytest>=9.0.3,<10' \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
-            'zizmor==1.31.1' \
+            'zizmor==1.32.0' \
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-          if command -v codeql >/dev/null 2>&1; then
-            dirname "$(command -v codeql)" >> "$GITHUB_PATH"
-          else
-            # Keep this pin synchronized with the other workflow pins and Dockerfile.
-            # The digest is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
-            #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
-            #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-            CODEQL_VER="2.27.4"
-            CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-            CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
-            CODEQL_URL="https://github.com/github/codeql-action/releases/download"
+          # Keep this pin synchronized with the other workflow pins and Dockerfile.
+          # The digest is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
+          #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
+          #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
+          CODEQL_VER="2.27.4"
+          CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
+          CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
+          CODEQL_URL="https://github.com/github/codeql-action/releases/download"
+          if [[ ! -f "${CODEQL_ARCHIVE}" ]]; then
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
               "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
-            printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
-            tar xzf "${CODEQL_ARCHIVE}" -C /opt
-            echo "/opt/codeql" >> "$GITHUB_PATH"
           fi
+          printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
+          tar xzf "${CODEQL_ARCHIVE}" -C /opt
+          echo "/opt/codeql" >> "$GITHUB_PATH"
+
+      - name: Save verified CodeQL archive
+        if: >-
+          (github.event_name == 'push' ||
+          github.event_name == 'workflow_dispatch') &&
+          steps.codeql-archive.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: /tmp/codeql-bundle-linux64.tar.gz
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
 
       # preflight: allow-pr-script-execution reason=readonly-workflow-contract-tests
       - name: Run workflow contract tests
@@ -334,7 +349,7 @@ jobs:
               failures=$((failures + 1))
             else
               hadolint_image='hadolint/hadolint@sha256:fdf19d026b54834f88c62774fdf2a61ff3b586a42632e5070674d41a796bfdf3'
-              trivy_image='aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c'
+              trivy_image='aquasec/trivy@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb'
               if [ "${#docker_files[@]}" -gt 0 ]; then
                 if ! docker run --rm \
                   -v "$PWD":/repo:ro \

@@ -163,16 +163,33 @@ For multiline content, sanitize one line at a time.
 ## Cache, Artifact, and Publish Boundaries
 
 Treat cache, artifact, and release boundaries as security boundaries. GitHub's
-secure-use guidance favors least-privilege tokens, SHA-pinned actions, explicit
-environment protection for secrets, and manually reviewed logs for secret
-exposure. The Wiz GitHub Actions guidance highlights the same practical risks:
-credential theft, poisoned pipeline execution, artifact handling, and cache or
-tooling state crossing into release or package publishing.
+cache service treats entries as unsigned state visible to other workflow runs.
+Never cache secrets, credentials, build outputs, package trees, binaries,
+coverage, CTest state, or files derived from PR-controlled source.
 
-Do not use `actions/cache` or Docker Buildx `type=gha` cache in jobs that publish
-packages, containers, attestations, or GitHub Releases. Release and publishing
-jobs must rebuild trusted inputs from pinned refs or verified checksums instead
-of restoring mutable cache state.
+The only permitted Actions-service workflow cache is one immutable download
+archive whose exact SHA-256 appears in a literal cache key. Use SHA-pinned
+`actions/cache/restore`
+and `actions/cache/save` steps, one archive path, no restore prefixes, no
+cross-OS restore, and no implicit setup-action cache. Verify the archive's
+pinned checksum on every hit before extraction. Save only after a restore miss
+from trusted `push`, `schedule`, or `workflow_dispatch` events; pull requests
+may restore but must never save.
+
+The manual-only `ci-docker` workflow may import inline cache metadata from a
+previously validated canonical image after resolving its tag to an immutable
+manifest digest. It may export only `type=inline` metadata with the candidate
+image, and it must retain a dispatch input that disables cache use. Do not use
+Docker Buildx `type=gha`, a separate mutable cache image, or a cache written by
+pull-request or fork-controlled code. Final local container proof remains a
+no-cache build.
+
+Do not use any Actions cache or Docker Buildx `type=gha` cache in workflows with
+low-trust metadata triggers or jobs that publish packages, attestations, or
+GitHub Releases. Package and release jobs must rebuild trusted inputs from
+pinned refs or verified checksums. Keep cache use within the free storage
+allowance, prefer a small shared key over per-branch keys, and remove a pilot if
+cache upload/download churn outweighs runner-time savings.
 
 Publishing jobs must download artifacts by explicit `name:` or constrained
 `pattern:` and validate the expected artifact set before packaging, attestation,
@@ -194,7 +211,7 @@ exception must be marked directly before the step with
 exposure still appears in preflight output.
 
 Use preflight canaries for indicators of compromise and auth/accounting drift:
-cache use in publish jobs, broad artifact intake, missing release artifacts,
+cache policy violations, broad artifact intake, missing release artifacts,
 untrusted PR artifact uploads, `secrets: inherit`, token exposure in
 write-permission jobs, dangerous triggers, direct expression interpolation, and
 checkout credential persistence. Package install/build/publish commands in
@@ -202,7 +219,7 @@ workflow `run:` blocks must either use locked, checksummed inputs or be isolated
 to an unprivileged scanner/bootstrap step marked with
 `# preflight: allow-package-install reason=<short-reason>`. Treat token-exposure canaries in
 write-permission jobs as advisory until reviewed and explicitly marked;
-publishing cache, broad artifact intake, and untrusted PR artifact upload
+unsafe cache use, broad artifact intake, and untrusted PR artifact upload
 canaries are blocking.
 
 GitHub App installation tokens, including Actions `GITHUB_TOKEN`, are moving to
