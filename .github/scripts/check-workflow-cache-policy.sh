@@ -193,6 +193,16 @@ def decode_yaml_scalar(value):
     return value
 
 
+def quoted_scalar_starts(value, index):
+    previous = value[:index].rstrip()
+    if not previous or previous[-1] in "[{,:":
+        return True
+    if previous[-1] != "?":
+        return False
+    before_indicator = previous[:-1].rstrip()
+    return not before_indicator or before_indicator[-1] in "[{,"
+
+
 def top_level_separator_index(value, separator):
     depth = 0
     quote = ""
@@ -203,10 +213,16 @@ def top_level_separator_index(value, separator):
                 escaped = False
             elif character == "\\" and quote == '"':
                 escaped = True
+            elif (
+                character == quote == "'"
+                and index + 1 < len(value)
+                and value[index + 1] == "'"
+            ):
+                escaped = True
             elif character == quote:
                 quote = ""
             continue
-        if character in {"'", '"'}:
+        if character in {"'", '"'} and quoted_scalar_starts(value, index):
             quote = character
         elif character in "[{":
             depth += 1
@@ -235,16 +251,22 @@ def flow_depth(value):
     depth = 0
     quote = ""
     escaped = False
-    for character in value:
+    for index, character in enumerate(value):
         if quote:
             if escaped:
                 escaped = False
             elif character == "\\" and quote == '"':
                 escaped = True
+            elif (
+                character == quote == "'"
+                and index + 1 < len(value)
+                and value[index + 1] == "'"
+            ):
+                escaped = True
             elif character == quote:
                 quote = ""
             continue
-        if character in {"'", '"'}:
+        if character in {"'", '"'} and quoted_scalar_starts(value, index):
             quote = character
         elif character in "[{":
             depth += 1
@@ -266,6 +288,8 @@ def inline_trigger_names(value):
             separator = top_level_separator_index(item, ":")
             if separator >= 0:
                 names.add(decode_yaml_scalar(item[:separator]))
+            else:
+                names.add(decode_yaml_scalar(item))
         return names
     return {decode_yaml_scalar(value)} if value else set()
 

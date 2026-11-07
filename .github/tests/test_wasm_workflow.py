@@ -703,6 +703,12 @@ def test_cache_policy_scanner_rejects_unsafe_cache(
             "default: build(}}}, pull_request_target: {}}\n",
             "",
         ),
+        (
+            "on: {workflow_dispatch: {inputs: {label: {type: string, "
+            "default: it's ready}}}, pull_request_target: {}}\n",
+            "",
+        ),
+        ("on: {pull_request_target}\n", ""),
     ],
 )
 def test_cache_policy_scanner_rejects_obscured_low_trust_triggers(
@@ -720,6 +726,13 @@ def test_cache_policy_scanner_rejects_obscured_low_trust_triggers(
         "        with:\n"
         "          path: /tmp/dependencies.tar.gz\n"
         f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify archive\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=/tmp/dependencies.tar.gz\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | "
+        "sha256sum -c -\n"
     )
     if root_indent:
         workflow = "\n".join(
