@@ -17,6 +17,8 @@ fi
 
 failures=0
 workflow_files=()
+matches_file=$(mktemp "${TMPDIR:-/tmp}/iccdev-cache-policy.XXXXXX")
+trap 'rm -f "$matches_file"' EXIT
 
 for item in "$@"; do
   if [ -d "$item" ]; then
@@ -43,9 +45,10 @@ for workflow in "${workflow_files[@]}"; do
     continue
   fi
 
-  # Capture the scanner result before reading it. The process-substitution
-  # redirection fails on macOS Bash 3.2, allowing a false [OK] result.
-  matches=$(python3 - "$workflow" <<'PY'
+  # Capture the scanner result before reading it. Process substitution can
+  # allow a false [OK] result, while a heredoc inside command substitution is
+  # not parsed reliably by macOS Bash 3.2.
+  if ! python3 - "$workflow" > "$matches_file" <<'PY'
 import json
 import re
 import sys
@@ -668,7 +671,11 @@ for number, code, lines in outside_run:
     if match and match.group(1).strip().lower().strip("'\"") == "false":
         print(f"{number}: {stripped}")
 PY
-  )
+  then
+    echo "[FAIL] Cache policy scanner failed for $workflow" >&2
+    exit 1
+  fi
+  matches=$(<"$matches_file")
   while IFS= read -r match; do
     [ -n "$match" ] || continue
     echo "[FAIL] Cache policy violation in $workflow: $match" >&2

@@ -1100,7 +1100,7 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-release-lto:
-    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     name: macOS Clang Release LTO
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
@@ -1115,7 +1115,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   macos-debug:
-    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' }}
     name: macOS Clang Debug
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
@@ -1130,7 +1130,7 @@ jobs:
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   apple-xcode-ctest:
-    if: ${{ (needs.detect-src.outputs.run_native_matrix == 'true' || needs.detect-src.outputs.apple_xcode_changed == 'true') && needs.detect-src.outputs.ci_scope != 'fast-lane' }}
+    if: ${{ needs.detect-src.outputs.run_native_matrix == 'true' || needs.detect-src.outputs.apple_xcode_changed == 'true' }}
     name: Apple Xcode CTest runtime layouts
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-apple-platform-smoke.yml
