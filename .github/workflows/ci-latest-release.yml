@@ -2724,6 +2724,10 @@ jobs:
             iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
+            if ! grep -qE '^(\./)?THIRD-PARTY-NOTICES\.md$' <<< "$entries"; then
+              echo "::error::$name omits third-party notices"
+              exit 1
+            fi
             if ! grep -qE '(^|/)third-party-licenses/.+' <<< "$entries"; then
               echo "::error::$name omits dependency license files"
               exit 1
