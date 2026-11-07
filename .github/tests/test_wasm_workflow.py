@@ -247,6 +247,12 @@ def test_cache_policy_scanner_allows_only_verified_archives(
         "        with:\n"
         "          path: ${{ runner.temp }}/dependencies.zip\n"
         f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify archive\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=dependencies.zip\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
     )
     if operation == "save":
         workflow += (
@@ -257,11 +263,6 @@ def test_cache_policy_scanner_allows_only_verified_archives(
             "          path: ${{ runner.temp }}/dependencies.zip\n"
             f"          key: iccdev-dependencies-{archive_digest}\n"
         )
-    workflow += (
-        "      - name: Verify archive\n"
-        "        run: |\n"
-        f"          echo '{archive_digest}  dependencies.zip' | sha256sum -c -\n"
-    )
     fixture = tmp_path / "cache-policy.yml"
     fixture.write_text(workflow, encoding="utf-8")
     result = subprocess.run(
@@ -274,6 +275,156 @@ def test_cache_policy_scanner_allows_only_verified_archives(
     output = result.stdout + result.stderr
     assert (result.returncode == 0) is allowed, output
     assert diagnostic in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+def test_cache_policy_scanner_keeps_inline_save_condition_in_its_step(tmp_path):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        "permissions:\n"
+        "  contents: read\n"
+        "on:\n"
+        "  workflow_dispatch:\n"
+        "jobs:\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - uses: actions/cache/restore@"
+        f"{action_pin}\n"
+        "        id: dependency-archive\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify archive\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=/tmp/dependencies.zip\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
+        "      - name: Trusted preceding condition\n"
+        "        if: github.event_name == 'workflow_dispatch' "
+        "&& steps.dependency-archive.outputs.cache-hit != 'true'\n"
+        "        run: echo ready\n"
+        "      - uses: actions/cache/save@"
+        f"{action_pin}\n"
+        "        if: github.event_name == 'pull_request'\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+    )
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "cache save condition includes an untrusted event" in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+@pytest.mark.parametrize(
+    "verification",
+    [
+        (
+            "      - name: Verify unrelated archive\n"
+            "        run: |\n"
+            "          set -euo pipefail\n"
+            "          ARCHIVE=unrelated.zip\n"
+            "          ARCHIVE_SHA256=" + "a" * 64 + "\n"
+            "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
+        ),
+        (
+            "      - name: Use before verification\n"
+            "        run: |\n"
+            "          set -euo pipefail\n"
+            "          ARCHIVE=dependencies.zip\n"
+            "          ARCHIVE_SHA256=" + "a" * 64 + "\n"
+            "          unzip \"$ARCHIVE\"\n"
+            "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
+        ),
+    ],
+)
+def test_cache_policy_scanner_rejects_unbound_or_late_verification(
+    verification, tmp_path
+):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        "permissions:\n"
+        "  contents: read\n"
+        "on:\n"
+        "  workflow_dispatch:\n"
+        "jobs:\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - id: dependency-archive\n"
+        f"        uses: actions/cache/restore@{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        f"{verification}"
+    )
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "cached archive SHA-256 must be verified before extraction or saving" in output
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
+def test_cache_policy_scanner_requires_verification_before_save(tmp_path):
+    action_pin = "0" * 40
+    archive_digest = "a" * 64
+    workflow = (
+        "permissions:\n"
+        "  contents: read\n"
+        "on:\n"
+        "  workflow_dispatch:\n"
+        "jobs:\n"
+        "  test:\n"
+        "    steps:\n"
+        "      - id: dependency-archive\n"
+        f"        uses: actions/cache/restore@{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - if: github.event_name == 'workflow_dispatch' "
+        "&& steps.dependency-archive.outputs.cache-hit != 'true'\n"
+        f"        uses: actions/cache/save@{action_pin}\n"
+        "        with:\n"
+        "          path: /tmp/dependencies.zip\n"
+        f"          key: iccdev-dependencies-{archive_digest}\n"
+        "      - name: Verify too late\n"
+        "        run: |\n"
+        "          set -euo pipefail\n"
+        "          ARCHIVE=/tmp/dependencies.zip\n"
+        f"          ARCHIVE_SHA256={archive_digest}\n"
+        "          printf '%s  %s\\n' \"$ARCHIVE_SHA256\" \"$ARCHIVE\" | sha256sum -c -\n"
+    )
+    fixture = tmp_path / "cache-policy.yml"
+    fixture.write_text(workflow, encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(ROOT / ".github/scripts/check-workflow-cache-policy.sh"), str(fixture)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "cached archive SHA-256 must be verified before extraction or saving" in output
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX Bash and path syntax required")
@@ -354,7 +505,7 @@ def test_cache_policy_scanner_allows_only_validated_image_cache(
         ),
         (
             "on:\n  workflow_dispatch:\n",
-            "cached archive SHA-256 must be re-verified before extraction",
+            "cached archive SHA-256 must be verified before extraction or saving",
         ),
     ],
 )

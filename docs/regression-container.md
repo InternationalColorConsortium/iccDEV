@@ -448,13 +448,6 @@ docker run --rm iccdev:local bash -lc '
 '
 ```
 
-The manual `ci-docker` workflow defaults `use_build_cache` to `true`. It
-resolves the last validated integration image, or `latest`, to an immutable
-manifest digest before importing its inline BuildKit metadata. Successful
-published images carry only the inline `min` cache; no GitHub Actions cache or
-separate cache image is written. Dispatch with `use_build_cache=false` for a
-clean hosted rebuild.
-
 ## Maintainer preflight and security checks
 
 Run this complete local preflight from a clean checkout before pushing a

@@ -69,25 +69,87 @@ def code_lines(path):
         yield number, line.split("#", 1)[0].rstrip(), lines
 
 
-def step_window(lines, action_index):
-    action_indent = len(lines[action_index]) - len(lines[action_index].lstrip(" "))
-    step_indent = max(0, action_indent - 2)
-    start = action_index
-    while start > 0:
-        candidate = lines[start - 1]
-        indent = len(candidate) - len(candidate.lstrip(" "))
-        if candidate.strip() and indent == step_indent and candidate.lstrip().startswith("- "):
-            start -= 1
-            break
-        start -= 1
-    end = action_index + 1
+def step_bounds(lines, member_index):
+    member = lines[member_index]
+    member_indent = len(member) - len(member.lstrip(" "))
+    if member.lstrip().startswith("- "):
+        step_indent = member_indent
+        start = member_index
+    else:
+        step_indent = max(0, member_indent - 2)
+        start = member_index
+        for index in range(member_index - 1, -1, -1):
+            candidate = lines[index]
+            indent = len(candidate) - len(candidate.lstrip(" "))
+            if candidate.strip() and indent < step_indent:
+                break
+            if (
+                candidate.strip()
+                and indent == step_indent
+                and candidate.lstrip().startswith("- ")
+            ):
+                start = index
+                break
+
+    end = member_index + 1
     while end < len(lines):
         candidate = lines[end]
         indent = len(candidate) - len(candidate.lstrip(" "))
-        if candidate.strip() and indent == step_indent and candidate.lstrip().startswith("- "):
+        if candidate.strip() and (
+            indent < step_indent
+            or (indent == step_indent and candidate.lstrip().startswith("- "))
+        ):
             break
         end += 1
+    return start, end
+
+
+def step_window(lines, action_index):
+    start, end = step_bounds(lines, action_index)
     return "\n".join(lines[start:end])
+
+
+def steps_block_bounds(lines, member_index):
+    member_indent = len(lines[member_index]) - len(lines[member_index].lstrip(" "))
+    block_start = 0
+    block_indent = -1
+    for index in range(member_index - 1, -1, -1):
+        candidate = lines[index]
+        indent = len(candidate) - len(candidate.lstrip(" "))
+        if indent < member_indent and re.match(r"^\s*steps:\s*$", candidate):
+            block_start = index + 1
+            block_indent = indent
+            break
+
+    block_end = len(lines)
+    if block_indent >= 0:
+        for index in range(member_index + 1, len(lines)):
+            candidate = lines[index]
+            indent = len(candidate) - len(candidate.lstrip(" "))
+            if candidate.strip() and indent <= block_indent:
+                block_end = index
+                break
+    return block_start, block_end
+
+
+def steps_in_same_job(lines, member_index):
+    block_start, block_end = steps_block_bounds(lines, member_index)
+    current_start, _ = step_bounds(lines, member_index)
+    step_indent = len(lines[current_start]) - len(lines[current_start].lstrip(" "))
+    index = block_start
+    while index < block_end:
+        candidate = lines[index]
+        indent = len(candidate) - len(candidate.lstrip(" "))
+        if (
+            candidate.strip()
+            and indent == step_indent
+            and candidate.lstrip().startswith("- ")
+        ):
+            _, end = step_bounds(lines, index)
+            yield index, min(end, block_end), "\n".join(lines[index:min(end, block_end)])
+            index = max(end, index + 1)
+            continue
+        index += 1
 
 
 def scalar(window, name):
@@ -118,7 +180,123 @@ def scalar(window, name):
     return ""
 
 
-def cache_action_findings(window, action, workflow_text, restore_ids):
+def digest_env_names(workflow_text, digest):
+    return set(re.findall(
+        rf"(?mi)^\s*([A-Z][A-Z0-9_]*SHA256):\s*['\"]?{re.escape(digest)}['\"]?\s*$",
+        workflow_text,
+    ))
+
+
+def first_archive_use(text):
+    matches = [
+        re.search(r"\btar\s+(?:-[^\s]*x[^\s]*|[^\s]*x[^\s]*)", text, re.I),
+        re.search(r"\bExpand-Archive\b", text, re.I),
+        re.search(r"\bunzip\b", text, re.I),
+    ]
+    positions = [match.start() for match in matches if match]
+    return min(positions) if positions else None
+
+
+def bash_archive_verification(text, archive_name, digest, workflow_text):
+    checksum = re.search(r"\bsha256sum\b[^\r\n]*\s-c(?:\s|$)", text, re.I)
+    if not checksum or not re.search(r"(?m)^\s*set\s+-[^\r\n]*e", text[:checksum.start()]):
+        return False
+
+    archive_vars = set(re.findall(
+        rf"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^\r\n]*{re.escape(archive_name)}",
+        text,
+    ))
+    digest_vars = set(re.findall(
+        rf"(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*['\"]?{re.escape(digest)}['\"]?\s*$",
+        text,
+    ))
+    digest_vars.update(digest_env_names(workflow_text, digest))
+    line_start = text.rfind("\n", 0, checksum.start()) + 1
+    command = text[line_start:text.find("\n", checksum.end())]
+    archive_bound = archive_name in command or any(
+        re.search(rf"\$(?:\{{{re.escape(name)}\}}|{re.escape(name)}\b)", command)
+        for name in archive_vars
+    )
+    digest_bound = digest in command or any(
+        re.search(rf"\$(?:\{{{re.escape(name)}\}}|{re.escape(name)}\b)", command)
+        for name in digest_vars
+    )
+    if not archive_bound or not digest_bound or "|| true" in command:
+        return False
+
+    use_position = first_archive_use(text)
+    return use_position is None or checksum.start() < use_position
+
+
+def powershell_archive_verification(text, archive_name, digest, workflow_text):
+    checksum = re.search(
+        r"\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"
+        r"\(Get-FileHash\b([^\r\n]*)\)\.Hash",
+        text,
+        re.I,
+    )
+    if not checksum or archive_name not in text[:checksum.end()]:
+        return False
+    if not re.search(r"\$ErrorActionPreference\s*=\s*['\"]Stop['\"]", text[:checksum.start()], re.I):
+        return False
+
+    archive_vars = set(re.findall(
+        rf"(?mi)^\s*\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^\r\n]*{re.escape(archive_name)}",
+        text,
+    ))
+    hash_arguments = checksum.group(2)
+    if archive_name not in hash_arguments and not any(
+        re.search(rf"\${re.escape(name)}\b", hash_arguments, re.I)
+        for name in archive_vars
+    ):
+        return False
+
+    expected_vars = digest_env_names(workflow_text, digest)
+    if not expected_vars:
+        return False
+    actual_var = checksum.group(1)
+    expected_pattern = "|".join(re.escape(name) for name in sorted(expected_vars))
+    comparison = re.search(
+        rf"if\s*\(\s*\${re.escape(actual_var)}\s*-ne\s*"
+        rf"\$env:(?:{expected_pattern})\s*\)\s*{{(?P<body>.*?)}}",
+        text[checksum.end():],
+        re.I | re.S,
+    )
+    if not comparison or not re.search(r"\bthrow\b", comparison.group("body"), re.I):
+        return False
+
+    use_position = first_archive_use(text)
+    return use_position is None or checksum.start() < use_position
+
+
+def archive_verification_exists(lines, action_index, operation, path, digest, workflow_text):
+    archive_name = path.rsplit("/", 1)[-1]
+    if not archive_name or "${{" in archive_name or not re.search(
+        r"\.(?:zip|tar\.gz|tgz|tar\.xz)$", archive_name, re.I
+    ):
+        return False
+
+    action_start, action_end = step_bounds(lines, action_index)
+    preceding_use = False
+    for start, end, text in steps_in_same_job(lines, action_index):
+        if operation == "restore" and start < action_end:
+            continue
+        if operation == "save" and end > action_start:
+            continue
+        verified = bash_archive_verification(text, archive_name, digest, workflow_text)
+        verified = verified or powershell_archive_verification(
+            text, archive_name, digest, workflow_text
+        )
+        if verified and not preceding_use:
+            return True
+        if first_archive_use(text) is not None:
+            preceding_use = True
+    return False
+
+
+def cache_action_findings(
+    window, action, workflow_text, restore_ids, lines, action_index
+):
     findings = []
     action_match = re.fullmatch(
         r"actions/cache/(restore|save)@([0-9a-f]{40})",
@@ -135,11 +313,15 @@ def cache_action_findings(window, action, workflow_text, restore_ids):
     digest_match = re.search(r"(?:^|[-_])([0-9a-f]{64})(?:$|[-_])", key)
     if "${{" in key or not digest_match:
         findings.append("cache key must be literal and contain the archive SHA-256")
-    elif (
-        workflow_text.count(digest_match.group(1)) < 2
-        or not re.search(r"\b(sha256sum|Get-FileHash)\b", workflow_text, re.I)
+    elif not archive_verification_exists(
+        lines,
+        action_index,
+        operation,
+        path,
+        digest_match.group(1),
+        workflow_text,
     ):
-        findings.append("cached archive SHA-256 must be re-verified before extraction")
+        findings.append("cached archive SHA-256 must be verified before extraction or saving")
 
     if operation == "save":
         condition = scalar(window, "if")
@@ -171,7 +353,14 @@ def cache_action_findings(window, action, workflow_text, restore_ids):
             )
         else:
             restore_id = re.search(restore_miss, condition).group(1)
-            if restore_id not in restore_ids:
+            restore_indexes = restore_ids.get(restore_id, [])
+            matching_restore = any(
+                restore_index < action_index
+                and steps_block_bounds(lines, restore_index)
+                == steps_block_bounds(lines, action_index)
+                for restore_index in restore_indexes
+            )
+            if not matching_restore:
                 findings.append(
                     "cache save miss check must reference an actions/cache/restore step id"
                 )
@@ -182,12 +371,12 @@ workflow = Path(sys.argv[1])
 workflow_text = workflow.read_text(encoding="utf-8")
 outside_run = list(code_lines(workflow))
 outside_text = "\n".join(code for _, code, _ in outside_run)
-restore_ids = set()
+restore_ids = {}
 for number, code, lines in outside_run:
     if re.match(r"(?:-\s*)?uses:\s*actions/cache/restore@", code.strip(), re.I):
         restore_id = scalar(step_window(lines, number - 1), "id")
         if restore_id:
-            restore_ids.add(restore_id)
+            restore_ids.setdefault(restore_id, []).append(number - 1)
 low_trust_trigger = re.search(
     r"(?m)^\s{0,4}(pull_request_target|workflow_run|issue_comment|issues):\s*$",
     outside_text,
@@ -222,6 +411,8 @@ for number, code, lines in outside_run:
             action_match.group(1),
             workflow_text,
             restore_ids,
+            lines,
+            number - 1,
         ):
             print(f"{number}: {finding}")
     if re.match(r"(?:-\s*)?uses:\s*msys2/setup-msys2@", stripped, re.I):
