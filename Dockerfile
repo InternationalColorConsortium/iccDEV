@@ -184,6 +184,8 @@ ENV CC=clang \
 RUN groupadd --gid 10001 iccdev-ci \
  && useradd --uid 10001 --gid 10001 --home-dir /workspace --create-home --shell /bin/bash --no-log-init iccdev-ci
 
+RUN install -d -m 0755 /usr/share/doc/iccdev
+
 COPY --chmod=0644 LICENSE.md /usr/share/doc/iccdev/copyright
 COPY --chmod=0644 Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md /usr/share/doc/iccdev/THIRD-PARTY-NOTICES.md
 COPY --chown=iccdev-ci:iccdev-ci .github/ci/requirements /workspace/iccDEV/.github/ci/requirements
