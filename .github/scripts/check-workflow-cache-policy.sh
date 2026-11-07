@@ -183,6 +183,131 @@ def scalar(window, name):
     return ""
 
 
+def strip_yaml_quotes(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def top_level_separator_index(value, separator):
+    depth = 0
+    quote = ""
+    escaped = False
+    for index, character in enumerate(value):
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif character == quote:
+                quote = ""
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character in "[{(":
+            depth += 1
+        elif character in "]})":
+            depth = max(0, depth - 1)
+        elif character == separator and depth == 0:
+            return index
+    return -1
+
+
+def split_top_level(value, separator):
+    parts = []
+    start = 0
+    while start <= len(value):
+        relative = top_level_separator_index(value[start:], separator)
+        if relative < 0:
+            parts.append(value[start:].strip())
+            break
+        end = start + relative
+        parts.append(value[start:end].strip())
+        start = end + 1
+    return [part for part in parts if part]
+
+
+def flow_depth(value):
+    depth = 0
+    quote = ""
+    escaped = False
+    for character in value:
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\" and quote == '"':
+                escaped = True
+            elif character == quote:
+                quote = ""
+            continue
+        if character in {"'", '"'}:
+            quote = character
+        elif character in "[{":
+            depth += 1
+        elif character in "]}":
+            depth -= 1
+    return depth
+
+
+def inline_trigger_names(value):
+    value = value.strip()
+    if value.startswith("[") and value.endswith("]"):
+        return {
+            strip_yaml_quotes(item)
+            for item in split_top_level(value[1:-1], ",")
+        }
+    if value.startswith("{") and value.endswith("}"):
+        names = set()
+        for item in split_top_level(value[1:-1], ","):
+            separator = top_level_separator_index(item, ":")
+            if separator >= 0:
+                names.add(strip_yaml_quotes(item[:separator]))
+        return names
+    return {strip_yaml_quotes(value)} if value else set()
+
+
+def workflow_trigger_names(text):
+    lines = text.splitlines()
+    on_index = -1
+    on_value = ""
+    for index, line in enumerate(lines):
+        match = re.match(r"^(?:on|['\"]on['\"])\s*:\s*(.*)$", line)
+        if match:
+            on_index = index
+            on_value = match.group(1).strip()
+            break
+    if on_index < 0:
+        return set()
+
+    if on_value:
+        while flow_depth(on_value) > 0 and on_index + 1 < len(lines):
+            on_index += 1
+            on_value += " " + lines[on_index].strip()
+        return inline_trigger_names(on_value)
+
+    names = set()
+    event_indent = None
+    for line in lines[on_index + 1:]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            break
+        if event_indent is None:
+            event_indent = indent
+        if indent != event_indent:
+            continue
+        entry = line.strip()
+        if entry.startswith("- "):
+            entry = entry[2:].strip()
+        separator = top_level_separator_index(entry, ":")
+        if separator >= 0:
+            entry = entry[:separator]
+        names.add(strip_yaml_quotes(entry))
+    return names
+
+
 def digest_env_names(workflow_text, digest):
     return set(re.findall(
         rf"(?mi)^\s*([A-Z][A-Z0-9_]*SHA256):\s*['\"]?{re.escape(digest)}['\"]?\s*$",
@@ -395,14 +520,8 @@ for number, code, lines in outside_run:
         restore_id = scalar(step_window(lines, number - 1), "id")
         if restore_id:
             restore_ids.setdefault(restore_id, []).append(number - 1)
-low_trust_names = r"(?:pull_request_target|workflow_run|issue_comment|issues)"
-low_trust_trigger = re.search(
-    rf"(?m)^\s{{0,4}}['\"]?{low_trust_names}['\"]?\s*:",
-    outside_text,
-) or re.search(
-    rf"(?m)^\s{{0,4}}(?:on|['\"]on['\"]):[^\r\n]*\b{low_trust_names}\b",
-    outside_text,
-)
+low_trust_names = {"pull_request_target", "workflow_run", "issue_comment", "issues"}
+low_trust_trigger = bool(workflow_trigger_names(outside_text) & low_trust_names)
 write_scopes = (
     r"(?:contents|packages|attestations|artifact-metadata|id-token|actions|"
     r"pull-requests|issues|statuses|checks|deployments|pages)"
