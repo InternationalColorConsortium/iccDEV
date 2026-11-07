@@ -10,6 +10,10 @@ iccFromXml input.xml output.icc {-noid -v[=schema.rng]}
 iccFromXml -h | --help
 ```
 
+A help flag is honoured as the first argument, whatever follows it. After the
+operands it is refused as an unrecognised option, so a conversion never exits
+0 without writing its output.
+
 - `input.xml`: The ICC profile XML file
 - `output.icc`: The output binary ICC profile
 - `-noid`: Prevents writing a profile ID (optional). The saved profile's ID field

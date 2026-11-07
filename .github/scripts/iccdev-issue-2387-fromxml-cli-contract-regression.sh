@@ -207,6 +207,23 @@ run_case "no-operands"   1 err "a bare invocation is a malformed conversion, not
 run_case "one-operand"   1 err "an input with no output path converts nothing" -- base.xml
 run_case "help-short"    0 out "-h is an explicit help request and succeeds" -- -h
 run_case "help-long"     0 out "--help is an explicit help request and succeeds" -- --help
+# #2976: a help flag in the first position is a help request whatever follows,
+# and it converts nothing.
+run_case "help-first-with-input"    0 out "-h before an input operand is a help request" -- -h base.xml
+run_case "help-first-with-operands" 0 out "--help before both operands is a help request" -- --help base.xml out-first.icc
+if [ -f "$WORKDIR/out-first.icc" ]; then
+  fail_case "help-first-no-output" "a help request wrote a profile"
+else
+  pass_case "help-first-no-output" "the help request wrote no profile"
+fi
+# #2976: the usage screen names the tool as it is installed.
+help_name_exit=0
+( cd "$WORKDIR" && timeout 60 "$FROMXML" -h ) > "$STDOUT_LOG" 2> "$STDERR_LOG" || help_name_exit=$?
+if [ "$help_name_exit" -eq 0 ] && grep -q '^Usage: iccFromXml ' "$STDOUT_LOG" && ! grep -q 'IccFromXml' "$STDOUT_LOG"; then
+  pass_case "usage-tool-name" "the usage screen says iccFromXml"
+else
+  fail_case "usage-tool-name" "the usage screen does not name the tool iccFromXml"
+fi
 
 ###############################################################################
 # Finding 4 -- an unrecognised option is an error, not something to skip.
