@@ -7,9 +7,14 @@ dependency notices under `third-party-licenses/`, collected from the installed
 Debian or vcpkg packages or from the pinned WASM dependency sources. The
 dependency set may include libheif and its codec libraries, libtiff (including
 BigTIFF support), libjpeg-turbo or libjpeg, libpng, zlib, libxml2,
-nlohmann-json, and wxWidgets when the GUI tool is built. The macOS archive does
-not redistribute Homebrew packages; their licenses remain with the separately
-installed formulae.
+nlohmann-json, and wxWidgets when the GUI tool is built. Linux bundles also
+include the Debian common-license texts referenced by package copyright files.
+
+The macOS archive does not copy Homebrew dynamic libraries; their licenses
+remain with the separately installed formulae. It does include nlohmann-json
+notices because that header-only implementation is compiled into IccJSON.
+The macOS, Windows, and WASM bundles retain nlohmann-json's root license and
+the attributed runtime headers that identify additional copyright holders.
 
 Redistributors must keep those upstream notices with any bundled third-party
 binaries.

@@ -289,8 +289,12 @@ jobs:
               cp -L "$copyright" "$license_root/$package/copyright"
             fi
           done < "$package_list"
+          common_license_root="$license_root/common-licenses"
+          mkdir -p "$common_license_root"
+          cp -aL /usr/share/common-licenses/. "$common_license_root/"
           test -s "$license_root/libheif-dev/copyright"
           test -s "$license_root/libtiff-dev/copyright"
+          test -s "$common_license_root/GPL-2"
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -562,6 +566,36 @@ jobs:
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
           cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          nlohmann_prefix="$(brew --prefix nlohmann-json)"
+          nlohmann_license_root="$stage/third-party-licenses/nlohmann-json"
+          nlohmann_attribution_root="$nlohmann_license_root/runtime-attributions"
+          mkdir -p "$nlohmann_attribution_root"
+          cp -L "$nlohmann_prefix/LICENSE.MIT" "$nlohmann_license_root/LICENSE.MIT"
+          attribution_count=0
+          while IFS= read -r header; do
+            owners="$(grep '^// SPDX-FileCopyrightText:' "$header" || true)"
+            if [ -n "$owners" ] && grep -Fqv 'Niels Lohmann' <<< "$owners"; then
+              relative="${header#"$nlohmann_prefix/include/"}"
+              destination="$nlohmann_attribution_root/$relative"
+              mkdir -p "$(dirname "$destination")"
+              cp -L "$header" "$destination"
+              attribution_count=$((attribution_count + 1))
+            fi
+          done < <(
+            find "$nlohmann_prefix/include/nlohmann" -type f \
+              \( -name '*.hpp' -o -name '*.h' \) -print | sort
+          )
+          if [ "$attribution_count" -lt 4 ]; then
+            echo "::error::nlohmann-json runtime attribution headers are incomplete"
+            exit 1
+          fi
+          for attribution in \
+            nlohmann/detail/conversions/to_chars.hpp \
+            nlohmann/detail/meta/cpp_future.hpp \
+            nlohmann/detail/output/serializer.hpp \
+            nlohmann/thirdparty/hedley/hedley.hpp; do
+            test -s "$nlohmann_attribution_root/$attribution"
+          done
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -1017,6 +1051,43 @@ jobs:
             $requiredCopyright = Join-Path $licenseRoot "$requiredPort\copyright"
             if (-not (Test-Path -LiteralPath $requiredCopyright -PathType Leaf)) {
               throw "Required vcpkg dependency copyright missing: $requiredPort"
+            }
+          }
+          $nlohmannInclude = Join-Path $env:VCPKG_INSTALLED_DIR `
+            'x64-windows\include\nlohmann'
+          $nlohmannAttributionRoot = Join-Path $licenseRoot `
+            'nlohmann-json\runtime-attributions\nlohmann'
+          $attributionCount = 0
+          Get-ChildItem -LiteralPath $nlohmannInclude -Recurse -File |
+            Where-Object { $_.Extension -in '.hpp', '.h' } |
+            Sort-Object FullName |
+            ForEach-Object {
+              $owners = @(Select-String -LiteralPath $_.FullName `
+                -Pattern '^// SPDX-FileCopyrightText:')
+              $additionalOwners = @($owners | Where-Object {
+                $_.Line -notmatch 'Niels Lohmann'
+              })
+              if ($owners.Count -gt 0 -and $additionalOwners.Count -gt 0) {
+                $relative = [IO.Path]::GetRelativePath($nlohmannInclude, $_.FullName)
+                $destination = Join-Path $nlohmannAttributionRoot $relative
+                New-Item -ItemType Directory -Force `
+                  -Path (Split-Path -Parent $destination) | Out-Null
+                Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+                $attributionCount++
+              }
+            }
+          if ($attributionCount -lt 4) {
+            throw "nlohmann-json runtime attribution headers are incomplete"
+          }
+          foreach ($attribution in @(
+            'detail\conversions\to_chars.hpp',
+            'detail\meta\cpp_future.hpp',
+            'detail\output\serializer.hpp',
+            'thirdparty\hedley\hedley.hpp'
+          )) {
+            $attributionPath = Join-Path $nlohmannAttributionRoot $attribution
+            if (-not (Test-Path -LiteralPath $attributionPath -PathType Leaf)) {
+              throw "Required nlohmann-json attribution missing: $attribution"
             }
           }
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
@@ -1748,6 +1819,33 @@ jobs:
               echo "::error::WASM dependency lacks license metadata: $dependency"
               exit 1
             fi
+          done
+          nlohmann_source="$third_party/nlohmann-json/include/nlohmann"
+          nlohmann_attribution_root="$license_root/nlohmann-json/runtime-attributions"
+          attribution_count=0
+          while IFS= read -r header; do
+            owners="$(grep '^// SPDX-FileCopyrightText:' "$header" || true)"
+            if [ -n "$owners" ] && grep -Fqv 'Niels Lohmann' <<< "$owners"; then
+              relative="${header#"$third_party/nlohmann-json/include/"}"
+              destination="$nlohmann_attribution_root/$relative"
+              mkdir -p "$(dirname "$destination")"
+              cp -L "$header" "$destination"
+              attribution_count=$((attribution_count + 1))
+            fi
+          done < <(
+            find "$nlohmann_source" -type f \
+              \( -name '*.hpp' -o -name '*.h' \) -print | sort
+          )
+          if [ "$attribution_count" -lt 4 ]; then
+            echo "::error::nlohmann-json runtime attribution headers are incomplete"
+            exit 1
+          fi
+          for attribution in \
+            nlohmann/detail/conversions/to_chars.hpp \
+            nlohmann/detail/meta/cpp_future.hpp \
+            nlohmann/detail/output/serializer.hpp \
+            nlohmann/thirdparty/hedley/hedley.hpp; do
+            test -s "$nlohmann_attribution_root/$attribution"
           done
           node -e '
             const fs = require("fs");
@@ -2621,6 +2719,7 @@ jobs:
           for name in \
             iccdev-linux-gcc \
             iccdev-linux-clang \
+            iccdev-macos-clang \
             iccdev-windows-msvc \
             iccdev-wasm-release; do
             archive="release-assets/$name.zip"
@@ -2629,6 +2728,39 @@ jobs:
               echo "::error::$name omits dependency license files"
               exit 1
             fi
+          done
+
+          for name in iccdev-linux-gcc iccdev-linux-clang; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            expected="third-party-licenses/debian/common-licenses/GPL-2"
+            if ! grep -qE "(^|/)${expected}$" <<< "$entries"; then
+              echo "::error::$name omits Debian common-license texts"
+              exit 1
+            fi
+          done
+
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for name in iccdev-macos-clang iccdev-windows-msvc iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            if [ "$name" = "iccdev-windows-msvc" ]; then
+              prefix="third-party-licenses/vcpkg/nlohmann-json/runtime-attributions"
+            else
+              prefix="third-party-licenses/nlohmann-json/runtime-attributions"
+            fi
+            for attribution in "${nlohmann_attributions[@]}"; do
+              expected="$prefix/$attribution"
+              if ! grep -qE "(^|/)${expected//./\\.}$" <<< "$entries"; then
+                echo "::error::$name omits nlohmann-json attribution: $attribution"
+                exit 1
+              fi
+            done
           done
 
           runtime_dir="artifacts/reficcmax-runtime-packages-linux"
@@ -2908,6 +3040,18 @@ jobs:
               exit 1
             fi
           done
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for attribution in "${nlohmann_attributions[@]}"; do
+            if [[ ! -s "third-party-licenses/nlohmann-json/runtime-attributions/$attribution" ]]; then
+              echo "::error::Staged npm package omits nlohmann-json attribution: $attribution"
+              exit 1
+            fi
+          done
           npm pack --dry-run --json >/dev/null
 
           mkdir -p "$GITHUB_WORKSPACE/npm-iccdev"
@@ -2931,6 +3075,13 @@ jobs:
             echo "::error::npm package tarball omits dependency license files"
             exit 1
           fi
+          for attribution in "${nlohmann_attributions[@]}"; do
+            expected="package/third-party-licenses/nlohmann-json/runtime-attributions/$attribution"
+            if ! grep -Fqx "$expected" <<< "$archive_entries"; then
+              echo "::error::npm package tarball omits nlohmann-json attribution: $attribution"
+              exit 1
+            fi
+          done
 
       # preflight: allow-token-exposure reason=npm-oidc-trusted-publishing
       # preflight: allow-package-install reason=npm-oidc-validated-tarball-publish
@@ -3105,6 +3256,19 @@ jobs:
             fi
             if [[ -z "$notice" ]]; then
               echo "::error::Published npm package omits $dependency license metadata"
+              exit 1
+            fi
+          done
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for attribution in "${nlohmann_attributions[@]}"; do
+            attribution_path="$npm_environment/package/third-party-licenses/nlohmann-json/runtime-attributions/$attribution"
+            if [[ ! -s "$attribution_path" ]]; then
+              echo "::error::Published npm package omits nlohmann-json attribution: $attribution"
               exit 1
             fi
           done
