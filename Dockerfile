@@ -130,6 +130,8 @@ RUN for attempt in 1 2 3; do \
  && for tool in cloc doxygen dot find sort lscpu unzip; do \
       command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }; \
     done \
+ && test -s /usr/share/doc/libheif-dev/copyright \
+ && test -s /usr/share/doc/libtiff-dev/copyright \
  && test -f /usr/include/valgrind/memcheck.h \
  && sed -i 's/^#geninfo_unexecuted_blocks = 0$/geninfo_unexecuted_blocks = 1/' /etc/lcovrc \
  && grep -Fx 'geninfo_unexecuted_blocks = 1' /etc/lcovrc \
@@ -182,6 +184,8 @@ ENV CC=clang \
 RUN groupadd --gid 10001 iccdev-ci \
  && useradd --uid 10001 --gid 10001 --home-dir /workspace --create-home --shell /bin/bash --no-log-init iccdev-ci
 
+COPY --chmod=0644 LICENSE.md /usr/share/doc/iccdev/copyright
+COPY --chmod=0644 Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md /usr/share/doc/iccdev/THIRD-PARTY-NOTICES.md
 COPY --chown=iccdev-ci:iccdev-ci .github/ci/requirements /workspace/iccDEV/.github/ci/requirements
 
 RUN python3 -m venv /opt/iccdev-spectral-preview \

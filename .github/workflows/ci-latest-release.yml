@@ -261,9 +261,36 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.so*' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          license_root="$stage/third-party-licenses/debian"
+          package_list="$RUNNER_TEMP/iccdev-debian-license-packages.txt"
+          library_packages=(
+            libheif-dev libpng-dev libxml2-dev libtiff-dev
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common
+          )
+          mkdir -p "$license_root"
+          {
+            printf '%s\n' "${library_packages[@]}"
+            apt-cache depends --recurse --installed "${library_packages[@]}" |
+              sed -n -E 's/^[[:space:]]*(Pre)?Depends: ([^ <][^ ]*).*$/\2/p'
+          } | sed 's/:.*$//' | sort -u > "$package_list"
+          while IFS= read -r package; do
+            if status="$(dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null)" \
+              && [ "$status" = "ii " ]; then
+              copyright="/usr/share/doc/$package/copyright"
+              if [ ! -f "$copyright" ]; then
+                echo "::error::Installed Debian dependency lacks copyright metadata: $package"
+                exit 1
+              fi
+              mkdir -p "$license_root/$package"
+              cp -L "$copyright" "$license_root/$package/copyright"
+            fi
+          done < "$package_list"
+          test -s "$license_root/libheif-dev/copyright"
+          test -s "$license_root/libtiff-dev/copyright"
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -531,9 +558,10 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -883,9 +911,16 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "vcpkg integrate install failed with exit code $LASTEXITCODE" }
             vcpkg install
             if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed with exit code $LASTEXITCODE" }
+            $env:VCPKG_INSTALLED_DIR = Join-Path $PWD 'vcpkg_installed'
           } else {
             throw "Unsupported Windows vcpkg source: $env:WINDOWS_VCPKG_SOURCE"
           }
+          $vcpkgShare = Join-Path $env:VCPKG_INSTALLED_DIR 'x64-windows\share'
+          if (-not (Test-Path -LiteralPath $vcpkgShare -PathType Container)) {
+            throw "vcpkg dependency metadata directory not found: $vcpkgShare"
+          }
+          "VCPKG_INSTALLED_DIR=$env:VCPKG_INSTALLED_DIR" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $vcpkgToolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
           if (-not (Test-Path -LiteralPath $vcpkgToolchain -PathType Leaf)) {
             throw "vcpkg toolchain file not found: $vcpkgToolchain"
@@ -954,9 +989,36 @@ jobs:
               throw "Required staged Windows runtime artifact missing: $required"
             }
           }
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           Copy-Item -Path "Testing/README.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
+          Copy-Item -Path "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md" `
+            -Destination $stage -Force
+          $vcpkgShare = Join-Path $env:VCPKG_INSTALLED_DIR 'x64-windows\share'
+          $licenseRoot = Join-Path $stage 'third-party-licenses\vcpkg'
+          $copyrightFiles = @(
+            Get-ChildItem -Path (Join-Path $vcpkgShare '*\copyright') -File
+          )
+          if ($copyrightFiles.Count -eq 0) {
+            throw "No vcpkg dependency copyright files found under $vcpkgShare"
+          }
+          foreach ($copyright in $copyrightFiles) {
+            $port = $copyright.Directory.Name
+            $destination = Join-Path $licenseRoot $port
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            Copy-Item -LiteralPath $copyright.FullName `
+              -Destination (Join-Path $destination 'copyright') -Force
+            $spdx = Join-Path $copyright.Directory.FullName 'vcpkg.spdx.json'
+            if (Test-Path -LiteralPath $spdx -PathType Leaf) {
+              Copy-Item -LiteralPath $spdx -Destination $destination -Force
+            }
+          }
+          foreach ($requiredPort in @('libheif', 'tiff')) {
+            $requiredCopyright = Join-Path $licenseRoot "$requiredPort\copyright"
+            if (-not (Test-Path -LiteralPath $requiredCopyright -PathType Leaf)) {
+              throw "Required vcpkg dependency copyright missing: $requiredPort"
+            }
+          }
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
           # 4. Copy the complete MATLAB source tree and the MEX/runtime files
           #    produced by the tested Release build above.
@@ -1660,6 +1722,43 @@ jobs:
           chmod +x Build/Cmake/wasm-package/stage.sh
           Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage "$VERSION"
 
+          license_root="wasm-stage/third-party-licenses"
+          third_party="$PWD/third_party"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md wasm-stage/
+          mkdir -p "$license_root"
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            source_dir="$third_party/$dependency"
+            destination="$license_root/$dependency"
+            notice_count=0
+            mkdir -p "$destination"
+            while IFS= read -r notice; do
+              cp -L "$notice" "$destination/$(basename "$notice")"
+              notice_count=$((notice_count + 1))
+            done < <(
+              find "$source_dir" -maxdepth 1 -type f \
+                \( -iname 'license*' -o -iname 'licence*' -o \
+                   -iname 'copying*' -o -iname 'copyright*' -o \
+                   -iname 'notice*' \) -print | sort
+            )
+            if [ "$dependency" = "libjpeg" ]; then
+              cp -L "$source_dir/README" "$destination/README"
+              notice_count=$((notice_count + 1))
+            fi
+            if [ "$notice_count" -eq 0 ]; then
+              echo "::error::WASM dependency lacks license metadata: $dependency"
+              exit 1
+            fi
+          done
+          node -e '
+            const fs = require("fs");
+            const path = "wasm-stage/package.json";
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+            if (!pkg.files.includes("third-party-licenses/")) {
+              pkg.files.push("third-party-licenses/");
+            }
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
           {
             echo "### WASM npm-shaped bundle"
             echo "| Field | Value |"
@@ -1880,6 +1979,8 @@ jobs:
           unzip -Z1 "${zip_file}" > build-cpack/ZIP-CONTENTS.txt
           grep -q '/VERSION$' build-cpack/ZIP-CONTENTS.txt
           grep -q '/TOOL-CATALOG.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/LICENSE.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/THIRD-PARTY-NOTICES.md$' build-cpack/ZIP-CONTENTS.txt
           grep -q '/bin/iccHeifDump$' build-cpack/ZIP-CONTENTS.txt
           unzip -p "${zip_file}" '*/TOOL-CATALOG.md' |
             grep -Fx -- "- \`iccHeifDump\`"
@@ -2486,6 +2587,33 @@ jobs:
             echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
           done
 
+          for name in \
+            iccdev-linux-gcc \
+            iccdev-linux-clang \
+            iccdev-macos-clang \
+            iccdev-windows-msvc \
+            iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            if ! grep -qE '(^|/)LICENSE(\.md)?$' <<< "$entries"; then
+              echo "::error::$name omits the ICC project license"
+              exit 1
+            fi
+          done
+
+          for name in \
+            iccdev-linux-gcc \
+            iccdev-linux-clang \
+            iccdev-windows-msvc \
+            iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            if ! grep -qE '(^|/)third-party-licenses/.+' <<< "$entries"; then
+              echo "::error::$name omits dependency license files"
+              exit 1
+            fi
+          done
+
           runtime_dir="artifacts/reficcmax-runtime-packages-linux"
           cp "$runtime_dir"/reficcmax-*.zip release-assets/
           cp "$runtime_dir"/reficcmax-*.deb release-assets/
@@ -2760,6 +2888,10 @@ jobs:
           archive_entries="$(tar -tzf "$tarball")"
           if ! grep -Fqx "package/package.json" <<< "$archive_entries"; then
             echo "::error::npm package tarball does not contain package.json"
+            exit 1
+          fi
+          if ! grep -q '^package/third-party-licenses/' <<< "$archive_entries"; then
+            echo "::error::npm package tarball omits dependency license files"
             exit 1
           fi
 
