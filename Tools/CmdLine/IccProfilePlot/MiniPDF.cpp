@@ -149,6 +149,11 @@ void PDFWriter::CloseFile()
           // function's job and not Serialize's.
           Serialize(out);
 
+          // Materialize the string before opening the output file. out.str()
+          // allocates and can throw; evaluating it as an icWriteAndClose()
+          // argument after the open would unwind past the owned FILE handle.
+          std::string text = out.str();
+
           // PDF export paths are intentional caller-selected output files after regular-file validation.
 
           // codeql[cpp/path-injection]
@@ -156,7 +161,7 @@ void PDFWriter::CloseFile()
           // icWriteAndClose() writes through the handle icOpenRegularWriteTextFile()
           // just validated, then closes it (#2154). It replaced a byte-identical
           // private WritePdfTextFile() copy that lived here.
-          if (!icWriteAndClose(outFile, out.str())) {
+          if (!icWriteAndClose(outFile, text)) {
             fprintf(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
             // Fall through (don't early-return) so the shared object-cleanup loop
             // at the end still frees every PDFObject on this failure path (#1547).

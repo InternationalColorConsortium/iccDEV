@@ -475,25 +475,31 @@ inline ICC_CMDLINE_NO_SANITIZE_INTEGER bool icSha256File(
   size_t used = 0;
   unsigned long long totalBytes = 0;
   unsigned char readBuffer[4096];
-  size_t n;
-  while ((n = fread(readBuffer, 1, sizeof(readBuffer), f)) > 0) {
-    totalBytes += (unsigned long long)n;
-    for (size_t offset = 0; offset < n;) {
-      const size_t take = (n - offset < sizeof(block) - used)
-        ? n - offset : sizeof(block) - used;
-      memcpy(block + used, readBuffer + offset, take);
-      used += take;
-      offset += take;
-      if (used == sizeof(block)) {
-        icSha256Block(h, block);
-        used = 0;
+  for (;;) {
+    const size_t n = fread(readBuffer, 1, sizeof(readBuffer), f);
+    if (n) {
+      totalBytes += (unsigned long long)n;
+      for (size_t offset = 0; offset < n;) {
+        const size_t take = (n - offset < sizeof(block) - used)
+          ? n - offset : sizeof(block) - used;
+        memcpy(block + used, readBuffer + offset, take);
+        used += take;
+        offset += take;
+        if (used == sizeof(block)) {
+          icSha256Block(h, block);
+          used = 0;
+        }
       }
     }
+
+    if (n < sizeof(readBuffer)) {
+      const bool readOk = ferror(f) == 0;
+      fclose(f);
+      if (!readOk)
+        return false;
+      break;
+    }
   }
-  const bool readOk = ferror(f) == 0;
-  fclose(f);
-  if (!readOk)
-    return false;
 
   block[used++] = 0x80;
   if (used > 56) {

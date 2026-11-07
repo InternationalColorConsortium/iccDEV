@@ -5262,6 +5262,8 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   if (!m_pLumCurve || !m_pToneFuncs || !m_nOutputChannels)
     return false;
 
+  const icUInt16Number outputChannels = m_nOutputChannels;
+
   icElemTypeSignature sig = GetType();
 
   if (!pIO)
@@ -5278,7 +5280,13 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   if (!pIO->Write16(&m_nInputChannels))
     return false;
 
-  if (!pIO->Write16(&m_nOutputChannels))
+  // CIccIO::Write16() accepts a non-const buffer for byte-order conversion,
+  // even though the write path only reads it.  Serialize a local copy so the
+  // member remains visibly invariant for the channel-count guards and array
+  // bounds below (and for static analyzers that conservatively model void* as
+  // an output parameter).
+  icUInt16Number serializedOutputChannels = outputChannels;
+  if (!pIO->Write16(&serializedOutputChannels))
     return false;
 
   size_t lumOffset = pIO->Tell();
@@ -5290,7 +5298,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
     return false;
 
   //Reserve Position entry for mapping functions
-  for (int i = 0; i < m_nOutputChannels; i++) {
+  for (int i = 0; i < outputChannels; i++) {
     if (!pIO->Write32(&zero) ||
       !pIO->Write32(&zero))
       return false;
@@ -5309,7 +5317,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   //rather than a fixed array: the channel count is a uInt16Number, and Read()
   //and the XML and JSON readers all accept any count.  nothrow because every
   //other failure in this function returns false, as Read() does.
-  std::unique_ptr<icPositionNumber[]> funcPos(new (std::nothrow) icPositionNumber[m_nOutputChannels]);
+  std::unique_ptr<icPositionNumber[]> funcPos(new (std::nothrow) icPositionNumber[outputChannels]);
   if (!funcPos)
     return false;
 
@@ -5321,7 +5329,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   funcPos[0].size = (icUInt32Number)(pIO->Tell() - (funcPos[0].offset + nTagStartPos));
 
   //write out additional non-copied tone functions
-  for (int i = 1; i < m_nOutputChannels; i++) {
+  for (int i = 1; i < outputChannels; i++) {
     int j;
     for (j = 0; j < i; j++)
       if (m_pToneFuncs[j] == m_pToneFuncs[i])
@@ -5351,7 +5359,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   }
 
   //write out tone mapping function positions
-  for (int i = 0; i < m_nOutputChannels; i++) {
+  for (int i = 0; i < outputChannels; i++) {
     if (!pIO->Write32(&funcPos[i].offset) ||
       !pIO->Write32(&funcPos[i].size)) {
       return false;

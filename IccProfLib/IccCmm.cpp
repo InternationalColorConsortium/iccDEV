@@ -3715,7 +3715,8 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
 
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
-    icFloatNumber xyz[3], normxyz[3], pccxyz[3];
+    icFloatNumber xyz[3] = { 0.0f, 0.0f, 0.0f };
+    icFloatNumber normxyz[3], pccxyz[3];
     
     if (illuminantRange.steps < 3) {
       delete pApply;
