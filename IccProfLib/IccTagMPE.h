@@ -106,10 +106,10 @@ public:
 typedef std::list<CIccApplyMpePtr> CIccApplyMpeList;
 typedef CIccApplyMpeList::iterator CIccApplyMpeIter;
 
-class IIccExtensionMpe
+class ICCPROFLIB_API IIccExtensionMpe
 {
 public:
-  virtual ~IIccExtensionMpe() {}
+  virtual ~IIccExtensionMpe();
   virtual const char *GetExtClassName()=0;
 };
 

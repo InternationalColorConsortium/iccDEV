@@ -635,9 +635,12 @@ For repeatable agent-assisted work, use
      `Testing/CreateAllProfiles.bat`.
    - Profile validation: update `Testing/RunTests.sh` and
      `Testing/RunTests.bat`.
-   - Focused Linux regression: add or update a `.github/scripts/*.sh` script.
+   - Focused Unix regression: add or update a `.github/scripts/*.sh` script.
 2. Register the test in `Build/Cmake/Testing/CMakeLists.txt`.
-   - Use `iccdev_add_script_test()` for Linux shell tests.
+   - Use `iccdev_add_script_test()` for Unix shell tests. These scripts must be
+     compatible with macOS Bash 3.2 as well as current Linux Bash: do not use
+     `mapfile`, GNU-only utility flags, or unguarded empty-array expansion with
+     `set -u`.
    - Use `iccdev_add_windows_batch_test()` for Windows batch-backed tests.
    - Set labels and a timeout.
    - Add `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
@@ -669,8 +672,13 @@ script output and still leave a deterministic pass/fail condition.
 The `ci-json-python` orchestrator calls the reusable Unix and Windows build
 workflows. The Windows reusable workflow serially builds its CTest helper
 binaries, runs CTest discovery, and executes CTest with JUnit output. The Unix
-reusable workflow runs the Linux CTest gate for full-test jobs and verifies its
-discovered suite set before execution. `ci-pr-win` reports helper compilation
+reusable workflow runs the routine CTest gate independently of the full tool
+parity sweep, verifies its discovered suite set, and retains JUnit and discovery
+logs for non-PR developer-report runs. The comprehensive matrix enables this
+gate on both Linux and macOS. `ci-pr-action` also runs representative CTest
+coverage in its macOS Release/LTO and Debug jobs, excluding `slow`,
+`clusterfuzzlite`, `pr-extended`, and `ci-infrastructure`. `ci-pr-win` reports
+helper compilation
 and CTest execution separately for MSVC, ClangCL, and MinGW, with JUnit results
 in each lane. MSVC and ClangCL helper builds remain serial because vcpkg stages
 shared runtime DLLs; MinGW's MSYS2 static lane uses bounded two-way compilation.

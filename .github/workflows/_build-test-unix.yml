@@ -6,10 +6,11 @@
 #
 # Reusable workflow: Build + Test iccDEV on Linux/macOS
 #
-# Caller passes os, python-version, and run-full-tests flag.
+# Caller passes os, python-version, and test-selection flags.
 # Full tests (Linux): profile generation (all scripts), RunTests,
 #   CalcTest, tool parity (dump/toxml/fromxml/roundtrip/tojson/fromjson).
-# Light tests (macOS): CreateAllProfiles only, Python wheel, MCP.
+# CTest can run independently on Linux or macOS without enabling the full
+# parity sweep.
 #
 ###############################################################
 
@@ -31,6 +32,10 @@ on:
         default: "3.12"
       run-full-tests:
         description: "Run comprehensive tool parity tests"
+        type: boolean
+        default: false
+      run-ctest:
+        description: "Run the routine Unix CTest gate"
         type: boolean
         default: false
       run-wheel-smoke:
@@ -281,8 +286,8 @@ jobs:
           TOTAL_COUNT=$(find "${WORKSPACE_DIR}/Testing" -name '*.icc' | wc -l)
           echo "Total: $TOTAL_COUNT ICC profiles in Testing/"
 
-      - name: Run Linux CTest gate
-        if: ${{ inputs.run-full-tests }}
+      - name: Run Unix CTest gate
+        if: ${{ inputs.run-full-tests || inputs.run-ctest }}
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -310,6 +315,7 @@ jobs:
           ctest --test-dir "${WORKSPACE_DIR}/Build" -N \
             --label-exclude 'slow|clusterfuzzlite' \
             --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list-routine.txt"
+          grep -Eq 'Total Tests: [1-9][0-9]*' "$LOGDIR/ctest-list-routine.txt"
 
           echo "=== CTest execution ==="
           ctest --test-dir "${WORKSPACE_DIR}/Build" \
@@ -945,7 +951,7 @@ jobs:
           ls -lhR artifact-tools/
 
       - name: Collect test logs
-        if: always() && inputs.run-full-tests
+        if: always() && (inputs.run-full-tests || inputs.run-ctest)
         env:
           BASH_ENV: /dev/null
         run: |
@@ -1019,7 +1025,7 @@ jobs:
 
       # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload test logs
-        if: always() && inputs.run-full-tests && github.event_name != 'pull_request'
+        if: always() && (inputs.run-full-tests || inputs.run-ctest) && github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: "iccdev-test-logs-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"

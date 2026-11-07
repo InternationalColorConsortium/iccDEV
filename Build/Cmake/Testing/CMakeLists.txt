@@ -13749,6 +13749,13 @@ fi
 duration=$1
 shift
 
+# Accept the explicit seconds suffix supported by GNU timeout.  Several test
+# harnesses use it, while macOS reaches this compatibility wrapper because it
+# provides neither timeout nor gtimeout by default.
+case "$duration" in
+  *s) duration=${duration%s} ;;
+esac
+
 case "$duration" in
   ''|*[!0-9.]*)
     echo "timeout: invalid duration '$duration'" >&2
@@ -13763,20 +13770,37 @@ rm -f "$timed_out"
 pid=$!
 
 (
-  sleep "$duration"
+  sleeper=""
+  stop_watcher() {
+    if [ -n "$sleeper" ]; then
+      kill "$sleeper" >/dev/null 2>&1 || true
+      wait "$sleeper" 2>/dev/null || true
+    fi
+    exit 0
+  }
+  trap stop_watcher HUP INT TERM
+
+  sleep "$duration" &
+  sleeper=$!
+  wait "$sleeper" 2>/dev/null || exit 0
+  sleeper=""
+
   if kill -0 "$pid" >/dev/null 2>&1; then
     : > "$timed_out"
     kill -TERM "$pid" >/dev/null 2>&1 || true
-    sleep 2
+    sleep 2 &
+    sleeper=$!
+    wait "$sleeper" 2>/dev/null || exit 0
+    sleeper=""
     kill -KILL "$pid" >/dev/null 2>&1 || true
   fi
-) &
+) >/dev/null 2>&1 &
 watcher=$!
 
 wait "$pid"
 status=$?
 
-kill "$watcher" >/dev/null 2>&1 || true
+kill -TERM "$watcher" >/dev/null 2>&1 || true
 wait "$watcher" 2>/dev/null || true
 
 if [ -e "$timed_out" ]; then

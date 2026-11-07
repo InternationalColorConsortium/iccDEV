@@ -64,6 +64,10 @@
 namespace iccDEV {
 #endif
 
+IIccExtensionMpe::~IIccExtensionMpe()
+{
+}
+
 /**
  ******************************************************************************
  * Name: CIccApplyMpe::CIccApplyMpe

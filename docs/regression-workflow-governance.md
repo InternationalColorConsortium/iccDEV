@@ -97,6 +97,10 @@ protected `PR Summary` result. Its `mcp-server-` concurrency group is distinct
 from the caller's `ci-pr-` group, so a called job cannot cancel its caller.
 The reusable tool suite passes `instrumentation=core` and always excludes
 `ci-infrastructure` and `clusterfuzzlite` CTests.
+The macOS Clang Release/LTO and Debug jobs run a representative native CTest
+selection after profile generation. They exclude `slow`, `clusterfuzzlite`,
+`pr-extended`, and `ci-infrastructure`, so Darwin shared-library and optimizer
+boundaries are checked without duplicating the comprehensive pre-PR matrix.
 Its fast mode runs a fixed core smoke selection plus the requested recent
 registrations; the recent limit is registration order, not change impact.
 Full mode checks the image's spectral-preview Python package pins and decoder

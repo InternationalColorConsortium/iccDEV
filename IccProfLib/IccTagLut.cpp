@@ -79,6 +79,10 @@
 namespace iccDEV {
 #endif
 
+CIccCurve::~CIccCurve()
+{
+}
+
 #ifdef ICC_USE_AVX2
 static inline bool iccUseAvx2ClutOutput(int outputChannels)
 {
