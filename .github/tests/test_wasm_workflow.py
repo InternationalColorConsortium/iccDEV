@@ -698,9 +698,14 @@ def test_cache_policy_scanner_rejects_unsafe_cache(
         ('"o\\u006e": {pull_request_target: {}}\n', ""),
         ("on:\n  {\n    pull_request_target: {}\n  }\n", ""),
         ("on:\n  pull_request_target: {}\n", "  "),
+        (
+            "on: {workflow_dispatch: {inputs: {label: {type: string, "
+            "default: build(}}}, pull_request_target: {}}\n",
+            "",
+        ),
     ],
 )
-def test_cache_policy_scanner_rejects_encoded_low_trust_triggers(
+def test_cache_policy_scanner_rejects_obscured_low_trust_triggers(
     header, root_indent, tmp_path
 ):
     action_pin = "0" * 40

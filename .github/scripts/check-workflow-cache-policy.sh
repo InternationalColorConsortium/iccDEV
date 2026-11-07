@@ -208,9 +208,9 @@ def top_level_separator_index(value, separator):
             continue
         if character in {"'", '"'}:
             quote = character
-        elif character in "[{(":
+        elif character in "[{":
             depth += 1
-        elif character in "]})":
+        elif character in "]}":
             depth = max(0, depth - 1)
         elif character == separator and depth == 0:
             return index
