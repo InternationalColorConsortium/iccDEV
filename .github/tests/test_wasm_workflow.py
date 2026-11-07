@@ -470,7 +470,8 @@ def test_cache_policy_scanner_allows_only_validated_image_cache(
         + "0" * 40
         + "\n"
         "        with:\n"
-        "          no-cache: ${{ !inputs.use_build_cache }}\n"
+        "          no-cache: ${{ !inputs.use_build_cache || "
+        "steps.cache.outputs.source == '' }}\n"
         f"          cache-from: {cache_from}\n"
         f"          cache-to: {cache_to}\n"
     )

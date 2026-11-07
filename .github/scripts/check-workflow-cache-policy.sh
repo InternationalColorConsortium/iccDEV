@@ -395,7 +395,10 @@ safe_docker_cache_contract = (
         r'cache_digest"\s*=~\s*\^sha256:\[0-9a-f\]\{64\}\$',
         workflow_text,
     )
-    and "no-cache: ${{ !inputs.use_build_cache }}" in workflow_text
+    and (
+        "no-cache: ${{ !inputs.use_build_cache || "
+        "steps.cache.outputs.source == '' }}" in workflow_text
+    )
 )
 for number, code, lines in outside_run:
     stripped = code.strip()
