@@ -25,6 +25,12 @@ env:
 
 'on':
   workflow_dispatch:
+    inputs:
+      use_build_cache:
+        description: Reuse a digest-pinned cache from the last validated image
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
@@ -141,6 +147,54 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve validated image cache
+        if: ${{ inputs.use_build_cache }}
+        id: cache
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          cache_tags=()
+          case "$REF" in
+            refs/heads/ci-qa-pr-docker-testing|refs/heads/ci-publish-colourbill-ctrl)
+              cache_tags+=("${IMAGE_NAME}:${REF_NAME}")
+              ;;
+          esac
+          cache_tags+=("${IMAGE_NAME}:latest")
+
+          cache_digest=""
+          for cache_tag in "${cache_tags[@]}"; do
+            if ! cache_digest="$(
+              docker buildx imagetools inspect "$cache_tag" \
+                --format '{{.Manifest.Digest}}' 2>/dev/null
+            )"; then
+              cache_digest=""
+              echo "Cache image unavailable: $(sanitize_line "$cache_tag")"
+              continue
+            fi
+            if [[ ! "$cache_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid cache image digest for $(sanitize_line "$cache_tag")" >&2
+              exit 1
+            fi
+            break
+          done
+
+          if [ -z "$cache_digest" ]; then
+            echo "No validated image cache found; continuing with a cold build"
+            printf 'source=%s\n' "$(sanitize_line "")" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'source=type=registry,ref=%s@%s\n' \
+            "$(sanitize_line "$IMAGE_NAME")" \
+            "$(sanitize_line "$cache_digest")" >> "$GITHUB_OUTPUT"
+
       - name: Build image for validation
         id: build-push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
@@ -148,7 +202,9 @@ jobs:
           context: .
           file: ./Dockerfile
           tags: ${{ env.PUBLISH_IMAGE != 'true' && steps.meta.outputs.tags || '' }}
-          no-cache: true
+          no-cache: ${{ !inputs.use_build_cache || steps.cache.outputs.source == '' }}
+          cache-from: ${{ inputs.use_build_cache && steps.cache.outputs.source || '' }}
+          cache-to: ${{ inputs.use_build_cache && env.PUBLISH_IMAGE == 'true' && 'type=inline' || '' }}
           pull: true
           platforms: ${{ matrix.platform }}
           build-args: |

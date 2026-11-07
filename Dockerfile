@@ -12,7 +12,6 @@ FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab0
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-ARG GIT_COMMIT=unknown
 ARG BUILD_JOBS=32
 ARG TARGETARCH
 ARG FLAMEGRAPH_COMMIT=41fee1f99f9276008b7cd112fca19dc3ea84ac32
@@ -323,6 +322,8 @@ RUN python3 -m venv /opt/iccdev-mcp \
       /opt/iccdev-mcp/bin/pip* \
       /opt/iccdev-mcp/lib/python*/site-packages/pip \
       /opt/iccdev-mcp/lib/python*/site-packages/pip-*.dist-info
+
+ARG GIT_COMMIT=unknown
 
 USER 10001:10001
 WORKDIR /workspace/iccDEV
