@@ -261,9 +261,40 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.so*' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          license_root="$stage/third-party-licenses/debian"
+          package_list="$RUNNER_TEMP/iccdev-debian-license-packages.txt"
+          library_packages=(
+            libheif-dev libpng-dev libxml2-dev libtiff-dev
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common
+          )
+          mkdir -p "$license_root"
+          {
+            printf '%s\n' "${library_packages[@]}"
+            apt-cache depends --recurse --installed "${library_packages[@]}" |
+              sed -n -E 's/^[[:space:]]*(Pre)?Depends: ([^ <][^ ]*).*$/\2/p'
+          } | sed 's/:.*$//' | sort -u > "$package_list"
+          while IFS= read -r package; do
+            if status="$(dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null)" \
+              && [ "$status" = "ii " ]; then
+              copyright="/usr/share/doc/$package/copyright"
+              if [ ! -f "$copyright" ]; then
+                echo "::error::Installed Debian dependency lacks copyright metadata: $package"
+                exit 1
+              fi
+              mkdir -p "$license_root/$package"
+              cp -L "$copyright" "$license_root/$package/copyright"
+            fi
+          done < "$package_list"
+          common_license_root="$license_root/common-licenses"
+          mkdir -p "$common_license_root"
+          cp -aL /usr/share/common-licenses/. "$common_license_root/"
+          test -s "$license_root/libheif-dev/copyright"
+          test -s "$license_root/libtiff-dev/copyright"
+          test -s "$common_license_root/GPL-2"
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -531,9 +562,40 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccConnect -type l -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           cp Testing/README.md  "$stage/"
           cp LICENSE.md "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          nlohmann_prefix="$(brew --prefix nlohmann-json)"
+          nlohmann_license_root="$stage/third-party-licenses/nlohmann-json"
+          nlohmann_attribution_root="$nlohmann_license_root/runtime-attributions"
+          mkdir -p "$nlohmann_attribution_root"
+          cp -L "$nlohmann_prefix/LICENSE.MIT" "$nlohmann_license_root/LICENSE.MIT"
+          attribution_count=0
+          while IFS= read -r header; do
+            owners="$(grep '^// SPDX-FileCopyrightText:' "$header" || true)"
+            if [ -n "$owners" ] && grep -Fqv 'Niels Lohmann' <<< "$owners"; then
+              relative="${header#"$nlohmann_prefix/include/"}"
+              destination="$nlohmann_attribution_root/$relative"
+              mkdir -p "$(dirname "$destination")"
+              cp -L "$header" "$destination"
+              attribution_count=$((attribution_count + 1))
+            fi
+          done < <(
+            find "$nlohmann_prefix/include/nlohmann" -type f \
+              \( -name '*.hpp' -o -name '*.h' \) -print | sort
+          )
+          if [ "$attribution_count" -lt 4 ]; then
+            echo "::error::nlohmann-json runtime attribution headers are incomplete"
+            exit 1
+          fi
+          for attribution in \
+            nlohmann/detail/conversions/to_chars.hpp \
+            nlohmann/detail/meta/cpp_future.hpp \
+            nlohmann/detail/output/serializer.hpp \
+            nlohmann/thirdparty/hedley/hedley.hpp; do
+            test -s "$nlohmann_attribution_root/$attribution"
+          done
           cp -a docs    "$stage/docs"
           # 4. Copy the MATLAB package, native table sources, and QA fixtures.
           cp -a matlab "$stage/matlab"
@@ -883,9 +945,16 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "vcpkg integrate install failed with exit code $LASTEXITCODE" }
             vcpkg install
             if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed with exit code $LASTEXITCODE" }
+            $env:VCPKG_INSTALLED_DIR = Join-Path $PWD 'vcpkg_installed'
           } else {
             throw "Unsupported Windows vcpkg source: $env:WINDOWS_VCPKG_SOURCE"
           }
+          $vcpkgShare = Join-Path $env:VCPKG_INSTALLED_DIR 'x64-windows\share'
+          if (-not (Test-Path -LiteralPath $vcpkgShare -PathType Container)) {
+            throw "vcpkg dependency metadata directory not found: $vcpkgShare"
+          }
+          "VCPKG_INSTALLED_DIR=$env:VCPKG_INSTALLED_DIR" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $vcpkgToolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
           if (-not (Test-Path -LiteralPath $vcpkgToolchain -PathType Leaf)) {
             throw "vcpkg toolchain file not found: $vcpkgToolchain"
@@ -954,9 +1023,73 @@ jobs:
               throw "Required staged Windows runtime artifact missing: $required"
             }
           }
-          # 3. Copy Testing/README.md, LICENSE.md and docs/
+          # 3. Copy project and dependency licensing, README.md, and docs/
           Copy-Item -Path "Testing/README.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
+          Copy-Item -Path "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md" `
+            -Destination $stage -Force
+          $vcpkgShare = Join-Path $env:VCPKG_INSTALLED_DIR 'x64-windows\share'
+          $licenseRoot = Join-Path $stage 'third-party-licenses\vcpkg'
+          $copyrightFiles = @(
+            Get-ChildItem -Path (Join-Path $vcpkgShare '*\copyright') -File
+          )
+          if ($copyrightFiles.Count -eq 0) {
+            throw "No vcpkg dependency copyright files found under $vcpkgShare"
+          }
+          foreach ($copyright in $copyrightFiles) {
+            $port = $copyright.Directory.Name
+            $destination = Join-Path $licenseRoot $port
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            Copy-Item -LiteralPath $copyright.FullName `
+              -Destination (Join-Path $destination 'copyright') -Force
+            $spdx = Join-Path $copyright.Directory.FullName 'vcpkg.spdx.json'
+            if (Test-Path -LiteralPath $spdx -PathType Leaf) {
+              Copy-Item -LiteralPath $spdx -Destination $destination -Force
+            }
+          }
+          foreach ($requiredPort in @('libheif', 'tiff')) {
+            $requiredCopyright = Join-Path $licenseRoot "$requiredPort\copyright"
+            if (-not (Test-Path -LiteralPath $requiredCopyright -PathType Leaf)) {
+              throw "Required vcpkg dependency copyright missing: $requiredPort"
+            }
+          }
+          $nlohmannInclude = Join-Path $env:VCPKG_INSTALLED_DIR `
+            'x64-windows\include\nlohmann'
+          $nlohmannAttributionRoot = Join-Path $licenseRoot `
+            'nlohmann-json\runtime-attributions\nlohmann'
+          $attributionCount = 0
+          Get-ChildItem -LiteralPath $nlohmannInclude -Recurse -File |
+            Where-Object { $_.Extension -in '.hpp', '.h' } |
+            Sort-Object FullName |
+            ForEach-Object {
+              $owners = @(Select-String -LiteralPath $_.FullName `
+                -Pattern '^// SPDX-FileCopyrightText:')
+              $additionalOwners = @($owners | Where-Object {
+                $_.Line -notmatch 'Niels Lohmann'
+              })
+              if ($owners.Count -gt 0 -and $additionalOwners.Count -gt 0) {
+                $relative = [IO.Path]::GetRelativePath($nlohmannInclude, $_.FullName)
+                $destination = Join-Path $nlohmannAttributionRoot $relative
+                New-Item -ItemType Directory -Force `
+                  -Path (Split-Path -Parent $destination) | Out-Null
+                Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+                $attributionCount++
+              }
+            }
+          if ($attributionCount -lt 4) {
+            throw "nlohmann-json runtime attribution headers are incomplete"
+          }
+          foreach ($attribution in @(
+            'detail\conversions\to_chars.hpp',
+            'detail\meta\cpp_future.hpp',
+            'detail\output\serializer.hpp',
+            'thirdparty\hedley\hedley.hpp'
+          )) {
+            $attributionPath = Join-Path $nlohmannAttributionRoot $attribution
+            if (-not (Test-Path -LiteralPath $attributionPath -PathType Leaf)) {
+              throw "Required nlohmann-json attribution missing: $attribution"
+            }
+          }
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
           # 4. Copy the complete MATLAB source tree and the MEX/runtime files
           #    produced by the tested Release build above.
@@ -1660,6 +1793,72 @@ jobs:
           chmod +x Build/Cmake/wasm-package/stage.sh
           Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage "$VERSION"
 
+          license_root="wasm-stage/third-party-licenses"
+          third_party="$PWD/third_party"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md wasm-stage/
+          mkdir -p "$license_root"
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            source_dir="$third_party/$dependency"
+            destination="$license_root/$dependency"
+            notice_count=0
+            mkdir -p "$destination"
+            while IFS= read -r notice; do
+              cp -L "$notice" "$destination/$(basename "$notice")"
+              notice_count=$((notice_count + 1))
+            done < <(
+              find "$source_dir" -maxdepth 1 -type f \
+                \( -iname 'license*' -o -iname 'licence*' -o \
+                   -iname 'copying*' -o -iname 'copyright*' -o \
+                   -iname 'notice*' \) -print | sort
+            )
+            if [ "$dependency" = "libjpeg" ]; then
+              cp -L "$source_dir/README" "$destination/README"
+              notice_count=$((notice_count + 1))
+            fi
+            if [ "$notice_count" -eq 0 ]; then
+              echo "::error::WASM dependency lacks license metadata: $dependency"
+              exit 1
+            fi
+          done
+          nlohmann_source="$third_party/nlohmann-json/include/nlohmann"
+          nlohmann_attribution_root="$license_root/nlohmann-json/runtime-attributions"
+          attribution_count=0
+          while IFS= read -r header; do
+            owners="$(grep '^// SPDX-FileCopyrightText:' "$header" || true)"
+            if [ -n "$owners" ] && grep -Fqv 'Niels Lohmann' <<< "$owners"; then
+              relative="${header#"$third_party/nlohmann-json/include/"}"
+              destination="$nlohmann_attribution_root/$relative"
+              mkdir -p "$(dirname "$destination")"
+              cp -L "$header" "$destination"
+              attribution_count=$((attribution_count + 1))
+            fi
+          done < <(
+            find "$nlohmann_source" -type f \
+              \( -name '*.hpp' -o -name '*.h' \) -print | sort
+          )
+          if [ "$attribution_count" -lt 4 ]; then
+            echo "::error::nlohmann-json runtime attribution headers are incomplete"
+            exit 1
+          fi
+          for attribution in \
+            nlohmann/detail/conversions/to_chars.hpp \
+            nlohmann/detail/meta/cpp_future.hpp \
+            nlohmann/detail/output/serializer.hpp \
+            nlohmann/thirdparty/hedley/hedley.hpp; do
+            test -s "$nlohmann_attribution_root/$attribution"
+          done
+          node -e '
+            const fs = require("fs");
+            const path = "wasm-stage/package.json";
+            const pkg = JSON.parse(fs.readFileSync(path, "utf8"));
+            for (const entry of ["THIRD-PARTY-NOTICES.md", "third-party-licenses/"]) {
+              if (!pkg.files.includes(entry)) {
+                pkg.files.push(entry);
+              }
+            }
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
           {
             echo "### WASM npm-shaped bundle"
             echo "| Field | Value |"
@@ -1880,6 +2079,8 @@ jobs:
           unzip -Z1 "${zip_file}" > build-cpack/ZIP-CONTENTS.txt
           grep -q '/VERSION$' build-cpack/ZIP-CONTENTS.txt
           grep -q '/TOOL-CATALOG.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/LICENSE.md$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/THIRD-PARTY-NOTICES.md$' build-cpack/ZIP-CONTENTS.txt
           grep -q '/bin/iccHeifDump$' build-cpack/ZIP-CONTENTS.txt
           unzip -p "${zip_file}" '*/TOOL-CATALOG.md' |
             grep -Fx -- "- \`iccHeifDump\`"
@@ -2014,6 +2215,12 @@ jobs:
             echo "::error::Anonymous namespace references leaked into generated HTML"
             exit 1
           fi
+          cp LICENSE.md docs/generated/html/LICENSE.md
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md \
+            docs/generated/html/THIRD-PARTY-NOTICES.md
+          cmp -s LICENSE.md docs/generated/html/LICENSE.md
+          cmp -s Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md \
+            docs/generated/html/THIRD-PARTY-NOTICES.md
           echo "Full iccDEV Doxygen HTML generation complete"
           find docs/generated/html -maxdepth 1 -printf '%p\n' |
             sort |
@@ -2486,6 +2693,84 @@ jobs:
             echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
           done
 
+          for name in \
+            iccdev-linux-gcc \
+            iccdev-linux-clang \
+            iccdev-macos-clang \
+            iccdev-apple-mobile-core \
+            iccdev-windows-msvc \
+            iccdev-wasm-release \
+            iccdev-doxygen-html; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            if ! grep -qE '(^|/)LICENSE(\.md)?$' <<< "$entries"; then
+              echo "::error::$name omits the ICC project license"
+              exit 1
+            fi
+          done
+
+          doxygen_archive="release-assets/iccdev-doxygen-html.zip"
+          doxygen_entries="$(unzip -Z1 "$doxygen_archive")"
+          if ! grep -Fxq 'THIRD-PARTY-NOTICES.md' <<< "$doxygen_entries"; then
+            echo "::error::iccdev-doxygen-html omits third-party notices"
+            exit 1
+          fi
+
+          for name in \
+            iccdev-linux-gcc \
+            iccdev-linux-clang \
+            iccdev-macos-clang \
+            iccdev-windows-msvc \
+            iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            expected_notice='iccDEV-Testing/THIRD-PARTY-NOTICES.md'
+            if [ "$name" = 'iccdev-wasm-release' ]; then
+              expected_notice='THIRD-PARTY-NOTICES.md'
+            fi
+            if ! grep -Fxq "$expected_notice" <<< "$entries"; then
+              echo "::error::$name omits third-party notices"
+              exit 1
+            fi
+            if ! grep -qE '(^|/)third-party-licenses/.+' <<< "$entries"; then
+              echo "::error::$name omits dependency license files"
+              exit 1
+            fi
+          done
+
+          for name in iccdev-linux-gcc iccdev-linux-clang; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            expected="third-party-licenses/debian/common-licenses/GPL-2"
+            if ! grep -qE "(^|/)${expected}$" <<< "$entries"; then
+              echo "::error::$name omits Debian common-license texts"
+              exit 1
+            fi
+          done
+
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for name in iccdev-macos-clang iccdev-windows-msvc iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            if [ "$name" = "iccdev-windows-msvc" ]; then
+              prefix="third-party-licenses/vcpkg/nlohmann-json/runtime-attributions"
+            else
+              prefix="third-party-licenses/nlohmann-json/runtime-attributions"
+            fi
+            for attribution in "${nlohmann_attributions[@]}"; do
+              expected="$prefix/$attribution"
+              if ! grep -qE "(^|/)${expected//./\\.}$" <<< "$entries"; then
+                echo "::error::$name omits nlohmann-json attribution: $attribution"
+                exit 1
+              fi
+            done
+          done
+
           runtime_dir="artifacts/reficcmax-runtime-packages-linux"
           cp "$runtime_dir"/reficcmax-*.zip release-assets/
           cp "$runtime_dir"/reficcmax-*.deb release-assets/
@@ -2747,6 +3032,34 @@ jobs:
             echo "::error::Staged npm package version does not match npm_version"
             exit 1
           fi
+          for required in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [[ ! -s "$required" ]]; then
+              echo "::error::Staged npm package omits $required"
+              exit 1
+            fi
+          done
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            notice=""
+            if [[ -d "third-party-licenses/$dependency" ]]; then
+              notice="$(find "third-party-licenses/$dependency" -maxdepth 1 -type f -size +0c -print -quit)"
+            fi
+            if [[ -z "$notice" ]]; then
+              echo "::error::Staged npm package omits $dependency license metadata"
+              exit 1
+            fi
+          done
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for attribution in "${nlohmann_attributions[@]}"; do
+            if [[ ! -s "third-party-licenses/nlohmann-json/runtime-attributions/$attribution" ]]; then
+              echo "::error::Staged npm package omits nlohmann-json attribution: $attribution"
+              exit 1
+            fi
+          done
           npm pack --dry-run --json >/dev/null
 
           mkdir -p "$GITHUB_WORKSPACE/npm-iccdev"
@@ -2762,6 +3075,21 @@ jobs:
             echo "::error::npm package tarball does not contain package.json"
             exit 1
           fi
+          if ! grep -Fqx "package/THIRD-PARTY-NOTICES.md" <<< "$archive_entries"; then
+            echo "::error::npm package tarball omits THIRD-PARTY-NOTICES.md"
+            exit 1
+          fi
+          if ! grep -q '^package/third-party-licenses/' <<< "$archive_entries"; then
+            echo "::error::npm package tarball omits dependency license files"
+            exit 1
+          fi
+          for attribution in "${nlohmann_attributions[@]}"; do
+            expected="package/third-party-licenses/nlohmann-json/runtime-attributions/$attribution"
+            if ! grep -Fqx "$expected" <<< "$archive_entries"; then
+              echo "::error::npm package tarball omits nlohmann-json attribution: $attribution"
+              exit 1
+            fi
+          done
 
       # preflight: allow-token-exposure reason=npm-oidc-trusted-publishing
       # preflight: allow-package-install reason=npm-oidc-validated-tarball-publish
@@ -2922,6 +3250,36 @@ jobs:
           PACKAGE_VERSION="$NPM_VERSION" node -e \
             'const pkg = require(process.argv[1] + "/package.json"); if (pkg.version !== process.env.PACKAGE_VERSION) process.exit(1);' \
             "$npm_environment/package"
+          for required in LICENSE THIRD-PARTY-NOTICES.md; do
+            if [[ ! -s "$npm_environment/package/$required" ]]; then
+              echo "::error::Published npm package omits $required"
+              exit 1
+            fi
+          done
+          for dependency in zlib libpng libjpeg libtiff libxml2 nlohmann-json; do
+            notice=""
+            dependency_dir="$npm_environment/package/third-party-licenses/$dependency"
+            if [[ -d "$dependency_dir" ]]; then
+              notice="$(find "$dependency_dir" -maxdepth 1 -type f -size +0c -print -quit)"
+            fi
+            if [[ -z "$notice" ]]; then
+              echo "::error::Published npm package omits $dependency license metadata"
+              exit 1
+            fi
+          done
+          nlohmann_attributions=(
+            nlohmann/detail/conversions/to_chars.hpp
+            nlohmann/detail/meta/cpp_future.hpp
+            nlohmann/detail/output/serializer.hpp
+            nlohmann/thirdparty/hedley/hedley.hpp
+          )
+          for attribution in "${nlohmann_attributions[@]}"; do
+            attribution_path="$npm_environment/package/third-party-licenses/nlohmann-json/runtime-attributions/$attribution"
+            if [[ ! -s "$attribution_path" ]]; then
+              echo "::error::Published npm package omits nlohmann-json attribution: $attribution"
+              exit 1
+            fi
+          done
 
       - name: Summary Report
         if: always()
