@@ -261,7 +261,8 @@ run_refused_output() {
   fi
   mkdir -p "$output"
 
-  timeout 60 "$VISUALIZE" "${options[@]}" "$input" > "$logfile" 2>&1 || exit_code=$?
+  # bash 3.2 (macOS) treats an empty array as unbound under set -u.
+  timeout 60 "$VISUALIZE" ${options[@]+"${options[@]}"} "$input" > "$logfile" 2>&1 || exit_code=$?
   check_sanitizers "$name" "$logfile" || return
   if [ "$exit_code" -lt 1 ] || [ "$exit_code" -gt 127 ]; then
     fail_case "$name" "expected graceful failure, got exit $exit_code"
