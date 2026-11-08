@@ -3223,7 +3223,10 @@ bool icXmlParseProfDesc(xmlNode *pNode, CIccProfileDescStruct &p, std::string &p
           p.m_deviceModel = icXmlStrToSig(pDescNode->children ? (const icChar*)pDescNode->children->content : "");
         }
         else if (!icXmlStrCmp(pDescNode->name, "DeviceAttributes")){
-          p.m_attributes = icGetDeviceAttrValue(pDescNode);      
+          if (!icGetDeviceAttrValue(pDescNode, p.m_attributes)) {
+            parseStr += "Invalid ProfileDesc DeviceAttributes VendorSpecific\n";
+            return false;
+          }
         }
         else if (!icXmlStrCmp(pDescNode->name, "Technology")){
           p.m_technology = (icTechnologySignature)icXmlStrToSig(pDescNode->children ? (const icChar*)pDescNode->children->content : "");
@@ -6569,6 +6572,10 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
       return false;
     }
 
+    if (vals.GetSize() % m_nPCSChannels) {
+      parseStr += "PCSValues count is not a multiple of channel count\n";
+      return false;
+    }
     m_NumberOfVertices = vals.GetSize() / m_nPCSChannels;
 
     if (m_NumberOfVertices<4) {
@@ -6605,6 +6612,10 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
       return false;
     }
 
+    if (vals.GetSize() % m_nDeviceChannels) {
+      parseStr += "DeviceValues count is not a multiple of channel count\n";
+      return false;
+    }
     int nVertices = vals.GetSize() / m_nDeviceChannels;
 
     if (m_NumberOfVertices != nVertices) {

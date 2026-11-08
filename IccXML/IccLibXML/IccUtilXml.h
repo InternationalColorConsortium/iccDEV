@@ -171,6 +171,7 @@ icMeasurementGeometry icGeNamedtMeasurementGeometryValue(const icChar *str);
 icMeasurementFlare icGetNamedMeasurementFlareValue(const icChar *str);
 const icChar* icGetStandardObserverName(icStandardObserver str);
 icUInt64Number icGetDeviceAttrValue(xmlNode *pNode);
+bool icGetDeviceAttrValue(xmlNode *pNode, icUInt64Number &out);
 icColorantEncoding icGetColorantValue(const icChar* str);
 // icGetMeasurementValue moved to IccProfLib/IccUtil.h
 const std::string icGetDeviceAttrName(icUInt64Number devAttr);

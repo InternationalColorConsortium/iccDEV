@@ -56,6 +56,7 @@
 #include <new>
 #include <vector>
 #include <memory>
+#include <limits>
 #include "IccMpeBasic.h"
 #include "IccIO.h"
 #include <map>
@@ -3325,7 +3326,7 @@ bool CIccSegmentedCurve::Write(CIccIO *pIO)
 {
   icCurveElemSignature sig = GetType();
 
-  if (!pIO)
+  if (!pIO || m_list->size() > (std::numeric_limits<icUInt16Number>::max)())
     return false;
 
   if (!pIO->Write32(&sig))

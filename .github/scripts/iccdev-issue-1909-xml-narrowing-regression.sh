@@ -164,6 +164,22 @@ expect_accept() {
   rm -f "$TOOL_ICC"
 }
 
+# A partial GBD vertex must fail before the XML reader drops its last value.
+expect_gbd_partial_reject() {
+  local fixture="$1" label="$2" diagnostic="$3"
+  run_tool "$fixture"
+  if [ "$TOOL_RC" -ge 1 ] && [ "$TOOL_RC" -le 127 ] &&
+     [ ! -e "$TOOL_ICC" ] && grep -Fq "$diagnostic" "$TOOL_LOG" &&
+     ! grep -Eq 'ERROR: AddressSanitizer|runtime error:' "$TOOL_LOG"; then
+    echo "[PASS] $label -- refused without a sanitizer finding"
+  else
+    echo "[FAIL] $label -- expected graceful refusal (rc=$TOOL_RC)"
+    sed -n '1,8p' "$TOOL_LOG"
+    status=2
+  fi
+  rm -f "$TOOL_ICC"
+}
+
 echo "=================================================================="
 echo " XML attribute narrowing regression (issue #1909)"
 echo "=================================================================="
@@ -230,6 +246,14 @@ if mutate "$GBD" gbd-launder-1909.xml '<PCSValues channels="3"' '<PCSValues chan
 fi
 if mutate "$GBD" gbd-control-1909.xml '<PCSValues channels="3"' '<PCSValues channels="3"'; then
   expect_accept gbd-control-1909.xml 'PCSValues channels="3" (the wrapped value)'
+fi
+if mutate "$GBD" gbd-partial-pcs.xml '</PCSValues>' '999</PCSValues>'; then
+  expect_gbd_partial_reject gbd-partial-pcs.xml 'GamutBoundaryDesc partial PCS vertex' \
+    'PCSValues count is not a multiple of channel count'
+fi
+if mutate "$GBD" gbd-partial-device.xml '</DeviceValues>' '999</DeviceValues>'; then
+  expect_gbd_partial_reject gbd-partial-device.xml 'GamutBoundaryDesc partial device vertex' \
+    'DeviceValues count is not a multiple of channel count'
 fi
 
 # SparseMatrix dimensions and the array's own channel count.
