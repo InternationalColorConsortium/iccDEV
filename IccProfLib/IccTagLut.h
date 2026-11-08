@@ -583,6 +583,7 @@ public:
 
   virtual icTagTypeSignature GetType() const { return icSigLut8Type; }
   virtual icUInt8Number GetPrecision() const { return 1; }
+  virtual bool IsInputMatrix() const final { return true; }
 
   bool Read(icUInt32Number size, CIccIO *pIO);
   bool Write(CIccIO *pIO);
@@ -613,6 +614,7 @@ public:
   
   virtual icTagTypeSignature GetType() const { return icSigLut16Type; }
   virtual bool UseLegacyPCS() const { return true; } //Treat Lab Encoding differently?
+  virtual bool IsInputMatrix() const final { return true; }
 
   bool Read(icUInt32Number size, CIccIO *pIO);
   bool Write(CIccIO *pIO);
