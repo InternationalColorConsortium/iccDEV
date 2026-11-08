@@ -3766,10 +3766,11 @@ CIccMBB::CIccMBB()
  */
 CIccMBB::CIccMBB(const CIccMBB &IMBB)
 {
- icUInt8Number nCurves;
- int i;
- 
-  m_bInputMatrix = IMBB.m_bInputMatrix;
+  icUInt8Number nCurves;
+  int i;
+  const bool bInputMatrix = IMBB.IsInputMatrix();
+
+  m_bInputMatrix = bInputMatrix;
   m_bUseMCurvesAsBCurves = IMBB.m_bUseMCurvesAsBCurves;
   m_nInput = IMBB.m_nInput;
   m_nOutput = IMBB.m_nOutput;
@@ -3783,7 +3784,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
     m_CLUT = NULL;
 
   if (IMBB.m_CurvesA) {
-    nCurves = !IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nOutput : m_nInput;
 
     m_CurvesA = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3794,7 +3795,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesM) {
-    nCurves = IsInputMatrix() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesM = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3805,7 +3806,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesB) {
-    nCurves = IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesB = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3839,12 +3840,21 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   if (&IMBB == this)
     return *this;
 
+  const bool bInputMatrix = IMBB.IsInputMatrix();
+  // Legacy LUTs have a fixed input-matrix layout. Their curve arrays cannot
+  // receive a source whose A, M, and B array sizes use the opposite layout.
+  // Other MBB tags can adopt the source layout through m_bInputMatrix.
+  const icTagTypeSignature tagType = GetType();
+  if (!bInputMatrix &&
+      (tagType == icSigLut8Type || tagType == icSigLut16Type))
+    return *this;
+
   Cleanup();
 
   icUInt8Number nCurves;
   int i;
 
-  m_bInputMatrix = IMBB.m_bInputMatrix;
+  m_bInputMatrix = bInputMatrix;
   m_bUseMCurvesAsBCurves = IMBB.m_bUseMCurvesAsBCurves;
   m_nInput = IMBB.m_nInput;
   m_nOutput = IMBB.m_nOutput;
@@ -3858,7 +3868,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
     m_CLUT = NULL;
 
   if (IMBB.m_CurvesA) {
-    nCurves = !IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nOutput : m_nInput;
 
     m_CurvesA = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3869,7 +3879,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesM) {
-    nCurves = IsInputMatrix() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesM = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3880,7 +3890,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesB) {
-    nCurves = IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesB = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -5434,6 +5444,9 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
 
   if (!Init(nInput, nOutput))
     return false;
+  // A public base assignment may carry A-to-B placement into this legacy tag.
+  // Restore the fixed legacy layout before allocating its output A-curves.
+  m_bInputMatrix = true;
   m_nReserved = reserved;
   m_nReservedByte = reservedByte;
   memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));
@@ -5908,6 +5921,9 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
 
   if (!Init(nInput, nOutput))
     return false;
+  // A public base assignment may carry A-to-B placement into this legacy tag.
+  // Restore the fixed legacy layout before allocating its output A-curves.
+  m_bInputMatrix = true;
   m_nReserved = reserved;
   m_nReservedByte = reservedByte;
   memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));
