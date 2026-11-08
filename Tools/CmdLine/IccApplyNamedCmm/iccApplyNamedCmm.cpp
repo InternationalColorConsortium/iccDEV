@@ -566,28 +566,28 @@ int main(int argc, const char* argv[])
     }
 
     if (!exportFile.empty()) {
+      json cfgJson;
+      json applyJson, profilesJson;
+
+      cfgApply.toJson(applyJson);
+
+      if (bExportData) {
+        json dataJson;
+        cfgData.toJson(dataJson);
+        cfgJson["colorData"] = dataJson;
+
+        applyJson["srcFile"] = nullptr;
+        applyJson["srcType"] = "colorData";
+      }
+
+      cfgJson["dataFiles"] = applyJson;
+
+      cfgProfiles.toJson(profilesJson);
+      cfgJson["profileSequence"] = profilesJson;
+
+      std::string jsonText = cfgJson.dump(1);
       FILE* f = icOpenWriteTextFile(exportFile.c_str());
       if (f) {
-        json cfgJson;
-        json applyJson, profilesJson;
-
-        cfgApply.toJson(applyJson);
-
-        if (bExportData) {
-          json dataJson;
-          cfgData.toJson(dataJson);
-          cfgJson["colorData"] = dataJson;
-
-          applyJson["srcFile"] = nullptr;
-          applyJson["srcType"] = "colorData";
-        }
-
-        cfgJson["dataFiles"] = applyJson;
-
-        cfgProfiles.toJson(profilesJson);
-        cfgJson["profileSequence"] = profilesJson;
-
-        std::string jsonText = cfgJson.dump(1);
         size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
         if (n != jsonText.size()) {
           printf("Error writing json config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());

@@ -809,7 +809,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
     if (profilePath.IsEmpty()) {
 		theReport = "Invalid Profile Path!\n";
-		nStat = (icValidateStatus)-1;
+		nStat = icValidateCriticalError;
 	}
 	else {
 		std::string sReport;
@@ -971,7 +971,10 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
 		case icValidateCriticalError:
             status_color = *wxRED;
-            ver_str = "Critical Error - Profile Violates ICC Specification" + ver_str;
+            if (profilePath.IsEmpty())
+                ver_str = "Invalid Profile Path";
+            else
+                ver_str = "Critical Error - Profile Violates ICC Specification" + ver_str;
 			break;
 
 		default:

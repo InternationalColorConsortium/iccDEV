@@ -324,8 +324,9 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
 /******************************************************************************/
 
-void PDFWriter::CloseFile()
+bool PDFWriter::CloseFile()
 {
+  bool wroteOk = false;
   if (!m_filename.empty()) {
     if (PageCount() > 0) {
         try  {
@@ -339,6 +340,9 @@ void PDFWriter::CloseFile()
           WriteXRefs(out);
           WriteFooter(out);
 
+          // str() can allocate and throw; materialize before opening the file.
+          std::string text = out.str();
+
           // PDF export paths are intentional caller-selected output files after regular-file validation.
 
           // codeql[cpp/path-injection]
@@ -346,10 +350,16 @@ void PDFWriter::CloseFile()
           // icWriteAndClose() writes through the handle icOpenRegularWriteTextFile()
           // just validated, then closes it (#2154). It replaced a byte-identical
           // private WritePdfTextFile() copy that lived here.
-          if (!icWriteAndClose(outFile, out.str())) {
+          if (!outFile) {
             LogAnError(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
             m_filename.clear();
-            return;
+          }
+          else if (!icWriteAndClose(outFile, text)) {
+            LogAnError(stderr, "PDF writing error in '%s': unable to write regular output file\n", m_filename.c_str());
+            m_filename.clear();
+          }
+          else {
+            wroteOk = true;
           }
 
         }
@@ -370,6 +380,7 @@ void PDFWriter::CloseFile()
   }
   m_objects.clear();
 
+  return wroteOk;
 }
 
 /******************************************************************************/

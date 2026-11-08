@@ -206,6 +206,13 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     LogAnError(stderr,"Could not create output file %s\n", name.c_str());
     return false;
   }
+  // Keep the stream owned if strip metadata allocation throws. The output
+  // helper can return stdout, which must remain open on every path.
+  const auto closeOwnedFile = [](FILE* file) {
+    if (file && file != stdout)
+      fclose(file);
+  };
+  std::unique_ptr<FILE, decltype(closeOwnedFile)> ownedFile(outfile, closeOwnedFile);
 
   // TIFF header, and byte order indicator
   // if constexpr (std::endian::native == std::endian::big) {  // only works in C++20 and up
@@ -223,7 +230,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // check for early failure
   if (writeFailed || ferror(outfile)) {
     LogAnError(stderr, "ERROR: I/O error writing TIFF header to %s\n", name.c_str() );
-    fclose(outfile);
+    closeOwnedFile(ownedFile.release());
     return false;
   }
 
@@ -290,7 +297,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   long byteCountOffset = ftell( outfile );
   if (byteCountOffset < 0) {
     LogAnError(stderr, "ERROR: TIFF ftell failed\n");
-    (void)fclose(outfile);
+    closeOwnedFile(ownedFile.release());
     return false;
   }
   if (stripCount > 1)
@@ -352,7 +359,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // check again after writing the tag directory
   if (writeFailed || ferror(outfile)) {
     LogAnError(stderr, "ERROR: I/O error writing TIFF directory to %s\n", name.c_str() );
-    fclose(outfile);
+    closeOwnedFile(ownedFile.release());
     return false;
   }
 
@@ -379,21 +386,21 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     long stripStart = ftell( outfile );
     if (stripStart < 0 || (unsigned long)stripStart > UINT32_MAX) {
       LogAnError(stderr, "ERROR: TIFF strip offset exceeds 32-bit range\n");
-      fclose(outfile);
+      closeOwnedFile(ownedFile.release());
       return false;
     }
 
     size_t pixelBytes = (size_t)width * (size_t)channels * (size_t)(depth/8);
     if (fwrite( buffer + offset, pixelBytes, rowCount, outfile ) != rowCount) {
       LogAnError(stderr, "ERROR: TIFF failed to write pixel data\n");
-      fclose(outfile);
+      closeOwnedFile(ownedFile.release());
       return false;
     }
 
     long stripEnd = ftell( outfile );
     if (stripEnd < 0 || (unsigned long)stripEnd > UINT32_MAX) {
       LogAnError(stderr, "ERROR: TIFF strip end offset exceeds 32-bit range\n");
-      fclose(outfile);
+      closeOwnedFile(ownedFile.release());
       return false;
     }
     stripOffsetList[strip] = uint32_t(stripStart);
@@ -419,11 +426,11 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
   if (writeFailed || ferror(outfile)) {
     LogAnError(stderr, "ERROR: I/O error writing TIFF data to %s\n", name.c_str() );
-    fclose(outfile);
+    closeOwnedFile(ownedFile.release());
     return false;
   }
 
-  if (!icFlushAndClose(outfile)) {
+  if (!icFlushAndClose(ownedFile.release())) {
     LogAnError(stderr, "ERROR: fclose failed for %s\n", name.c_str() );
     return false;
   }

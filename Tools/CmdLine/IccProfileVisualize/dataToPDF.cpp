@@ -746,11 +746,14 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
 
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
+  bool outputFailed = false;
+  size_t imageCount = 0;
 
   // iterate over pages in data
   for (auto &page : data.pages ) {
     if (!page) {
       LogAnError(stderr, "%s: null visualization page\n", basename.c_str());
+      outputFailed = true;
       continue;
     }
 
@@ -760,6 +763,7 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
       lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
       if (!lutData) {
         LogAnError(stderr, "%s: invalid lutPlotData page\n", basename.c_str());
+        outputFailed = true;
         continue;
       }
       output1DLUTPDF( lutData, pdffile );
@@ -768,6 +772,7 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
       abPlotData *abData = dynamic_cast<abPlotData*>(page);
       if (!abData) {
         LogAnError(stderr, "%s: invalid abPlotData page\n", basename.c_str());
+        outputFailed = true;
         continue;
       }
       outputNamedColorsABPDF( abData, pdffile );
@@ -776,6 +781,7 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
       xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
       if (!xyData) {
         LogAnError(stderr, "%s: invalid xyPlotData page\n", basename.c_str());
+        outputFailed = true;
         continue;
       }
       outputNamedColorsXYPDF( xyData, pdffile );
@@ -784,24 +790,32 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
       imageData *image = dynamic_cast<imageData*>(page);
       if (!image) {
         LogAnError(stderr, "%s: invalid imageData page\n", basename.c_str());
+        outputFailed = true;
         continue;
       }
       std::string tiffPath2 = image->object_name + ".tif";      // includes tag name
       if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
                     image->width, image->height, image->channels, image->depth )) {
         LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
+        outputFailed = true;
+      }
+      else {
+        imageCount++;
       }
     }
     else {
       LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
+      outputFailed = true;
     }
   } // end iteration over pages
 
   size_t objectCount = pdffile.PageCount(); // grab page count before destroying the pages
 
-  pdffile.CloseFile();
+  bool pdfWriteOk = pdffile.CloseFile();
+  if ((objectCount && !pdfWriteOk) || outputFailed)
+    return 0;
 
-  return objectCount;
+  return objectCount + imageCount;
 
 }   // end outputDataToPDF()
 

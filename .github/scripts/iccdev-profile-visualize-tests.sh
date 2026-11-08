@@ -234,6 +234,89 @@ run_visualize() {
   pass_case "$name" "generated A2B/B2A TIFFs and LUT PDF"
 }
 
+run_refused_output() {
+  local mode="$1"
+  local name="${mode}-output-refusal"
+  local testdir="$OUTDIR/$name"
+  local input="$testdir/${mode}.icc"
+  local output="$testdir/${mode}_luts.pdf"
+  local logfile="$testdir/output.log"
+  local exit_code=0
+  local expected
+  local -a options=()
+
+  TOTAL=$((TOTAL + 1))
+  rm -rf "$testdir"
+  mkdir -p "$testdir"
+  cp "$PROFILE" "$input"
+  if [ "$mode" = json ]; then
+    options=(-json)
+    output="$testdir/${mode}_data.json"
+    expected="JSON writing error"
+  elif [ "$mode" = tiff ]; then
+    output="$testdir/${mode}_A2B0.tif"
+    expected="Failed to write TIFF"
+  else
+    expected="PDF writing error"
+  fi
+  mkdir -p "$output"
+
+  timeout 60 "$VISUALIZE" "${options[@]}" "$input" > "$logfile" 2>&1 || exit_code=$?
+  check_sanitizers "$name" "$logfile" || return
+  if [ "$exit_code" -lt 1 ] || [ "$exit_code" -gt 127 ]; then
+    fail_case "$name" "expected graceful failure, got exit $exit_code"
+    return
+  fi
+  require_text "$name" "$logfile" "$expected" || return
+  if [ ! -d "$output" ]; then
+    fail_case "$name" "refused output directory was replaced"
+    return
+  fi
+  pass_case "$name" "output refusal returned exit $exit_code"
+}
+
+# A profile with nothing to plot keeps exit 0; only a failed write is a failure.
+run_no_content() {
+  local name="no-content-exit-zero"
+  local testdir="$OUTDIR/$name"
+  local input="$testdir/no-content.icc"
+  local logfile="$testdir/output.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -rf "$testdir"
+  mkdir -p "$testdir"
+  if ! python3 -c '
+import struct
+import sys
+
+src, dst = sys.argv[1:3]
+data = bytearray(open(src, "rb").read())
+count = struct.unpack(">I", data[128:132])[0]
+keep = [data[132 + i * 12:144 + i * 12] for i in range(count)
+        if data[132 + i * 12:136 + i * 12] in (b"desc", b"cprt", b"wtpt")]
+if not keep:
+    raise SystemExit("no header-only tags to keep")
+table = struct.pack(">I", len(keep)) + b"".join(keep)
+table += b"\x00" * (4 + 12 * count - len(table))
+data[128:132 + 12 * count] = table
+open(dst, "wb").write(data)
+' "$PROFILE" "$input"; then
+    fail_case "$name" "could not construct a profile with no plottable tags"
+    return
+  fi
+
+  timeout 60 "$VISUALIZE" "$input" > "$logfile" 2>&1 || exit_code=$?
+  check_sanitizers "$name" "$logfile" || return
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "a profile with no plottable content exited $exit_code"
+    sed -n '1,20p' "$logfile"
+    return
+  fi
+  require_text "$name" "$logfile" "had no content for output" || return
+  pass_case "$name" "no plottable content exits 0"
+}
+
 run_malformed_visualize() {
   local name="$1"
   local profile="$2"
@@ -282,6 +365,10 @@ run_malformed_visualize() {
 echo "=== iccProfileVisualize regression ==="
 
 run_visualize
+run_refused_output pdf
+run_refused_output json
+run_refused_output tiff
+run_no_content
 
 if [ "$FAIL" -eq 0 ]; then
   make_bad_tag_offset_profile "$PROFILE" "$BAD_TAG_PROFILE" || fail_case "bad-tag-fixture" "failed to create bad tag offset profile"

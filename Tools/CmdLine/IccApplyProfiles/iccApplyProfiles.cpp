@@ -784,22 +784,22 @@ int main(int argc, const char** argv)
                           cfgConnect.m_bUseSearch ? cfgSearch.m_profiles : cfgProfiles.m_profiles,
                           cfgSearch.m_pccWeights))
         return -1;
+      json cfgJson;
+      json applyJson, connectJson, profilesJson;
+
+      cfgApply.toJson(applyJson);
+      cfgJson["imageFiles"] = applyJson;
+
+      cfgConnect.toJson(connectJson);
+      if (!connectJson.empty())
+        cfgJson["connect"] = connectJson;
+        
+      cfgProfiles.toJson(profilesJson);
+      cfgJson["profileSequence"] = profilesJson;
+
+      std::string jsonText = cfgJson.dump(1);
       FILE* f = OpenWriteTextFile(exportFile);
       if (f) {
-        json cfgJson;
-        json applyJson, connectJson, profilesJson;
-
-        cfgApply.toJson(applyJson);
-        cfgJson["imageFiles"] = applyJson;
-
-        cfgConnect.toJson(connectJson);
-        if (!connectJson.empty())
-          cfgJson["connect"] = connectJson;
-        
-        cfgProfiles.toJson(profilesJson);
-        cfgJson["profileSequence"] = profilesJson;
-
-        std::string jsonText = cfgJson.dump(1);
         if (fwrite(jsonText.c_str(), 1, jsonText.size(), f) != jsonText.size()) {
           printf("Unable to write complete config file '%s'\n", icSanitizeConsoleText(exportFile.c_str()).c_str());
           fclose(f);

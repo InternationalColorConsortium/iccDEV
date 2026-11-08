@@ -203,14 +203,21 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     fprintf(stderr,"Could not create output file %s\n", name.c_str());
     return false;
   }
+  // The stream writer may throw while allocating strip metadata. The output
+  // helper can return stdout, which must remain open on every path.
+  const auto closeOwnedFile = [](FILE* file) {
+    if (file && file != stdout)
+      fclose(file);
+  };
+  std::unique_ptr<FILE, decltype(closeOwnedFile)> ownedFile(outfile, closeOwnedFile);
 
   // The stream overload owns none of the file's lifetime, so closing it is this
   // wrapper's job on every path -- including the failure paths, which used to
   // fclose() inline before the split (#2116).
-  bool wroteOk = WriteTIFF( outfile, name, dpi, color_model, buffer,
+  bool wroteOk = WriteTIFF( ownedFile.get(), name, dpi, color_model, buffer,
                             width, height, channels, depth );
 
-  bool closedOk = icFlushAndClose(outfile);
+  bool closedOk = icFlushAndClose(ownedFile.release());
 
   // Report the close failure only when the write itself succeeded. Every inner
   // failure path is reached with ferror() already set, and icFlushAndClose
