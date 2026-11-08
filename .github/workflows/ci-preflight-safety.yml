@@ -173,6 +173,7 @@ jobs:
             -p no:cacheprovider \
             --rootdir . \
             --import-mode=importlib \
+            .github/tests/test_apple_mobile_release_artifact.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_python_release_wheels.py \
             .github/tests/test_wasm_workflow.py \

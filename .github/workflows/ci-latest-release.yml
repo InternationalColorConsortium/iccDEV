@@ -2720,12 +2720,14 @@ jobs:
             iccdev-linux-gcc \
             iccdev-linux-clang \
             iccdev-macos-clang \
+            iccdev-apple-mobile-core \
             iccdev-windows-msvc \
             iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
             expected_notice='iccDEV-Testing/THIRD-PARTY-NOTICES.md'
-            if [ "$name" = 'iccdev-wasm-release' ]; then
+            if [ "$name" = 'iccdev-wasm-release' ] ||
+                [ "$name" = 'iccdev-apple-mobile-core' ]; then
               expected_notice='THIRD-PARTY-NOTICES.md'
             fi
             if ! grep -Fxq "$expected_notice" <<< "$entries"; then
@@ -2734,6 +2736,27 @@ jobs:
             fi
             if ! grep -qE '(^|/)third-party-licenses/.+' <<< "$entries"; then
               echo "::error::$name omits dependency license files"
+              exit 1
+            fi
+          done
+
+          for name in \
+            iccdev-macos-clang \
+            iccdev-apple-mobile-core \
+            iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            expected_license='third-party-licenses/nlohmann-json/LICENSE.MIT'
+            if [ "$name" = 'iccdev-macos-clang' ]; then
+              expected_license="iccDEV-Testing/$expected_license"
+            fi
+            if ! grep -Fxq "$expected_license" <<< "$entries"; then
+              echo "::error::$name omits a nonempty nlohmann-json LICENSE.MIT"
+              exit 1
+            fi
+            if ! license_bytes="$(unzip -p "$archive" "$expected_license" | wc -c)" ||
+                [ "$license_bytes" -eq 0 ]; then
+              echo "::error::$name omits a nonempty nlohmann-json LICENSE.MIT"
               exit 1
             fi
           done
@@ -2754,7 +2777,11 @@ jobs:
             nlohmann/detail/output/serializer.hpp
             nlohmann/thirdparty/hedley/hedley.hpp
           )
-          for name in iccdev-macos-clang iccdev-windows-msvc iccdev-wasm-release; do
+          for name in \
+            iccdev-macos-clang \
+            iccdev-apple-mobile-core \
+            iccdev-windows-msvc \
+            iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
             if [ "$name" = "iccdev-windows-msvc" ]; then

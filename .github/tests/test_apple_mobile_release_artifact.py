@@ -7,7 +7,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import shutil
+import subprocess
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -24,6 +28,16 @@ SPEC.loader.exec_module(VALIDATOR)
 
 def _artifact(root: Path, built: str = "apple-ios-device-core") -> Path:
     (root / "LICENSE.md").write_bytes((ROOT / "LICENSE.md").read_bytes())
+    (root / "THIRD-PARTY-NOTICES.md").write_bytes(
+        (ROOT / "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md").read_bytes()
+    )
+    license_root = root / "third-party-licenses/nlohmann-json"
+    license_root.mkdir(parents=True)
+    (license_root / "LICENSE.MIT").write_text("MIT License", encoding="utf-8")
+    for attribution in VALIDATOR.NLOHMANN_ATTRIBUTIONS:
+        path = license_root / "runtime-attributions" / attribution
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Copyright attribution", encoding="utf-8")
     lines = []
     for preset, sdk in VALIDATOR.expected_presets().items():
         result = "built" if preset == built else "skipped: SDK unavailable"
@@ -55,6 +69,38 @@ def test_apple_release_artifact_requires_complete_license(tmp_path: Path) -> Non
         VALIDATOR.validate_artifact(artifact)
     license_file.write_text("Incomplete license", encoding="utf-8")
     with pytest.raises(ValueError, match="Missing or altered Apple mobile core LICENSE"):
+        VALIDATOR.validate_artifact(artifact)
+
+
+def test_apple_release_artifact_requires_third_party_notices(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path)
+    notice_file = artifact / "THIRD-PARTY-NOTICES.md"
+    notice_file.unlink()
+    with pytest.raises(
+        ValueError, match="Missing or altered Apple mobile core THIRD-PARTY-NOTICES"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+    notice_file.write_text("Incomplete notices", encoding="utf-8")
+    with pytest.raises(
+        ValueError, match="Missing or altered Apple mobile core THIRD-PARTY-NOTICES"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+
+
+def test_apple_release_artifact_requires_nlohmann_attributions(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path, built="apple-ios-device-extended-core")
+    license_root = artifact / "third-party-licenses/nlohmann-json"
+    (license_root / "LICENSE.MIT").unlink()
+    with pytest.raises(
+        ValueError, match="Missing Apple mobile core nlohmann-json LICENSE.MIT"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+    (license_root / "LICENSE.MIT").write_text("MIT License", encoding="utf-8")
+    attribution = VALIDATOR.NLOHMANN_ATTRIBUTIONS[0]
+    (license_root / "runtime-attributions" / attribution).unlink()
+    with pytest.raises(
+        ValueError, match="Missing Apple mobile core nlohmann-json attribution"
+    ):
         VALIDATOR.validate_artifact(artifact)
 
 
@@ -95,6 +141,74 @@ def test_latest_release_consumes_validated_apple_artifact() -> None:
         if step.get("name") == "Build available Apple mobile core libraries"
     )
     assert "cp LICENSE.md artifacts/LICENSE.md" in build_step["run"]
+    assert "cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md artifacts/" in build_step["run"]
+    assert 'cp -L "$nlohmann_prefix/LICENSE.MIT"' in build_step["run"]
+
+
+@pytest.mark.parametrize(
+    ("invalid_archive", "invalid_kind"),
+    (
+        (None, None),
+        ("iccdev-macos-clang", "missing"),
+        ("iccdev-apple-mobile-core", "missing"),
+        ("iccdev-wasm-release", "missing"),
+        ("iccdev-apple-mobile-core", "empty"),
+        ("iccdev-apple-mobile-core", "corrupt"),
+    ),
+)
+def test_latest_release_zip_requires_nlohmann_license(
+    tmp_path: Path, invalid_archive: str | None, invalid_kind: str | None
+) -> None:
+    if os.name == "nt":
+        pytest.skip("release ZIP gate runs under Bash on Linux")
+    assert shutil.which("bash") and shutil.which("unzip")
+
+    release = yaml.safe_load(
+        (ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="utf-8")
+    )
+    package_step = next(
+        step for step in release["jobs"]["release"]["steps"]
+        if step.get("name") == "Package release archives"
+    )
+    script = package_step["run"]
+    start = script.index(
+        "for name in \\\n  iccdev-macos-clang \\\n  iccdev-apple-mobile-core \\\n  iccdev-wasm-release; do"
+    )
+    end = script.index("\nfor name in iccdev-linux-gcc iccdev-linux-clang; do", start)
+    gate = "set -euo pipefail\n" + script[start:end] + "\n"
+
+    release_assets = tmp_path / "release-assets"
+    release_assets.mkdir()
+    for name in (
+        "iccdev-macos-clang",
+        "iccdev-apple-mobile-core",
+        "iccdev-wasm-release",
+    ):
+        license_path = "third-party-licenses/nlohmann-json/LICENSE.MIT"
+        if name == "iccdev-macos-clang":
+            license_path = "iccDEV-Testing/" + license_path
+        archive_path = release_assets / f"{name}.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("manifest.txt", "fixture")
+            if name != invalid_archive or invalid_kind != "missing":
+                archive.writestr(
+                    license_path,
+                    b"" if name == invalid_archive and invalid_kind == "empty"
+                    else b"MIT License\n",
+                )
+        if name == invalid_archive and invalid_kind == "corrupt":
+            contents = archive_path.read_bytes()
+            assert contents.count(b"MIT License\n") == 1
+            archive_path.write_bytes(contents.replace(b"MIT License\n", b"MIT Licensf\n"))
+
+    result = subprocess.run(
+        ["bash", "-c", gate], cwd=tmp_path, capture_output=True, text=True, check=False
+    )
+    if invalid_archive is None:
+        assert result.returncode == 0, result.stdout + result.stderr
+    else:
+        assert result.returncode != 0
+        assert f"{invalid_archive} omits a nonempty nlohmann-json LICENSE.MIT" in result.stdout
 
 
 def test_apple_runtime_smoke_routes_to_pr_without_simulators() -> None:
