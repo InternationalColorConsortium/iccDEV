@@ -2319,6 +2319,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
           val[0].nIndex = index;
           val[0].space = icSigNamedData;
           samples.push_back(val);
+          spaces.push_back(space);
           lastSpace = "";
         }
       }
@@ -2353,7 +2354,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       szFmt += 4;
       if (space != lastSpace) {
         lastSpace = space;
-        icValueVector val(4);
+        icValueVector val(3);
         val[0].space = icSigLabData;
         samples.push_back(val);
         spaces.push_back(space);
@@ -2366,7 +2367,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       szFmt += 4;
       if (space != lastSpace) {
         lastSpace = space;
-        icValueVector val(4);
+        icValueVector val(3);
         val[0].space = icSigXYZData;
         samples.push_back(val);
         spaces.push_back(space);
@@ -2377,6 +2378,10 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       else {
       int nColor = -1;
       if ( (sscanf(szFmt, "%dCOLOR_", &nColor) == 1) && nColor >= 1) {  // sscanf can also return EOF(-1)
+        // The channel count becomes the low 16 bits of the colour-space
+        // signature below, and sizes the sample group.
+        if (nColor > 0xffff)
+          return false;
         const size_t bufSize = 30;
         char buf[bufSize];
         snprintf(buf, bufSize, "%dCOLOR", nColor);
@@ -2394,7 +2399,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
         if (szFmt) {
           szFmt++;
           size_t nChannel = (size_t)atoi(szFmt);
-          if (samples.size() > 1) {
+          if (!samples.empty()) {
             size_t last = samples.size() - 1;
             if (nChannel > 0 && samples[last].size() >= nChannel) {
               samples[samples.size() - 1][nChannel - 1].nIndex = index;
@@ -2423,6 +2428,10 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
   do {
     if (!f.parseNextLine(line) || line[0] == "END_DATA")
       break;
+    // Short rows are refused: the name, label and sample columns below are
+    // indexed from the format line.  A trailing tab adds one empty field.
+    if (line.size() < nFields)
+      return false;
     CIccCfgDataEntryPtr pData(new CIccCfgDataEntry);
 
     if (nId >= 0 && (size_t)nId < line.size()) {
@@ -2451,76 +2460,81 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       }
     }
 
-    size_t nValueIdx;
-    for (nValueIdx = 0; nValueIdx < samples.size(); nValueIdx++) {
-      if (samples[nValueIdx][0].space == m_space)
+    // The metadata vectors must stay aligned: each group in spaces describes
+    // the sample at the same index, including TINT groups.
+    size_t nValueIdx = samples.size();
+    for (size_t i = 0; i < samples.size() && i < spaces.size(); i++) {
+      if (samples[i][0].space == m_space && strncmp(spaces[i].c_str(), "SRC_", 4)) {
+        nValueIdx = i;
         break;
-    }
-    if (nValueIdx != samples.size()) {
-      for (size_t i = 0; i < samples[nValueIdx].size(); i++) {
-        size_t nPos = samples[nValueIdx][i].nIndex;
-        if (nPos < line.size()) {
-          pData->m_values.push_back((icFloatNumber)atof(line[nPos].c_str()));
-        }
       }
     }
-    else {
-      for (nValueIdx = 0; nValueIdx < spaces.size(); nValueIdx++) {
-        if (strncmp(spaces[nValueIdx].c_str(), "SRC_", 4))
+    if (nValueIdx == samples.size()) {
+      for (size_t i = 0; i < spaces.size() && i < samples.size(); i++) {
+        if (strncmp(spaces[i].c_str(), "SRC_", 4)) {
+          nValueIdx = i;
+          m_space = samples[i][0].space;
           break;
-      }
-      if (nValueIdx != spaces.size() && nValueIdx < samples.size()) {
-        m_space = samples[nValueIdx][0].space;
-        for (size_t j = 0; j < samples[nValueIdx].size(); j++) {
-          size_t nPos = samples[nValueIdx][j].nIndex;
-          if (nPos < line.size()) {
-            pData->m_values.push_back((icFloatNumber)atof(line[nPos].c_str()));
-          }
         }
+      }
+    }
+    // A file with only SRC_ groups has no destination group.  Its data is the
+    // input, as it was before the groups were kept apart; otherwise the tools
+    // would apply the transform to an empty input.
+    if (nValueIdx == samples.size() && !samples.empty()) {
+      nValueIdx = 0;
+      for (size_t i = 0; i < samples.size(); i++) {
+        if (samples[i][0].space == m_space) {
+          nValueIdx = i;
+          break;
+        }
+      }
+      m_space = samples[nValueIdx][0].space;
+    }
+    if (nValueIdx < samples.size()) {
+      for (const auto &sample : samples[nValueIdx]) {
+        if (sample.nIndex >= 0 && (size_t)sample.nIndex < line.size())
+          pData->m_values.push_back((icFloatNumber)atof(line[sample.nIndex].c_str()));
       }
     }
 
-    size_t nSrcIndex;
-    for (nSrcIndex = 0; nSrcIndex < samples.size(); nSrcIndex++) {
-      if (samples[nSrcIndex][0].space == m_srcSpace)
+    size_t nSrcIndex = samples.size();
+    for (size_t i = 0; i < samples.size() && i < spaces.size(); i++) {
+      if (i != nValueIdx && samples[i][0].space == m_srcSpace &&
+          !strncmp(spaces[i].c_str(), "SRC_", 4)) {
+        nSrcIndex = i;
         break;
-    }
-    if (nSrcIndex != samples.size() && nSrcIndex != nValueIdx) {
-      for (size_t i = 0; i < samples[nSrcIndex].size(); i++) {
-        size_t nPos = samples[nSrcIndex][i].nIndex;
-        if (nPos < line.size()) {
-          pData->m_values.push_back((icFloatNumber)atof(line[nPos].c_str()));
-        }
       }
     }
-    else {
-      for (nSrcIndex = 0; nSrcIndex < spaces.size(); nSrcIndex++) {
-        if (!strncmp(spaces[nValueIdx].c_str(), "SRC_", 4))
+    if (nSrcIndex == samples.size()) {
+      for (size_t i = 0; i < spaces.size() && i < samples.size(); i++) {
+        if (i != nValueIdx && !strncmp(spaces[i].c_str(), "SRC_", 4)) {
+          nSrcIndex = i;
           break;
-      }
-      if (nSrcIndex != spaces.size() && nSrcIndex < samples.size()) {
-        m_srcSpace = samples[nSrcIndex][0].space;
-        for (size_t j = 0; j < samples[nValueIdx].size(); j++) {
-          size_t nPos = samples[nValueIdx][j].nIndex;
-          if (nPos < line.size()) {
-            pData->m_srcValues.push_back((icFloatNumber)atof(line[nPos].c_str()));
-          }
         }
       }
-      else {
-        for (nSrcIndex = 0; nSrcIndex < samples.size(); nSrcIndex++) {
-          if (nSrcIndex != nValueIdx)
-            break;
+    }
+    if (nSrcIndex == samples.size()) {
+      for (size_t i = 0; i < samples.size(); i++) {
+        if (i != nValueIdx && samples[i][0].space == m_srcSpace) {
+          nSrcIndex = i;
+          break;
         }
-        if (nSrcIndex < samples.size()) {
-          m_srcSpace = samples[nSrcIndex][0].space;
-          for (size_t j = 0; j < samples[nValueIdx].size(); j++) {
-            size_t nPos = samples[nValueIdx][j].nIndex;
-            if (nPos < line.size()) {
-              pData->m_srcValues.push_back((icFloatNumber)atof(line[nPos].c_str()));
-            }
-          }
+      }
+    }
+    if (nSrcIndex == samples.size()) {
+      for (size_t i = 0; i < samples.size(); i++) {
+        if (i != nValueIdx) {
+          nSrcIndex = i;
+          break;
         }
+      }
+    }
+    if (nSrcIndex < samples.size()) {
+      m_srcSpace = samples[nSrcIndex][0].space;
+      for (const auto &sample : samples[nSrcIndex]) {
+        if (sample.nIndex >= 0 && (size_t)sample.nIndex < line.size())
+          pData->m_srcValues.push_back((icFloatNumber)atof(line[sample.nIndex].c_str()));
       }
     }
 

@@ -83,6 +83,21 @@ std::string doc(int declared, int present)
   return s;
 }
 
+// 256 * 65535 * sizeof(float) fits Reset()'s 64 MiB cap by 1024 bytes;
+// 257 exceeds it. Before the failure was checked, ParseXml kept the tag's
+// 16-byte constructor buffer and the second matrix wrote beyond that buffer.
+std::string overCapDoc(bool fullMatrix)
+{
+  std::string s = "<SparseMatrixArray outputChannels=\"65535\" matrixType=\"1\">";
+  const char *matrix = fullMatrix
+    ? "<FullMatrix rows=\"1\" cols=\"1\">0</FullMatrix>"
+    : "<SparseMatrix rows=\"1\" cols=\"1\"/>";
+  for (int i = 0; i < 257; i++)
+    s += matrix;
+  s += "</SparseMatrixArray>";
+  return s;
+}
+
 bool parse(const std::string &xml, std::string &err)
 {
   xmlDocPtr pDoc = xmlReadMemory(xml.data(), (int)xml.size(), "sparse.xml", NULL, 0);
@@ -113,6 +128,16 @@ int main()
   check(!ok, "two rows declared, three SparseRow: refused");
   check(err.find("More SparseRow elements than SparseMatrix rows") != std::string::npos,
         "two rows declared, three SparseRow: says why");
+
+  err.clear();
+  check(!parse(overCapDoc(false), err), "over-cap SparseMatrix array: refused");
+  check(err.find("Unable to allocate SparseMatrixArray data") != std::string::npos,
+        "over-cap SparseMatrix array: says why");
+
+  err.clear();
+  check(!parse(overCapDoc(true), err), "over-cap FullMatrix array: refused");
+  check(err.find("Unable to allocate SparseMatrixArray data") != std::string::npos,
+        "over-cap FullMatrix array: says why");
 
   xmlCleanupParser();
   if (g_failures)
