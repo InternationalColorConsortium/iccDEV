@@ -26,7 +26,7 @@ Quick start::
     result = cmm.apply([0.5, 0.3, 0.1])
 """
 
-__version__ = "0.1.2"
+__version__ = "2.3.2.5"
 
 from iccdev._iccdev import (
     # Classes
