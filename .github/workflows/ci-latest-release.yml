@@ -2740,6 +2740,27 @@ jobs:
             fi
           done
 
+          for name in \
+            iccdev-macos-clang \
+            iccdev-apple-mobile-core \
+            iccdev-wasm-release; do
+            archive="release-assets/$name.zip"
+            entries="$(unzip -Z1 "$archive")"
+            expected_license='third-party-licenses/nlohmann-json/LICENSE.MIT'
+            if [ "$name" = 'iccdev-macos-clang' ]; then
+              expected_license="iccDEV-Testing/$expected_license"
+            fi
+            if ! grep -Fxq "$expected_license" <<< "$entries"; then
+              echo "::error::$name omits a nonempty nlohmann-json LICENSE.MIT"
+              exit 1
+            fi
+            if ! license_bytes="$(unzip -p "$archive" "$expected_license" | wc -c)" ||
+                [ "$license_bytes" -eq 0 ]; then
+              echo "::error::$name omits a nonempty nlohmann-json LICENSE.MIT"
+              exit 1
+            fi
+          done
+
           for name in iccdev-linux-gcc iccdev-linux-clang; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"

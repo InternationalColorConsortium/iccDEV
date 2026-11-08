@@ -202,6 +202,16 @@ jobs:
             done < "$artifact_manifest"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
+      # preflight: allow-pr-script-execution reason=readonly-apple-artifact-validation
+      - name: Validate Apple mobile core artifact
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          python3 .github/scripts/validate-apple-mobile-core-artifact.py artifacts
+
       # preflight: allow-pr-script-execution reason=native-apple-host-test-only
       - name: Exercise Apple simulator hosts
         if: ${{ !inputs.release-artifact }}
