@@ -55,6 +55,7 @@
 #include <cstdio>
 #include <fstream>
 #include <cstring>
+#include <memory>
 #include <new>
 #include "IccFileUtil.h"
 #if !defined(_WIN32)
@@ -2873,6 +2874,13 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   if (!f)
     return false;
 
+  // Row formatting can allocate and throw; close the file on every exit.
+  const auto closeFile = [](FILE* opened) {
+    if (opened && opened != stdout)
+      fclose(opened);
+  };
+  std::unique_ptr<FILE, decltype(closeFile)> fileGuard(f, closeFile);
+
   fprintf(f, "CGATS.17\n");
   fprintf(f, "ORIGINATOR\t\"iccDEV\"\n");
   fprintf(f, "FILE_DESCRIPTOR\t\"Color Data\"\n");
@@ -2921,7 +2929,6 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
       for (size_t i = 0; i < (size_t)nDstSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_values.size()) ? 0 : pCurEntry->m_values[i];
         if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
-          if (f != stdout) fclose(f);
           return false;
         }
         if (i)
@@ -2943,7 +2950,6 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
       for (size_t i = 0; i < (size_t)nSrcSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_srcValues.size()) ? 0 : pCurEntry->m_srcValues[i];
         if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
-          if (f != stdout) fclose(f);
           return false;
         }
         if (i)
@@ -2956,7 +2962,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   }
   fprintf(f, "END_DATA\n");
 
-  if (!icFlushAndClose(f))
+  if (!icFlushAndClose(fileGuard.release()))
     return false;
 
   return true;

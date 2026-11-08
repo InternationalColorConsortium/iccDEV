@@ -53,6 +53,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <new>
+#include <limits>
+#include <memory>
 #include "IccTagProfSeqId.h"
 #include "IccUtil.h"
 #include "IccIO.h"
@@ -271,10 +273,9 @@ bool CIccProfileIdDesc::Read(icUInt32Number size, CIccIO *pIO)
 */
 bool CIccProfileIdDesc::Write(CIccIO *pIO)
 {
-  pIO->Write8(&m_profileID, sizeof(icProfileID));
-  m_desc.Write(pIO);
-
-  return true;
+  return pIO &&
+         pIO->Write8(&m_profileID, sizeof(icProfileID)) == sizeof(icProfileID) &&
+         m_desc.Write(pIO);
 }
 
 
@@ -527,7 +528,13 @@ bool CIccTagProfileSequenceId::Write(CIccIO *pIO)
   if (!pIO)
     return false;
 
-  size_t tagStart = pIO->Tell();
+  if (m_list->size() > (std::numeric_limits<icUInt32Number>::max)())
+    return false;
+  icUInt32Number count = (icUInt32Number)m_list->size();
+
+  int64_t tagStart = pIO->Tell();
+  if (tagStart < 0)
+    return false;
 
   if (!pIO->Write32(&sig))
     return false;
@@ -535,50 +542,64 @@ bool CIccTagProfileSequenceId::Write(CIccIO *pIO)
   if (!pIO->Write32(&m_nReserved))
     return false;
 
-  icUInt32Number i, count = (icUInt32Number)m_list->size();
-
-  pIO->Write32(&count);
-
-  icPositionNumber *pos = new (std::nothrow) icPositionNumber[count];
-  if (!pos)
+  if (!pIO->Write32(&count))
     return false;
 
-  size_t dirpos = pIO->Tell();
+  std::unique_ptr<icPositionNumber[]> pos(
+    count ? new (std::nothrow) icPositionNumber[count] : NULL);
+  if (count && !pos)
+    return false;
+
+  int64_t dirpos = pIO->Tell();
+  if (dirpos < 0)
+    return false;
 
   //Write Unintialized TagDir
-  for (i=0; i<count; i++) {
+  for (icUInt32Number i=0; i<count; i++) {
     pos[i].offset = 0;
     pos[i].size = 0;
-    pIO->Write32(&pos[i].offset);
-    pIO->Write32(&pos[i].size);
+    if (!pIO->Write32(&pos[i].offset) || !pIO->Write32(&pos[i].size))
+      return false;
   }
 
   CIccProfileIdDescList::iterator j;
 
   //Write Tags
+  icUInt32Number i;
   for (i=0, j=m_list->begin(); j!= m_list->end(); i++, j++) {
-    pos[i].offset = (icUInt32Number)pIO->Tell();
+    int64_t start = pIO->Tell();
+    if (start < tagStart ||
+        (uint64_t)(start - tagStart) > (std::numeric_limits<icUInt32Number>::max)())
+      return false;
 
-    j->Write(pIO);
-    pos[i].size = (icUInt32Number)(pIO->Tell() - pos[i].offset);
-    pos[i].offset -= tagStart;
+    if (!j->Write(pIO))
+      return false;
+    int64_t end = pIO->Tell();
+    if (end < start ||
+        (uint64_t)(end - start) > (std::numeric_limits<icUInt32Number>::max)())
+      return false;
+    pos[i].offset = (icUInt32Number)(start - tagStart);
+    pos[i].size = (icUInt32Number)(end - start);
 
-    pIO->Align32();
+    if (!pIO->Align32())
+      return false;
   }
 
-  size_t endpos = pIO->Tell();
+  int64_t endpos = pIO->Tell();
+  if (endpos < 0)
+    return false;
 
-  pIO->Seek(dirpos, icSeekSet);
+  if (pIO->Seek(dirpos, icSeekSet) < 0)
+    return false;
 
   //Write TagDir with offsets and sizes
   for (i=0; i<count; i++) {
-    pIO->Write32(&pos[i].offset);
-    pIO->Write32(&pos[i].size);
+    if (!pIO->Write32(&pos[i].offset) || !pIO->Write32(&pos[i].size))
+      return false;
   }
 
-  pIO->Seek(endpos, icSeekSet);
-  
-  delete[] pos;
+  if (pIO->Seek(endpos, icSeekSet) < 0)
+    return false;
 
   return true;
 }

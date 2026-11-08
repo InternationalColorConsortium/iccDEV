@@ -641,6 +641,11 @@ jobs:
             --require-test iccdev.applyprofiles-headless-receipts `
             --require-test iccdev.applyprofiles-matrix-contracts `
             --require-test iccdev.applyprofiles-evidence-matrix `
+            --require-test iccdev.tag-count-contract `
+            --require-test iccdev.sparsematrix-array-copy `
+            --require-test iccdev.clut-describe-bounds `
+            --require-test iccdev.profile-flags-name `
+            --require-test iccdev.namedcolor-array-default `
             --output-junit ctest-results.xml `
             --selection-output build\recent-ctests.txt
           if ($LASTEXITCODE -ne 0) {
@@ -933,6 +938,11 @@ jobs:
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
+            '--require-test', 'iccdev.tag-count-contract',
+            '--require-test', 'iccdev.sparsematrix-array-copy',
+            '--require-test', 'iccdev.clut-describe-bounds',
+            '--require-test', 'iccdev.profile-flags-name',
+            '--require-test', 'iccdev.namedcolor-array-default',
             '--output-junit', 'ctest-results.xml',
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           ) 2>&1 | Tee-Object -FilePath $checkLog -Append
@@ -1371,6 +1381,11 @@ jobs:
             '--require-test', 'iccdev.applyprofiles-headless-receipts',
             '--require-test', 'iccdev.applyprofiles-matrix-contracts',
             '--require-test', 'iccdev.applyprofiles-evidence-matrix',
+            '--require-test', 'iccdev.tag-count-contract',
+            '--require-test', 'iccdev.sparsematrix-array-copy',
+            '--require-test', 'iccdev.clut-describe-bounds',
+            '--require-test', 'iccdev.profile-flags-name',
+            '--require-test', 'iccdev.namedcolor-array-default',
             '--output-junit', (Join-Path $buildDir 'ctest-results.xml'),
             '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           )

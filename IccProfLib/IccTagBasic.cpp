@@ -54,6 +54,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <new>
 #include <climits>
 #include "IccTag.h"
@@ -3143,7 +3144,7 @@ CIccTagNamedColor2::CIccTagNamedColor2(int nSize/*=1*/, int nDeviceCoords/*=0*/)
 
   m_nColorEntrySize = 32/*rootName*/ + (3/*PCS*/ + 1/*iAny*/ + nDeviceCoords)*sizeof(icFloatNumber);
 
-  m_NamedColor = (SIccNamedColorEntry*)calloc(nSize, m_nColorEntrySize);
+  m_NamedColor = (SIccNamedColorEntry*)calloc(m_nSize, m_nColorEntrySize);
   if (!m_NamedColor)
     m_nSize = 0;
 
@@ -4041,10 +4042,10 @@ icValidateStatus CIccTagNamedColor2::Validate(std::string sigPath, std::string &
  */
 CIccTagXYZ::CIccTagXYZ(int nSize/*=1*/)
 {
-  m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_XYZ = (icXYZNumber*)calloc(nSize, sizeof(icXYZNumber));
+  m_nSize = nSize < 1 ? 1 : nSize;
+  m_XYZ = (icXYZNumber*)calloc(m_nSize, sizeof(icXYZNumber));
+  if (!m_XYZ)
+    m_nSize = 0;
 }
 
 
@@ -5185,6 +5186,7 @@ CIccTagSparseMatrixArray &CIccTagSparseMatrixArray::operator=(const CIccTagSpars
 
   m_nSize = ITSMA.m_nSize;
   m_nChannelsPerMatrix = ITSMA.m_nChannelsPerMatrix;
+  m_nMatrixType = ITSMA.m_nMatrixType;
 
   free(m_RawData);
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
@@ -5997,10 +5999,8 @@ bool CIccTagSparseMatrixArray::ValuePos(icFloatNumber & /* DstPos */, icFloatNum
 template <class T, icTagTypeSignature Tsig>
 CIccTagFixedNum<T, Tsig>::CIccTagFixedNum(int nSize/*=1*/)
 {
-  m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_Num = (T*)calloc(nSize, sizeof(T));
+  m_nSize = nSize < 1 ? 1 : nSize;
+  m_Num = (T*)calloc(m_nSize, sizeof(T));
   if (!m_Num)
     m_nSize = 0;
 }
@@ -6482,10 +6482,8 @@ template class CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType>;
 template <class T, icTagTypeSignature Tsig>
 CIccTagNum<T, Tsig>::CIccTagNum(int nSize/*=1*/)
 {
-  m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_Num = (T*)calloc(nSize, sizeof(T));
+  m_nSize = nSize < 1 ? 1 : nSize;
+  m_Num = (T*)calloc(m_nSize, sizeof(T));
   if (!m_Num)
     m_nSize = 0;
 }
@@ -7125,10 +7123,8 @@ template class CIccTagNum<icUInt64Number, icSigUInt64ArrayType>;
 template <class T, icTagTypeSignature Tsig>
 CIccTagFloatNum<T, Tsig>::CIccTagFloatNum(int nSize/*=1*/)
 {
-  m_nSize = nSize;
-  if (m_nSize <1)
-    m_nSize = 1;
-  m_Num = (T*)calloc(nSize, sizeof(T));
+  m_nSize = nSize < 1 ? 1 : nSize;
+  m_Num = (T*)calloc(m_nSize, sizeof(T));
   if (!m_Num)
     m_nSize = 0;
 }
@@ -9630,10 +9626,8 @@ icValidateStatus CIccTagDateTime::Validate(std::string sigPath, std::string &sRe
  */
 CIccTagColorantOrder::CIccTagColorantOrder(int nsize/*=1*/)
 {
-  m_nCount = nsize;
-  if (m_nCount <1)
-    m_nCount = 1;
-  m_pData = (icUInt8Number*)calloc(nsize, sizeof(icUInt8Number));
+  m_nCount = nsize < 1 ? 1 : nsize;
+  m_pData = (icUInt8Number*)calloc(m_nCount, sizeof(icUInt8Number));
   if (!m_pData)
     m_nCount = 0;
 }
@@ -9941,11 +9935,9 @@ CIccTagColorantTable::CIccTagColorantTable(int nSize/*=1*/)
   // PCS. Lab preserves Describe()'s historical fallback; CIccProfile replaces
   // it with the profile PCS when attaching or loading colorantTableTag.
   m_PCS = icSigLabData;
-  m_nCount = nSize;
-  if (m_nCount<1)
-    m_nCount = 1;
+  m_nCount = nSize < 1 ? 1 : nSize;
 
-  m_pData = (icColorantTableEntry*)calloc(nSize, sizeof(icColorantTableEntry));
+  m_pData = (icColorantTableEntry*)calloc(m_nCount, sizeof(icColorantTableEntry));
   if (!m_pData)
     m_nCount = 0;
 }
@@ -10769,6 +10761,8 @@ bool CIccProfileDescText::Write(CIccIO *pIO)
  *****************************************************************************
  */
 CIccProfileDescStruct::CIccProfileDescStruct()
+  : m_deviceMfg(0), m_deviceModel(0), m_attributes(0),
+    m_technology(icSigUndefined)
 {
 }
 
@@ -11615,6 +11609,8 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
 
+  if (!pIO)
+    return false;
   size_t startPos = pIO->Tell();
 
   unsigned long headerSize = sizeof(icTagTypeSignature) +
@@ -11623,10 +11619,6 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
   if (headerSize > size)
     return false;
 
-  if (!pIO) {
-    return false;
-  }
- 
   if (!pIO->Read32(&sig) ||
       !pIO->Read32(&m_nReserved))
     return false;
@@ -11640,12 +11632,14 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
   if ((icUInt32Number)nCountMeasmntTypes * sizeof(icUInt32Number) > size - headerSize)
     return false;
 
-  icUInt32Number* nOffset = new (std::nothrow) icUInt32Number[nCountMeasmntTypes];
-  if (!nOffset)
+  std::unique_ptr<icUInt32Number[]> nOffset(
+    nCountMeasmntTypes ? new (std::nothrow) icUInt32Number[nCountMeasmntTypes]
+                      : NULL);
+  if (nCountMeasmntTypes && !nOffset)
     return false;
 
-  if (pIO->Read32(&nOffset[0], nCountMeasmntTypes) != nCountMeasmntTypes) {
-    delete[] nOffset;
+  if (nCountMeasmntTypes &&
+      pIO->Read32(nOffset.get(), nCountMeasmntTypes) != nCountMeasmntTypes) {
     return false;
   }
 
@@ -11653,7 +11647,6 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
 
   for (icUInt16Number i=0; i<nCountMeasmntTypes; i++) {
     if ( (nOffset[i] + (size_t)4) > size) {
-      delete[] nOffset;
       return false;
     }
     // nOffset[i] is TAG-RELATIVE and is already bounded against the tag length by the
@@ -11667,21 +11660,17 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
     // exceeds its length, which is true of essentially every real tag.
     size_t offsetCalc = startPos + nOffset[i];
     if (offsetCalc > 0xFFFFFFFFULL) {
-      delete[] nOffset;
       return false;
     }
-    pIO->Seek(startPos + nOffset[i], icSeekSet);
+    if (pIO->Seek(startPos + nOffset[i], icSeekSet) < 0)
+      return false;
     entry = CIccResponseCurveStruct(m_nChannels);
     if (!entry.Read(size-nOffset[i], pIO)) {
-      delete[] nOffset;
       return false;
     }
 
     m_ResponseCurves->push_back(entry);
   }
-  delete[] nOffset;
-
-
   m_Curve->inited = false;
 
   return true;
@@ -11723,8 +11712,10 @@ bool CIccTagResponseCurveSet16::Write(CIccIO *pIO)
     return false;
 
   size_t offsetPos = pIO->GetLength();
-  icUInt32Number* nOffset = new (std::nothrow) icUInt32Number[nCountMeasmntTypes];
-  if (!nOffset)
+  std::unique_ptr<icUInt32Number[]> nOffset(
+    nCountMeasmntTypes ? new (std::nothrow) icUInt32Number[nCountMeasmntTypes]
+                      : NULL);
+  if (nCountMeasmntTypes && !nOffset)
     return false;
 
   int j;
@@ -11737,22 +11728,27 @@ bool CIccTagResponseCurveSet16::Write(CIccIO *pIO)
   CIccResponseCurveSet::iterator i;
 
   for (i=m_ResponseCurves->begin(), j=0; i!=m_ResponseCurves->end(); i++, j++) {
-    nOffset[j] = (icUInt32Number)(pIO->GetLength() - startPos);
+    size_t currentPos = pIO->GetLength();
+    if (currentPos < startPos ||
+        currentPos - startPos > (std::numeric_limits<icUInt32Number>::max)())
+      return false;
+    nOffset[j] = (icUInt32Number)(currentPos - startPos);
     if (!i->Write(pIO))
       return false;
   }
 
-  size_t curPOs = pIO->GetLength();
+  size_t endPos = pIO->GetLength();
 
-  pIO->Seek(offsetPos,icSeekSet);
+  if (pIO->Seek(offsetPos,icSeekSet)<0)
+    return false;
 
   for (j=0; j<nCountMeasmntTypes; j++) {
     if (!pIO->Write32(&nOffset[j]))
       return false;
   }
 
-  pIO->Seek(curPOs,icSeekSet);
-  delete [] nOffset;
+  if (pIO->Seek(endPos,icSeekSet)<0)
+    return false;
 
   return true;
 }

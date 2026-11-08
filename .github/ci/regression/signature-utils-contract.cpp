@@ -209,6 +209,88 @@ void testMcsNamingStillHolds()
         "CIccInfo::GetColorSpaceSigName keeps the MCS context");
 }
 
+typedef const icChar *(*SigFormatter)(icChar *, size_t, icUInt32Number);
+
+const icChar *format16bitSig(icChar *buf, size_t size, icUInt32Number sig)
+{
+  return icGet16bitSig(buf, size, (icUInt16Number)sig);
+}
+
+const icChar *formatSig(icChar *buf, size_t size, icUInt32Number sig)
+{
+  return icGetSig(buf, size, sig);
+}
+
+const icChar *formatSigStr(icChar *buf, size_t size, icUInt32Number sig)
+{
+  return icGetSigStr(buf, size, sig);
+}
+
+const icChar *formatColorSig(icChar *buf, size_t size, icUInt32Number sig)
+{
+  return icGetColorSig(buf, size, sig);
+}
+
+const icChar *formatColorSigStr(icChar *buf, size_t size, icUInt32Number sig)
+{
+  return icGetColorSigStr(buf, size, sig);
+}
+
+void testSmallFormatterBuffers()
+{
+  const struct {
+    const char *name;
+    SigFormatter format;
+  } formatters[] = {
+    {"icGet16bitSig", format16bitSig},
+    {"icGetSig", formatSig},
+    {"icGetSigStr", formatSigStr},
+    {"icGetColorSig", formatColorSig},
+    {"icGetColorSigStr", formatColorSigStr},
+  };
+
+  for (const auto &formatter : formatters) {
+    for (icUInt32Number sig : {0U, 0x41424344U}) {
+      for (size_t size=0; size<=6; size++) {
+        char bytes[9];
+        std::memset(bytes, '#', sizeof(bytes));
+        char *buf = bytes + 1;
+        const char *result = formatter.format(buf, size, sig);
+        bool valid = bytes[0] == '#' && bytes[size + 1] == '#';
+        if (size)
+          valid = valid && result == buf && std::memchr(buf, '\0', size);
+        else
+          valid = valid && !result;
+        if (!valid) {
+          ++g_fail;
+          std::fprintf(stderr,
+                       "[signature-utils-contract] FAIL: %s size=%zu sig=%08X\n",
+                       formatter.name, size, sig);
+        }
+      }
+      check(formatter.format(NULL, 0, sig) == NULL &&
+            formatter.format(NULL, 6, sig) == NULL,
+            "null signature-formatting buffer is rejected");
+    }
+    char buf[32];
+    check(formatter.format(buf, sizeof(buf), 0) == buf &&
+          std::strcmp(buf, "NULL") == 0,
+          "zero signature keeps the NULL display convention");
+  }
+}
+
+void testProfileDescDefaults()
+{
+  CIccProfileDescStruct entry;
+  check(entry.m_deviceMfg == 0 && entry.m_deviceModel == 0 &&
+        entry.m_attributes == 0 && entry.m_technology == icSigUndefined,
+        "default profile description initializes scalar fields");
+  CIccProfileDescStruct copy(entry);
+  check(copy.m_deviceMfg == 0 && copy.m_deviceModel == 0 &&
+        copy.m_attributes == 0 && copy.m_technology == icSigUndefined,
+        "copying a default profile description preserves initialized fields");
+}
+
 // --- 7. The technology signature lists, which drifted the way section 4 guards against. ---
 // FOUR places carry technology-signature knowledge and none of them consulted the others:
 //
@@ -480,6 +562,8 @@ int main()
   testAgreement();
   testSpectralPcs();
   testMcsNamingStillHolds();
+  testSmallFormatterBuffers();
+  testProfileDescDefaults();
   testTechnologySignatures();
   testValidateTechnologyRows();
 
