@@ -548,13 +548,16 @@ def test_release_summary_reports_outcomes_and_sanitizes_assets(
         env={**os.environ, "BASH_ENV": "/dev/null", "GITHUB_RUN_ID": "1234",
              "GITHUB_RUN_ATTEMPT": "2", "GITHUB_SHA": "abcdef1234567890",
              "GITHUB_STEP_SUMMARY": output.as_posix(), "RELEASE_OUTCOME": release_outcome,
-             "ATTESTATION_OUTCOME": attestation_outcome},
+             "ATTESTATION_OUTCOME": attestation_outcome,
+             "PYPI_REQUESTED": "iccdev\n### forged selection"},
     )
     assert result.returncode == 0, result.stdout + result.stderr
     content = output.read_text(encoding="ascii")
     assert f"Release publication: {release_outcome}" in content
     assert f"Artifact attestation: {attestation_outcome}" in content
     assert f"Assets staged: {2 if with_assets else 0} package files" in content
+    assert "PyPI selection: iccdev ### forged selection" in content
+    assert "\n### forged selection" not in content
     assert "[link]" not in content
     assert "<script>" not in content
     assert "\x1b" not in content

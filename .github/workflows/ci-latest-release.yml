@@ -3552,6 +3552,25 @@ jobs:
             sanitize_line() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9 ._:/#=-'; }
             sanitize_filename() { printf '%s' "$1" | LC_ALL=C tr -cd 'A-Za-z0-9._-'; }
           fi
+          # Keep dynamic values on their assigned summary line before batching
+          # the expensive sanitizer work for Windows ARM64 Git Bash.
+          summary_fields=(
+            RELEASE_OUTCOME ATTESTATION_OUTCOME OIDC_GATE_OUTCOME OIDC_PLAN_BLOCKED
+            OIDC_PLAN_ATTEMPT OIDC_PLAN_CURRENT PYPI_REQUESTED NPM_REQUESTED
+            PYPI_ICCDEV_ELIGIBLE PYPI_MCP_ELIGIBLE NPM_ICCDEV_ELIGIBLE
+            PYPI_ICCDEV_REASON PYPI_MCP_REASON NPM_ICCDEV_REASON
+            PYPI_ICCDEV_TARGET PYPI_MCP_TARGET NPM_ICCDEV_TARGET
+            PYPI_ICCDEV_TARGET_REASON PYPI_MCP_TARGET_REASON NPM_ICCDEV_TARGET_REASON
+            PYPI_ICCDEV_OUTCOME PYPI_MCP_OUTCOME NPM_ICCDEV_OUTCOME
+            PYTHON_SETUP_OUTCOME PYPI_ICCDEV_VERIFY_OUTCOME
+            PYPI_MCP_VERIFY_OUTCOME NPM_ICCDEV_VERIFY_OUTCOME
+          )
+          for field in "${summary_fields[@]}"; do
+            value="${!field-}"
+            value="${value//$'\r'/ }"
+            value="${value//$'\n'/ }"
+            printf -v "$field" '%s' "$value"
+          done
           release_tag="ci-latest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
           asset_count=0
           for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm release-assets/*.whl release-assets/*.tar.gz; do
@@ -3589,10 +3608,20 @@ jobs:
               [ -f "$f" ] || continue
               printf '  - %s\n' "$(sanitize_filename "$(basename "$f")")"
             done
-          } | while IFS= read -r line; do
-            sanitize_line "$line"
-            printf '\n'
-          done >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          } | {
+            if [[ -f .github/scripts/sanitize-sed.sh ]]; then
+              summary="$(cat)"
+              # Include the complete 36-wheel inventory and other release assets.
+              SANITIZE_PRINT_MAXLEN=65536
+              sanitize_print "$summary"
+              printf '\n'
+            else
+              while IFS= read -r line; do
+                sanitize_line "$line"
+                printf '\n'
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   downstream-selection-rejected:
     name: Selected downstream publication incomplete
