@@ -11703,12 +11703,13 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
  */
 bool CIccTagResponseCurveSet16::Write(CIccIO *pIO)
 {
-  icTagTypeSignature sig = GetType();
-  icUInt16Number nCountMeasmntTypes = (icUInt16Number)m_ResponseCurves->size();
-
-  if (!pIO) {
+  if (!pIO || !m_ResponseCurves ||
+      m_ResponseCurves->size() > (std::numeric_limits<icUInt16Number>::max)()) {
     return false;
   }
+
+  icTagTypeSignature sig = GetType();
+  icUInt16Number nCountMeasmntTypes = (icUInt16Number)m_ResponseCurves->size();
 
   size_t startPos = pIO->GetLength();
 
