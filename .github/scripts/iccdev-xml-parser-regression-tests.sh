@@ -1014,6 +1014,98 @@ PY
   pass "$name (65536 channels refused at the count, no signal)"
 }
 
+responsecurve_65536_measurement_types() {
+  local name="xml-responsecurve-65536-measurement-types"
+  local control="$OUTDIR/resp-measurement-types-control.xml"
+  local boundary="$OUTDIR/resp-measurement-types-65535.xml"
+  local file="$OUTDIR/resp-measurement-types-65536.xml"
+  local control_icc="$OUTDIR/resp-measurement-types-control.icc"
+  local boundary_icc="$OUTDIR/resp-measurement-types-65535.icc"
+  local output_icc="$OUTDIR/resp-measurement-types-65536.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local boundary_log="$OUTDIR/${name}-boundary.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  # ICC.1:2022 Table 73 encodes the number of response-curve measurement types
+  # as uInt16. The XML parser used to append every ResponseCurve without that
+  # bound; Write then narrowed 65536 to zero, allocated no offsets, and wrote
+  # nOffset[0] while traversing the full list (IccTagBasic.cpp:11739).
+  write_countofchannels_document "$control" "<CountOfChannels>1</CountOfChannels>"
+  rm -f "$control_icc" "$boundary_icc" "$output_icc"
+  if ! "$FROMXML" "$control" "$control_icc" >"$logfile" 2>&1 || [ ! -s "$control_icc" ]; then
+    fail "$name" "the one-curve control did not produce a profile"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+
+  if ! python3 - "$control" "$boundary" "$file" <<'PY'
+from pathlib import Path
+import sys
+
+control = Path(sys.argv[1]).read_text(encoding="utf-8")
+start_marker = '      <ResponseCurve MeasUnitSignature="Status A">'
+end_marker = '      </ResponseCurve>\n'
+start = control.index(start_marker)
+end = control.index(end_marker, start) + len(end_marker)
+curve = control[start:end]
+for count, path in ((65535, sys.argv[2]), (65536, sys.argv[3])):
+    Path(path).write_text(
+        control[:start] + curve * count + control[end:], encoding="utf-8"
+    )
+PY
+  then
+    fail "$name" "could not generate the boundary documents"
+    return
+  fi
+
+  if ! "$FROMXML" "$boundary" "$boundary_icc" >"$boundary_log" 2>&1 ||
+     [ ! -s "$boundary_icc" ]; then
+    fail "$name" "the 65535-curve boundary did not produce a profile"
+    return
+  fi
+  check_sanitizers "$name" "$boundary_log" || return
+  if ! python3 - "$boundary_icc" <<'PY'
+from pathlib import Path
+import sys
+
+profile = Path(sys.argv[1]).read_bytes()
+tags = int.from_bytes(profile[128:132], "big")
+entries = (profile[132 + 12 * i:144 + 12 * i] for i in range(tags))
+resp = next((entry for entry in entries if entry[:4] == b"resp"), None)
+if resp is None:
+    raise SystemExit(1)
+offset = int.from_bytes(resp[4:8], "big")
+raise SystemExit(0 if profile[offset + 10:offset + 12] == b"\xff\xff" else 1)
+PY
+  then
+    fail "$name" "the 65535-curve profile has the wrong encoded count"
+    return
+  fi
+
+  "$FROMXML" "$file" "$output_icc" >"$logfile" 2>&1
+  local status=$?
+  if [ "$status" -eq 0 ] || [ "$status" -ge 128 ]; then
+    fail "$name" "iccFromXml exited $status instead of refusing gracefully"
+    return
+  fi
+  if ! grep -Fq "Too many ResponseCurve entries in responseCurveSet16Type" "$logfile"; then
+    fail "$name" "refusal did not come from the response-curve count guard"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  # SaveIccProfile opens the destination before Write; failed writes can leave
+  # an empty file. They must not emit a usable or partial ICC profile.
+  if [ -s "$output_icc" ]; then
+    fail "$name" "iccFromXml emitted a nonempty profile after refusing the tag"
+    return
+  fi
+  pass "$name (1 and 65535 curves convert; 65536 fail without a profile)"
+}
+
 echo
 echo "=== responseCurveSet16 CountOfChannels (issues #2397, #2398, #2399) ==="
 
@@ -1025,6 +1117,7 @@ measurement_devicecode_overflow
 responsecurve_profile_reads_back
 measurement_reserved_not_inherited
 countofchannels_65536_channel_write
+responsecurve_65536_measurement_types
 
 ###############################################################################
 

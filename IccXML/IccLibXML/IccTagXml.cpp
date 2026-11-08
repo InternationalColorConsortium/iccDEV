@@ -3424,6 +3424,12 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string &parseSt
 
   for (pNode = pNode->next; pNode; pNode = pNode->next) {
     if (pNode->type==XML_ELEMENT_NODE && !icXmlStrCmp(pNode->name, "ResponseCurve")) {
+      // ICC.1 Table 73 stores the number of measurement types in uInt16.
+      // Refuse the next curve before the count can wrap in Write().
+      if (m_ResponseCurves->size() >= 0xffff) {
+        parseStr += "Too many ResponseCurve entries in responseCurveSet16Type\n";
+        return false;
+      }
       const icChar *szMeasurmentType = icXmlAttrValue(pNode, "MeasUnitSignature");
 
       if (nChannels != icXmlNodeCount(pNode->children, "ChannelResponses"))

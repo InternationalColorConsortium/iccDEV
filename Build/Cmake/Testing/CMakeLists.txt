@@ -2781,6 +2781,76 @@ function(iccdev_add_xml_lut_curve_count_test)
   endif()
 endfunction()
 
+function(iccdev_add_responsecurve_write_count_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccResponseCurveWriteCountTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/responsecurve-write-count.cpp"
+  )
+  target_compile_features(iccResponseCurveWriteCountTest PRIVATE cxx_std_17)
+  target_link_libraries(iccResponseCurveWriteCountTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_test(
+    NAME iccdev.responsecurve-write-count
+    COMMAND "$<TARGET_FILE:iccResponseCurveWriteCountTest>"
+  )
+  set_tests_properties(iccdev.responsecurve-write-count PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;responsecurve;security;regression"
+  )
+  if(WIN32)
+    set(_responsecurve_write_count_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccResponseCurveWriteCountTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _responsecurve_write_count_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.responsecurve-write-count PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_responsecurve_write_count_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_lut_read_reuse_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccLutReadReuseTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/lut-read-reuse.cpp"
+  )
+  target_compile_features(iccLutReadReuseTest PRIVATE cxx_std_17)
+  target_link_libraries(iccLutReadReuseTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_test(
+    NAME iccdev.lut-read-reuse
+    COMMAND "$<TARGET_FILE:iccLutReadReuseTest>"
+  )
+  set_tests_properties(iccdev.lut-read-reuse PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;lut;issue-3012;issue-3014;regression"
+  )
+  if(WIN32)
+    set(_lut_read_reuse_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccLutReadReuseTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _lut_read_reuse_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.lut-read-reuse PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_lut_read_reuse_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_lut_stage_combinations_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13594,6 +13664,8 @@ if(WIN32)
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_xml_text_long_roundtrip_test()
   iccdev_add_xml_lut_curve_count_test()
+  iccdev_add_responsecurve_write_count_test()
+  iccdev_add_lut_read_reuse_test()
   iccdev_add_lut_stage_combinations_test()
   iccdev_add_hex_data_malformed_xml_test()
   iccdev_add_xml_strict_numeric_attrs_test()
@@ -14191,6 +14263,8 @@ iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_xml_text_long_roundtrip_test()
 iccdev_add_xml_lut_curve_count_test()
+iccdev_add_responsecurve_write_count_test()
+iccdev_add_lut_read_reuse_test()
 iccdev_add_lut_stage_combinations_test()
 iccdev_add_hex_data_malformed_xml_test()
 iccdev_add_xml_strict_numeric_attrs_test()

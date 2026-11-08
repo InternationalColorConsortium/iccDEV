@@ -2057,6 +2057,13 @@ bool CIccTagJsonResponseCurveSet16::ParseJson(const IccJson &j, std::string &par
   if (!jsonExistsField(j, "ResponseCurves") || !j["ResponseCurves"].is_array())
     return true;
 
+  // ICC.1 Table 73 stores this count in uInt16. Check it before constructing
+  // the list so Write() cannot narrow 65536 entries to zero.
+  if (j["ResponseCurves"].size() > 0xffff) {
+    parseStr += "Too many ResponseCurves in ResponseCurveSet16\n";
+    return false;
+  }
+
   for (const IccJson &jCurve : j["ResponseCurves"]) {
     std::string measUnit;
     jGetString(jCurve, "MeasurementUnit", measUnit);

@@ -1032,6 +1032,23 @@ write_responsecurve_json "$OUTDIR/responsecurve-count-overflow.json" 65537 1
 write_responsecurve_json "$OUTDIR/responsecurve-devicecode-overflow.json" 1 65537
 write_responsecurve_json "$OUTDIR/responsecurve-devicecode-negative.json" 1 -1
 
+# The number of ResponseCurves is a separate uInt16 field in ICC.1 Table 73.
+# Keep the maximum accepted value and the first unrepresentable value adjacent
+# so a blanket refusal or a reintroduced count wrap cannot satisfy this case.
+python3 - "$OUTDIR/responsecurve-control.json" "$OUTDIR" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+control = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+data = control["Tags"][0]["outputResponseTag"]["data"]
+curve = data["ResponseCurves"][0]
+for count in (65535, 65536):
+    data["ResponseCurves"] = [curve] * count
+    path = Path(sys.argv[2]) / f"responsecurve-types-{count}.json"
+    path.write_text(json.dumps(control, separators=(",", ":")), encoding="utf-8")
+PY
+
 python3 -c '
 import copy
 import json
@@ -1175,6 +1192,8 @@ run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "
 # responseCurveSet16Type document would satisfy all three reject cases below while
 # removing the guards they exist to pin.
 run_fromjson_success_test "responsecurve-control" "$OUTDIR/responsecurve-control.json"
+run_fromjson_success_test "responsecurve-types-65535" "$OUTDIR/responsecurve-types-65535.json"
+run_reject_test "responsecurve-types-65536" "$OUTDIR/responsecurve-types-65536.json" "Too many ResponseCurves in ResponseCurveSet16"
 run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-overflow.json" "Missing or invalid CountOfChannels in ResponseCurveSet16"
 run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
 run_reject_test "responsecurve-devicecode-negative" "$OUTDIR/responsecurve-devicecode-negative.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"

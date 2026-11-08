@@ -4033,6 +4033,7 @@ bool CIccMBB::Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels)
   Cleanup();
   m_nInput = nInputChannels;
   m_nOutput = nOutputChannels;
+  m_bUseMCurvesAsBCurves = false;
   return true;
 }
 
@@ -4736,6 +4737,9 @@ CIccTagLutAtoB::~CIccTagLutAtoB()
 bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
+  icUInt32Number reserved;
+  icUInt16Number reservedWord;
+  icUInt8Number nInput, nOutput;
   icUInt32Number Offset[5];
   icUInt8Number nCurves, i;
   size_t nPos;
@@ -4748,10 +4752,10 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   size_t nEnd = nStart + size;
 
   if (!pIO->Read32(&sig) ||
-      !pIO->Read32(&m_nReserved) ||
-      !pIO->Read8(&m_nInput) ||
-      !pIO->Read8(&m_nOutput) ||
-      !pIO->Read16(&m_nReservedWord) ||
+      !pIO->Read32(&reserved) ||
+      !pIO->Read8(&nInput) ||
+      !pIO->Read8(&nOutput) ||
+      !pIO->Read16(&reservedWord) ||
       pIO->Read32(Offset, 5)!=5)
     return false;
 
@@ -4759,11 +4763,11 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   // must have at least 1 input and 1 output
-  if (m_nInput < 1 || m_nOutput < 1)
+  if (nInput < 1 || nOutput < 1)
     return false;
 
   // and the current limit is for 15 channels
-  if (m_nInput > 15 || m_nOutput > 15)
+  if (nInput > 15 || nOutput > 15)
     return false;
 
   // Every Offset[] field is attacker-controlled. Validate each in u64
@@ -4776,6 +4780,14 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
     if (Offset[oi] && static_cast<icUInt64Number>(Offset[oi]) > size)
       return false;
   }
+
+  // NewCurvesA/B/M reuse their existing arrays. Release the previous tag while
+  // its old channel counts still describe those allocations, then install the
+  // counts from this header before creating any new stages.
+  if (!Init(nInput, nOutput))
+    return false;
+  m_nReserved = reserved;
+  m_nReservedWord = reservedWord;
 
   //B Curves
   if (Offset[0]) {
@@ -5376,6 +5388,9 @@ CIccTagLut8::~CIccTagLut8()
 bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
+  icUInt32Number reserved;
+  icUInt8Number nInput, nOutput, reservedByte;
+  icS15Fixed16Number xyzMatrix[9];
   icUInt8Number i, nGrid;
   LPIccCurve *pCurves;
   CIccTagCurve *pCurve;
@@ -5388,24 +5403,30 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
   size_t nEnd = nStart + size;
  
   if (!pIO->Read32(&sig) ||
-      !pIO->Read32(&m_nReserved) ||
-      !pIO->Read8(&m_nInput) ||
-      !pIO->Read8(&m_nOutput) ||
+      !pIO->Read32(&reserved) ||
+      !pIO->Read8(&nInput) ||
+      !pIO->Read8(&nOutput) ||
       !pIO->Read8(&nGrid) ||
-      !pIO->Read8(&m_nReservedByte) ||
-      pIO->Read32(m_XYZMatrix, 9) != 9)
+      !pIO->Read8(&reservedByte) ||
+      pIO->Read32(xyzMatrix, 9) != 9)
     return false;
 
   if (sig!=GetType())
     return false;
 
   // must have at least 1 input and 1 output
-  if (m_nInput < 1 || m_nOutput < 1)
+  if (nInput < 1 || nOutput < 1)
     return false;
 
   // and the current limit is for 15 channels
-  if (m_nInput > 15 || m_nOutput > 15)
+  if (nInput > 15 || nOutput > 15)
     return false;
+
+  if (!Init(nInput, nOutput))
+    return false;
+  m_nReserved = reserved;
+  m_nReservedByte = reservedByte;
+  memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));
 
   //B Curves
   pCurves = NewCurvesB();
@@ -5834,6 +5855,9 @@ CIccTagLut16::~CIccTagLut16()
 bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
+  icUInt32Number reserved;
+  icUInt8Number nInput, nOutput, reservedByte;
+  icS15Fixed16Number xyzMatrix[9];
   icUInt8Number i, nGrid;
   icUInt16Number nInputEntries, nOutputEntries;
   LPIccCurve *pCurves;
@@ -5847,12 +5871,12 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
   size_t nEnd = nStart + size;
  
   if (!pIO->Read32(&sig) ||
-      !pIO->Read32(&m_nReserved) ||
-      !pIO->Read8(&m_nInput) ||
-      !pIO->Read8(&m_nOutput) ||
+      !pIO->Read32(&reserved) ||
+      !pIO->Read8(&nInput) ||
+      !pIO->Read8(&nOutput) ||
       !pIO->Read8(&nGrid) ||
-      !pIO->Read8(&m_nReservedByte) ||
-      pIO->Read32(m_XYZMatrix, 9) != 9 ||
+      !pIO->Read8(&reservedByte) ||
+      pIO->Read32(xyzMatrix, 9) != 9 ||
       !pIO->Read16(&nInputEntries) ||
       !pIO->Read16(&nOutputEntries))
     return false;
@@ -5861,16 +5885,22 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   // must have at least 1 input and 1 output
-  if (m_nInput < 1 || m_nOutput < 1)
+  if (nInput < 1 || nOutput < 1)
     return false;
 
   // and the current limit is for 15 channels
-  if (m_nInput > 15 || m_nOutput > 15)
+  if (nInput > 15 || nOutput > 15)
     return false;
 
   if (nInputEntries < 2 || nInputEntries > 4096 ||
       nOutputEntries < 2 || nOutputEntries > 4096)
     return false;
+
+  if (!Init(nInput, nOutput))
+    return false;
+  m_nReserved = reserved;
+  m_nReservedByte = reservedByte;
+  memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));
 
   //B Curves
   pCurves = NewCurvesB();
