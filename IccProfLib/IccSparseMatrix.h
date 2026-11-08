@@ -211,6 +211,8 @@ public:
   static icUInt8Number EntrySize(icSparseMatrixType nType);
 
 protected:
+  bool RowsWithinCapacity() const;
+
   icUInt8Number *m_pMatrix;
   icUInt64Number m_nRawSize;
   icSparseMatrixType m_nType;
