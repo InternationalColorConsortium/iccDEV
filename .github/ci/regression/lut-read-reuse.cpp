@@ -35,6 +35,7 @@
 
 #include <array>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -99,6 +100,139 @@ static bool testLegacy(const char *name, bool is16)
     return false;
 
   std::printf("%s same-object reads passed\n", name);
+  return true;
+}
+
+template <typename Tag>
+static bool testLegacyModeCarry(const char *name, bool is16, bool modeCarry = true)
+{
+  auto two = makeLegacyTag(is16, 2); // One input channel, two output channels.
+  Tag control;
+  if (!readTag(control, two) || !control.RawInputMatrix() || !control.IsInputB() ||
+      !control.GetCurvesA() || !control.GetCurvesA()[1])
+    return false;
+  if (!modeCarry) {
+    std::printf("%s fresh-object control passed\n", name);
+    return true;
+  }
+
+  Tag tag;
+  Tag donor;
+  donor.SetRawInputMatrix(false);
+  static_cast<CIccMBB &>(tag) = static_cast<const CIccMBB &>(donor);
+  if (!tag.RawInputMatrix() || !tag.IsInputB())
+    return false;
+
+  // Base assignment normalizes the raw state to the legacy layout. Read must
+  // also restore it when an existing object arrives with stale raw state.
+  tag.SetRawInputMatrix(false);
+  if (!readTag(tag, two) || !tag.RawInputMatrix() || !tag.IsInputB() ||
+      !tag.GetCurvesA() || !tag.GetCurvesA()[1])
+    return false;
+
+  std::printf("%s mode-carry read passed\n", name);
+  return true;
+}
+
+class LegacyLut8Probe : public CIccTagLut8 {
+public:
+  bool RawInputMatrix() const { return m_bInputMatrix; }
+  void SetRawInputMatrix(bool value) { m_bInputMatrix = value; }
+};
+
+class LegacyLut16Probe : public CIccTagLut16 {
+public:
+  bool RawInputMatrix() const { return m_bInputMatrix; }
+  void SetRawInputMatrix(bool value) { m_bInputMatrix = value; }
+};
+
+template <typename Tag>
+static bool testCrossLayoutAssignment(const char *name)
+{
+  CIccTagLutAtoB donor;
+  if (!donor.Init(1, 2))
+    return false;
+  LPIccCurve *donorCurves = donor.NewCurvesA();
+  if (!donorCurves)
+    return false;
+  donorCurves[0] = new CIccTagCurve;
+
+  Tag target;
+  if (!target.Init(1, 2))
+    return false;
+  LPIccCurve *targetCurves = target.NewCurvesA();
+  if (!targetCurves)
+    return false;
+  targetCurves[0] = new CIccTagCurve;
+  targetCurves[1] = new CIccTagCurve;
+  CIccCurve *first = targetCurves[0];
+  CIccCurve *second = targetCurves[1];
+
+  static_cast<CIccMBB &>(target) = static_cast<const CIccMBB &>(donor);
+  if (target.GetCurvesA() != targetCurves || targetCurves[0] != first ||
+      targetCurves[1] != second || !target.RawInputMatrix() ||
+      !target.IsInputB())
+    return false;
+
+  std::printf("%s incompatible-layout assignment passed\n", name);
+  return true;
+}
+
+template <typename Tag>
+static bool testLegacyCopyWithRawMode(const char *name)
+{
+  Tag donor;
+  if (!donor.Init(1, 2))
+    return false;
+  LPIccCurve *curves = donor.NewCurvesA();
+  if (!curves)
+    return false;
+  curves[0] = new CIccTagCurve;
+  curves[1] = new CIccTagCurve;
+  donor.SetRawInputMatrix(false);
+
+  Tag copy(donor);
+  Tag assigned;
+  static_cast<CIccMBB &>(assigned) = static_cast<const CIccMBB &>(donor);
+  donor.SetRawInputMatrix(true);
+  if (!copy.RawInputMatrix() || !copy.IsInputB() || !copy.GetCurvesA() ||
+      !copy.GetCurvesA()[0] || !copy.GetCurvesA()[1] ||
+      !assigned.RawInputMatrix() || !assigned.IsInputB() ||
+      !assigned.GetCurvesA() || !assigned.GetCurvesA()[0] ||
+      !assigned.GetCurvesA()[1])
+    return false;
+
+  std::printf("%s legacy copy normalization passed\n", name);
+  return true;
+}
+
+static bool testBaseCrossModeCopy()
+{
+  CIccTagLutAtoB donor;
+  if (!donor.Init(1, 2))
+    return false;
+  LPIccCurve *donorCurves = donor.NewCurvesA();
+  if (!donorCurves)
+    return false;
+  donorCurves[0] = new CIccTagCurve;
+
+  CIccMBB target;
+  if (!target.Init(1, 2))
+    return false;
+  LPIccCurve *targetCurves = target.NewCurvesA();
+  if (!targetCurves)
+    return false;
+  targetCurves[0] = new CIccTagCurve;
+  targetCurves[1] = new CIccTagCurve;
+
+  target = donor;
+  CIccMBB copy(donor);
+  if (target.IsInputMatrix() || !target.GetCurvesA() ||
+      !target.GetCurvesA()[0] || copy.IsInputMatrix() ||
+      !copy.GetCurvesA() || !copy.GetCurvesA()[0])
+    return false;
+
+  std::puts("MBB cross-mode copy passed");
   return true;
 }
 
@@ -232,10 +366,38 @@ static bool checkMbb(bool inputMatrix)
   return tag.OutputChannels() == 2 && !tag.GetCurvesA() && !tag.GetCurvesB();
 }
 
-int main()
+int main(int argc, char **argv)
 {
+  if (argc == 2 && !std::strcmp(argv[1], "--mode-control-8"))
+    return testLegacyModeCarry<LegacyLut8Probe>("LUT8", false, false) ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--mode-control-16"))
+    return testLegacyModeCarry<LegacyLut16Probe>("LUT16", true, false) ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--mode-carry-8"))
+    return testLegacyModeCarry<LegacyLut8Probe>("LUT8", false) ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--mode-carry-16"))
+    return testLegacyModeCarry<LegacyLut16Probe>("LUT16", true) ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--cross-layout-8"))
+    return testCrossLayoutAssignment<LegacyLut8Probe>("LUT8") ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--cross-layout-16"))
+    return testCrossLayoutAssignment<LegacyLut16Probe>("LUT16") ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--copy-raw-8"))
+    return testLegacyCopyWithRawMode<LegacyLut8Probe>("LUT8") ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--copy-raw-16"))
+    return testLegacyCopyWithRawMode<LegacyLut16Probe>("LUT16") ? 0 : 1;
+  if (argc == 2 && !std::strcmp(argv[1], "--base-cross-mode"))
+    return testBaseCrossModeCopy() ? 0 : 1;
+  if (argc != 1)
+    return 2;
+
   if (!testLegacy<CIccTagLut8>("LUT8", false) ||
       !testLegacy<CIccTagLut16>("LUT16", true) ||
+      !testLegacyModeCarry<LegacyLut8Probe>("LUT8", false) ||
+      !testLegacyModeCarry<LegacyLut16Probe>("LUT16", true) ||
+      !testCrossLayoutAssignment<LegacyLut8Probe>("LUT8") ||
+      !testCrossLayoutAssignment<LegacyLut16Probe>("LUT16") ||
+      !testLegacyCopyWithRawMode<LegacyLut8Probe>("LUT8") ||
+      !testLegacyCopyWithRawMode<LegacyLut16Probe>("LUT16") ||
+      !testBaseCrossModeCopy() ||
       !testMbb(true) || !testMbb(false) ||
       !checkLut<CIccTagLut8>(false) || !checkLut<CIccTagLut16>(true) ||
       !checkMbb<CIccTagLutAtoB>(false) || !checkMbb<CIccTagLutBtoA>(true)) {

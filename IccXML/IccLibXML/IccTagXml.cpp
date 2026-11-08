@@ -643,7 +643,12 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
     icUtf8ToAnsi(ansiStr, buf);
 
     icUInt32Number nStrSize = (icUInt32Number)ansiStr.size();
-    GetBuffer(nStrSize);
+    if (!GetBuffer(nStrSize)) {
+      parseStr += "Memory error allocating textDescriptionType ASCII data\n";
+      free(buf);
+      delete file;
+      return false;
+    }
     if (nStrSize) {
       memcpy(m_szText, ansiStr.c_str(), nStrSize);  
       m_nASCIISize = nStrSize + 1;
@@ -657,12 +662,19 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       parseStr += "'";
       parseStr += filename;
       parseStr += "' is not valid UTF-8.\n";
+      free(buf);
       delete file;
       return false;
     }
 
     nStrSize = (icUInt32Number)wstr.Size();
     m_uzUnicodeText = GetUnicodeBuffer(nStrSize);
+    if (!m_uzUnicodeText) {
+      parseStr += "Memory error allocating textDescriptionType Unicode data\n";
+      free(buf);
+      delete file;
+      return false;
+    }
 
     if (nStrSize) {
       // assign each entry in wstr to m_uzUnicodeText
@@ -687,6 +699,7 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
     if (nScriptCopy)
       memcpy(m_szScriptText, buf, nScriptCopy);
 
+    free(buf);
     delete file;
   }
 
@@ -697,7 +710,10 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
     
     icUInt32Number nSize = (icUInt32Number)str.size();
-    (void) GetBuffer(nSize);        // has hidden side effects
+    if (!GetBuffer(nSize)) {
+      parseStr += "Memory error allocating textDescriptionType ASCII data\n";
+      return false;
+    }
 
     if (nSize) {
       memcpy(m_szText, str.c_str(), nSize);
@@ -731,6 +747,10 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
 
             // set size of m_uzUnicodeText
             m_uzUnicodeText = GetUnicodeBuffer(nSize);
+            if (!m_uzUnicodeText) {
+              parseStr += "Memory error allocating textDescriptionType Unicode data\n";
+              return false;
+            }
             if (nSize) {
 
               // assign each entry in wstr to m_uzUnicodeText
@@ -1621,7 +1641,10 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
           n++;
 
       }
-      Reset(n, nChannelsPerMatrix);
+      if (!Reset(n, nChannelsPerMatrix)) {
+        parseStr += "Unable to allocate SparseMatrixArray data\n";
+        return false;
+      }
       m_nMatrixType = (icSparseMatrixType)nMatrixType;
 
       icUInt32Number bytesPerMatrix = GetBytesPerMatrix();

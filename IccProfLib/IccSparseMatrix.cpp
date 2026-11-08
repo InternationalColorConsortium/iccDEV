@@ -363,9 +363,34 @@ bool CIccSparseMatrix::MultiplyVector(icFloatNumber *pResult, const icFloatNumbe
 }
 
 
+/**
+ * Each row offset indexes this matrix's own column-index and data arrays, which
+ * Init() sized for m_nMaxEntries entries.  The offsets come from the profile, so
+ * a caller that walks them, as Interp() and Union() do, checks them first: they
+ * must not decrease and must not pass m_nMaxEntries.
+ */
+bool CIccSparseMatrix::RowsWithinCapacity() const
+{
+  if (!m_RowStart || !m_ColumnIndices || !m_Data)
+    return false;
+
+  for (icUInt32Number row = 0; row < m_nRows; row++) {
+    if (m_RowStart[row] > m_RowStart[row+1] ||
+        m_RowStart[row+1] > m_nMaxEntries)
+      return false;
+  }
+  return true;
+}
+
+
 bool CIccSparseMatrix::Interp(icFloatNumber d1, const CIccSparseMatrix &mtx1, icFloatNumber d2, const CIccSparseMatrix &mtx2)
 {
   if (mtx1.m_nRows != mtx2.m_nRows || mtx1.m_nCols != mtx2.m_nCols)
+    return false;
+
+  // The tint path, CIccTagSparseMatrixArray::Interpolate(), reaches this with
+  // matrices read from the profile that nothing has validated (#2991).
+  if (!mtx1.RowsWithinCapacity() || !mtx2.RowsWithinCapacity())
     return false;
 
   if (mtx1.m_nRows != m_nRows || mtx2.m_nCols != m_nCols) {
@@ -495,6 +520,11 @@ bool CIccSparseMatrix::Interp(icFloatNumber d1, const CIccSparseMatrix &mtx1, ic
 bool CIccSparseMatrix::Union(const CIccSparseMatrix &mtx1, const  CIccSparseMatrix &mtx2)
 {
   if (mtx1.m_nRows != mtx2.m_nRows || mtx1.m_nCols != mtx2.m_nCols)
+    return false;
+
+  // CIccTagSparseMatrixArray::Validate() calls this with a matrix it has already
+  // reported as invalid and with the next one not yet checked (#2991).
+  if (!mtx1.RowsWithinCapacity() || !mtx2.RowsWithinCapacity())
     return false;
 
   if (mtx1.m_nRows != m_nRows || mtx2.m_nCols != m_nCols) {

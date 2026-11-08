@@ -2975,7 +2975,7 @@ bool CIccMpeXmlCalculator::validName(const char *szName)
   return true;
 }
 
-bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, std::string &parseStr)
+bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, std::string &parseStr, icUInt32Number nDepth)
 {
   xmlNode *pChild, *pNext;
   xmlAttr *attr;
@@ -3010,6 +3010,12 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
               continue;
             }
 
+            if (nDepth >= kMaxImportDepth) {
+              parseStr += "Calculator import nesting exceeds " +
+                          std::to_string(kMaxImportDepth) + " levels\n";
+              return false;
+            }
+
             /* Parse the file and get the DOM. See IccProfileXml.cpp for the
              * rationale for still avoiding XML_PARSE_HUGE and XML_PARSE_NOENT,
              * and icXmlReadFileBounded for why an imported document is read
@@ -3037,7 +3043,17 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
               return false;
             }
 
-            (void)ParseImport(root_element, importPath+file+"*", parseStr); // result unused, but is side effect needed?
+            // Known gap, for a later change: cycles are caught only along the
+            // current path (importPath), not across siblings.  A file reached
+            // through two sibling imports is parsed twice, and now that a nested
+            // failure stops the load, its second set of declarations is refused
+            // as duplicates.  A fan-out of distinct files also multiplies the
+            // work at each level, which the depth cap does not bound.  A set of
+            // files already imported into this calculator would address both.
+            if (!ParseImport(root_element, importPath+file+"*", parseStr, nDepth+1)) {
+              xmlFreeDoc(doc);
+              return false;
+            }
 
             xmlFreeDoc(doc);
           }
@@ -3129,11 +3145,20 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                 if (size < 1) 
                   size = 1;
 
+                if (offset > 65535 - size) {
+                  parseStr += "Temporary variable declaration exceeds 65535 channels\n";
+                  return false;
+                }
                 var.m_members.push_back(CIccTempVar(member, offset, size));
                 offset += size;
               }
               if (var.m_size < offset)
                 var.m_size = offset;
+            }
+            if (var.m_pos >= 0 &&
+                (var.m_pos > 65535 || var.m_size > 65536 - var.m_pos)) {
+              parseStr += "Temporary variable addressing out of bounds\n";
+              return false;
             }
             m_declVarMap[name] = var;
           }
@@ -3175,7 +3200,8 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             m_macroMap[name] = (icChar*)(pNext->children->content);
 
             if ((attr = icXmlFindAttr(pNext, "Local"))) {
-              icUInt16Number offset, size;
+              int offset;
+              icUInt16Number size;
               CIccTempDeclVar var = CIccTempDeclVar(name, 0, 0);
               std::string locals = icXmlAttrValue(attr);
               CIccFuncTokenizer parse(locals.c_str());
@@ -3202,6 +3228,10 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                 if (size < 1)
                   size = 1;
 
+                if (offset > 65535 - size) {
+                  parseStr += "Temporary macro local declaration exceeds 65535 channels\n";
+                  return false;
+                }
                 var.m_members.push_back(CIccTempVar(member, offset, size));
                 offset += size;
               }
@@ -3663,7 +3693,7 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
               }
             }
 
-            if (m_nNextVar + decl->second.m_size > 65536) {
+            if (m_nNextVar > 65536 - decl->second.m_size) {
               parseStr += "Temporary variable addressing out of bounds\n";
               return false;
             }
@@ -3679,7 +3709,8 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
                 m_varMap[vm] = CIccTempVar(vm, decl->second.m_pos + m->m_pos, m->m_size);
               }
             }
-            if (decl->second.m_pos + decl->second.m_size > 65536) {
+            if (decl->second.m_pos > 65536 ||
+                decl->second.m_size > 65536 - decl->second.m_pos) {
               parseStr += "Temporary variable addressing out of bounds\n";
               return false;
             }
@@ -3713,7 +3744,8 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           parseStr += "Out of bounds indexing of '" + refroot + "'\n";
           return false;
         }
-        if (var->second.m_pos + voffset + vsize > 65536) {
+        if (var->second.m_pos > 65536 ||
+            voffset + vsize > 65536 - var->second.m_pos) {
           parseStr += "Temporary variable addressing out of bounds\n";
           return false;
         }
@@ -3995,6 +4027,7 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
     TempDeclVarMap::iterator declVar;
     for (declVar = m_declVarMap.begin(); declVar != m_declVarMap.end(); declVar++) {
       if (declVar->second.m_pos >= 0) {
+        // ParseImport bounds explicit declarations before this addition.
         int next = declVar->second.m_pos + declVar->second.m_size;
         if (next > m_nNextVar)
           m_nNextVar = next;

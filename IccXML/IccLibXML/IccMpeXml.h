@@ -317,7 +317,7 @@ public:
   virtual bool ToXml(std::string &xml, std::string blanks = "");
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 
-  bool ParseImport(xmlNode *pNode, std::string importPath, std::string &parseStr);
+  bool ParseImport(xmlNode *pNode, std::string importPath, std::string &parseStr, icUInt32Number nDepth=0);
 
 protected:
   void clean();
@@ -330,6 +330,8 @@ protected:
   // attacker-crafted long non-cyclic chains and any bypass of validation.
   // See codeql recursive-parse-no-depth-limit.ql.
   static const icUInt32Number kMaxFlattenDepth = 256;
+  // Import files recurse without entering ParseXml's separate element guard.
+  static const icUInt32Number kMaxImportDepth = 32;
   bool Flatten(std::string &flatStr, std::string macroName, const char *szFunc, std::string &parseStr, icUInt32Number nLocalsOffset=0, icUInt32Number nDepth=0);
   bool UpdateLocals(std::string &func, std::string szFunc, std::string &parseStr, int nLocalsOffset);
   bool ParseChanMap(ChanVarMap& chanMap, const char *szNames, int nChannels);

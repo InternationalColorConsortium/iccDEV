@@ -1758,6 +1758,146 @@ function(iccdev_add_mpecalc_matrix_overflow_test)
   endif()
 endfunction()
 
+function(iccdev_add_sparsematrix_array_copy_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseMatrixArrayCopyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/sparsematrix-array-copy.cpp"
+  )
+  target_link_libraries(iccSparseMatrixArrayCopyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseMatrixArrayCopyTest)
+
+  add_test(
+    NAME iccdev.sparsematrix-array-copy
+    COMMAND "$<TARGET_FILE:iccSparseMatrixArrayCopyTest>"
+  )
+  set_tests_properties(iccdev.sparsematrix-array-copy PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;sparsematrix;copy;roundtrip;regression"
+  )
+  if(WIN32)
+    set(_sparsematrix_copy_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseMatrixArrayCopyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparsematrix_copy_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.sparsematrix-array-copy PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparsematrix_copy_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_clut_describe_bounds_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccClutDescribeBoundsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/clut-describe-bounds.cpp"
+  )
+  target_link_libraries(iccClutDescribeBoundsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccClutDescribeBoundsTest)
+
+  add_test(
+    NAME iccdev.clut-describe-bounds
+    COMMAND "$<TARGET_FILE:iccClutDescribeBoundsTest>"
+  )
+  set_tests_properties(iccdev.clut-describe-bounds PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;clut;describe;bounds;regression"
+  )
+  if(WIN32)
+    set(_clut_describe_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccClutDescribeBoundsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _clut_describe_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.clut-describe-bounds PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_clut_describe_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_profile_flags_name_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccProfileFlagsNameTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/profile-flags-name.cpp"
+  )
+  target_link_libraries(iccProfileFlagsNameTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccProfileFlagsNameTest)
+
+  add_test(
+    NAME iccdev.profile-flags-name
+    COMMAND "$<TARGET_FILE:iccProfileFlagsNameTest>"
+  )
+  set_tests_properties(iccdev.profile-flags-name PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;profile;flags;regression"
+  )
+  if(WIN32)
+    set(_profile_flags_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileFlagsNameTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _profile_flags_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.profile-flags-name PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_profile_flags_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_namedcolor_array_default_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccNamedColorArrayDefaultTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/namedcolor-array-default.cpp"
+  )
+  target_link_libraries(iccNamedColorArrayDefaultTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccNamedColorArrayDefaultTest)
+
+  add_test(
+    NAME iccdev.namedcolor-array-default
+    COMMAND "$<TARGET_FILE:iccNamedColorArrayDefaultTest>"
+  )
+  set_tests_properties(iccdev.namedcolor-array-default PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;namedcolor;array;regression"
+  )
+  if(WIN32)
+    set(_namedcolor_array_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccNamedColorArrayDefaultTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _namedcolor_array_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.namedcolor-array-default PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_namedcolor_array_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccSparseMatrixUInt8::set / CIccSparseMatrixUInt16::set in IccSparseMatrix.h
 # (alerts #1061, #2260): (1) the clamp is NaN-safe -- `!(value > 0.0) ? 0` routes NaN
 # and value<=0 to 0 before the float->int cast, where the old `value < 0.0` test let a
@@ -2881,6 +3021,37 @@ function(iccdev_add_lut_stage_combinations_test)
     endforeach()
     set_tests_properties(iccdev.lut-stage-combinations PROPERTIES
       ENVIRONMENT_MODIFICATION "${_lut_stage_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_tag_count_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTagCountContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-count-contract.cpp"
+  )
+  target_link_libraries(iccTagCountContractTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccTagCountContractTest)
+  add_test(NAME iccdev.tag-count-contract
+    COMMAND "$<TARGET_FILE:iccTagCountContractTest>")
+  set_tests_properties(iccdev.tag-count-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;security;tag;count;regression"
+  )
+  if(WIN32)
+    set(_tag_count_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTagCountContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tag_count_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tag-count-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tag_count_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -4392,7 +4563,7 @@ function(iccdev_add_sparsematrix_union_validate_test)
   set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;security;sparsematrix;cwe-835;regression"
+    LABELS "iccdev;security;sparsematrix;cwe-835;issue-2991;regression"
   )
   if(WIN32)
     set(_sparse_union_windows_env_mods
@@ -13540,6 +13711,7 @@ if(WIN32)
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
+  iccdev_add_tag_count_contract_test()
   iccdev_add_utf8_converter_cursor_test()
   iccdev_add_console_sanitize_codepoint_test()
   iccdev_add_tiff_create_overflow_test()
@@ -13605,6 +13777,12 @@ if(WIN32)
   iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_mpecalc_rotate_operand_test()
   iccdev_add_mpecalc_select_parse_leak_test()
+  # This Windows call list returns before the Unix call list below. Keep the
+  # cross-platform lint regressions registered on both sides of that return.
+  iccdev_add_sparsematrix_array_copy_test()
+  iccdev_add_clut_describe_bounds_test()
+  iccdev_add_profile_flags_name_test()
+  iccdev_add_namedcolor_array_default_test()
   iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_namedcolor_findcolor_suffix_underflow_test()
@@ -14139,6 +14317,7 @@ iccdev_add_mlnk_header_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
+iccdev_add_tag_count_contract_test()
 iccdev_add_utf8_converter_cursor_test()
 iccdev_add_console_sanitize_codepoint_test()
 iccdev_add_tiff_create_overflow_test()
@@ -14193,6 +14372,10 @@ iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_mpecalc_rotate_operand_test()
 iccdev_add_mpecalc_select_parse_leak_test()
+iccdev_add_sparsematrix_array_copy_test()
+iccdev_add_clut_describe_bounds_test()
+iccdev_add_profile_flags_name_test()
+iccdev_add_namedcolor_array_default_test()
 iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_namedcolor_findcolor_suffix_underflow_test()

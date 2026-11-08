@@ -2373,6 +2373,9 @@ void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number
     }
   }
   else {
+    if (!bufSize)
+      return;
+
     icChar *ptr = pOutText;
     icChar *ptrEnd = ptr + bufSize;
     icFloatNumber *pData = &m_pData[nPos];
@@ -2381,25 +2384,32 @@ void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number
     for (i=0; i<m_nInput; i++) {
       icColorValue(pVal, valSize, (icFloatNumber)m_GridAdr[i] / (m_GridPoints[i]-1), m_csInput, i, bUseLegacy);
 
-// TODO - this buffer handling is sloppy, but should be ok for now
-// really needs to be refactored, needs some sort of error return if buffer overflows
-// right now it will terminate the output when the buffer overflows
-      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", pVal);
-      if (ptr >= ptrEnd)
-            return;
+      size_t remaining = size_t(ptrEnd - ptr);
+      int n = snprintf(ptr, remaining, " %s", pVal);
+      if (n < 0 || size_t(n) >= remaining)
+        return;
+      ptr += n;
     }
-    strcpy(ptr, "  ");
+    if (ptrEnd - ptr <= 2)
+      return;
+    ptr[0] = ptr[1] = ' ';
     ptr += 2;
+    *ptr = '\0';
 
     for (i=0; i<m_nOutput; i++) {
       icColorValue(pVal, valSize, pData[i], m_csOutput, i, bUseLegacy);
 
-      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", pVal);
-      if (ptr >= ptrEnd)
-            return;
+      size_t remaining = size_t(ptrEnd - ptr);
+      int n = snprintf(ptr, remaining, " %s", pVal);
+      if (n < 0 || size_t(n) >= remaining)
+        return;
+      ptr += n;
     }
-    strcpy(ptr, "\n");
-    sink.Write((const char*)pOutText, strlen(pOutText));
+    if (ptrEnd - ptr <= 1)
+      return;
+    *ptr++ = '\n';
+    *ptr = '\0';
+    sink.Write((const char*)pOutText, size_t(ptr - pOutText));
 
     if (cellsRemaining && *cellsRemaining > 0)
       --(*cellsRemaining);
@@ -3756,10 +3766,11 @@ CIccMBB::CIccMBB()
  */
 CIccMBB::CIccMBB(const CIccMBB &IMBB)
 {
- icUInt8Number nCurves;
- int i;
- 
-  m_bInputMatrix = IMBB.m_bInputMatrix;
+  icUInt8Number nCurves;
+  int i;
+  const bool bInputMatrix = IMBB.IsInputMatrix();
+
+  m_bInputMatrix = bInputMatrix;
   m_bUseMCurvesAsBCurves = IMBB.m_bUseMCurvesAsBCurves;
   m_nInput = IMBB.m_nInput;
   m_nOutput = IMBB.m_nOutput;
@@ -3773,7 +3784,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
     m_CLUT = NULL;
 
   if (IMBB.m_CurvesA) {
-    nCurves = !IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nOutput : m_nInput;
 
     m_CurvesA = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3784,7 +3795,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesM) {
-    nCurves = IsInputMatrix() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesM = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3795,7 +3806,7 @@ CIccMBB::CIccMBB(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesB) {
-    nCurves = IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesB = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3829,12 +3840,21 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   if (&IMBB == this)
     return *this;
 
+  const bool bInputMatrix = IMBB.IsInputMatrix();
+  // Legacy LUTs have a fixed input-matrix layout. Their curve arrays cannot
+  // receive a source whose A, M, and B array sizes use the opposite layout.
+  // Other MBB tags can adopt the source layout through m_bInputMatrix.
+  const icTagTypeSignature tagType = GetType();
+  if (!bInputMatrix &&
+      (tagType == icSigLut8Type || tagType == icSigLut16Type))
+    return *this;
+
   Cleanup();
 
   icUInt8Number nCurves;
   int i;
 
-  m_bInputMatrix = IMBB.m_bInputMatrix;
+  m_bInputMatrix = bInputMatrix;
   m_bUseMCurvesAsBCurves = IMBB.m_bUseMCurvesAsBCurves;
   m_nInput = IMBB.m_nInput;
   m_nOutput = IMBB.m_nOutput;
@@ -3848,7 +3868,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
     m_CLUT = NULL;
 
   if (IMBB.m_CurvesA) {
-    nCurves = !IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nOutput : m_nInput;
 
     m_CurvesA = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3859,7 +3879,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesM) {
-    nCurves = IsInputMatrix() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesM = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -3870,7 +3890,7 @@ CIccMBB &CIccMBB::operator=(const CIccMBB &IMBB)
   }
 
   if (IMBB.m_CurvesB) {
-    nCurves = IsInputB() ? m_nInput : m_nOutput;
+    nCurves = bInputMatrix ? m_nInput : m_nOutput;
 
     m_CurvesB = new LPIccCurve[nCurves];
     for (i=0; i<nCurves; i++)
@@ -5424,6 +5444,9 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
 
   if (!Init(nInput, nOutput))
     return false;
+  // A public base assignment may carry A-to-B placement into this legacy tag.
+  // Restore the fixed legacy layout before allocating its output A-curves.
+  m_bInputMatrix = true;
   m_nReserved = reserved;
   m_nReservedByte = reservedByte;
   memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));
@@ -5898,6 +5921,9 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
 
   if (!Init(nInput, nOutput))
     return false;
+  // A public base assignment may carry A-to-B placement into this legacy tag.
+  // Restore the fixed legacy layout before allocating its output A-curves.
+  m_bInputMatrix = true;
   m_nReserved = reserved;
   m_nReservedByte = reservedByte;
   memcpy(m_XYZMatrix, xyzMatrix, sizeof(m_XYZMatrix));

@@ -380,6 +380,180 @@ run_issue_1103_dump_profile_regression() {
   pass_case "$name"
 }
 
+# An explicit calculator variable occupies [Position, Position + Size). The
+# upper edge of the 65536-register address space is valid, but crossing it or
+# overflowing int while computing it must fail before flattening the function.
+run_calc_position_boundary_case() {
+  local name="$1"
+  local position="$2"
+  local size="$3"
+  local expected="$4"
+  local fixture="$REPO_ROOT/.github/ci/regression/calculator-position-boundary.xml"
+  local source_xml="$OUTDIR/${name}.xml"
+  local built_icc="$OUTDIR/${name}.icc"
+  local log="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$source_xml" "$built_icc" "$log"
+
+  if [ ! -f "$fixture" ]; then
+    fail_case "$name" "missing calculator position fixture"
+    return
+  fi
+
+  sed "s/Position=\"65535\" Size=\"1\"/Position=\"$position\" Size=\"$size\"/" \
+    "$fixture" > "$source_xml"
+  if ! grep -Fq "Position=\"$position\" Size=\"$size\"" "$source_xml"; then
+    fail_case "$name" "failed to set calculator variable boundary"
+    return
+  fi
+
+  timeout 30 "$FROMXML" "$source_xml" "$built_icc" > "$log" 2>&1 || exit_code=$?
+  if ! check_log "$name" "$log"; then
+    return
+  fi
+
+  if [ "$expected" = reject ]; then
+    if [ "$exit_code" -lt 1 ] || [ "$exit_code" -gt 123 ] || [ -e "$built_icc" ]; then
+      fail_case "$name" "expected graceful rejection (exit=$exit_code)"
+      sed -n '1,20p' "$log"
+      return
+    fi
+    if ! grep -Fq "Temporary variable addressing out of bounds" "$log"; then
+      fail_case "$name" "missing temporary-variable bounds diagnostic"
+      sed -n '1,20p' "$log"
+      return
+    fi
+  elif [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
+    fail_case "$name" "expected valid boundary to parse (exit=$exit_code)"
+    sed -n '1,20p' "$log"
+    return
+  fi
+
+  pass_case "$name"
+}
+
+run_calc_decl_width_case() {
+  local name="$1"
+  local replacement="$2"
+  local diagnostic="$3"
+  local fixture="$REPO_ROOT/.github/ci/regression/calculator-position-boundary.xml"
+  local source_xml="$OUTDIR/${name}.xml"
+  local built_icc="$OUTDIR/${name}.icc"
+  local log="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$source_xml" "$built_icc" "$log"
+
+  if [ ! -f "$fixture" ]; then
+    fail_case "$name" "missing calculator position fixture"
+    return
+  fi
+
+  sed "s|<Variables><Declare Name=\"x\" Position=\"65535\" Size=\"1\"/></Variables>|$replacement|" \
+    "$fixture" > "$source_xml"
+  if ! grep -Fq "$replacement" "$source_xml"; then
+    fail_case "$name" "failed to set calculator declaration"
+    return
+  fi
+
+  timeout 30 "$FROMXML" "$source_xml" "$built_icc" > "$log" 2>&1 || exit_code=$?
+  if ! check_log "$name" "$log"; then
+    return
+  fi
+  if [ "$exit_code" -lt 1 ] || [ "$exit_code" -gt 123 ] || [ -e "$built_icc" ]; then
+    fail_case "$name" "expected graceful rejection (exit=$exit_code)"
+    sed -n '1,20p' "$log"
+    return
+  fi
+  if ! grep -Fq "$diagnostic" "$log"; then
+    fail_case "$name" "missing declaration-width diagnostic"
+    sed -n '1,20p' "$log"
+    return
+  fi
+
+  pass_case "$name"
+}
+
+# Calculator imports recurse through separate XML documents. A shallow chain
+# must load, while a deeper chain and a failed nested import must stop parsing.
+run_calc_import_case() {
+  local name="$1" depth="$2" expected="$3"
+  local fixture="$REPO_ROOT/.github/ci/test-data/xml-spec-qa/mcs-3-channel-mid.xml"
+  local case_dir="$OUTDIR/$name"
+  local main_xml="$case_dir/main.xml"
+  local built_icc="$case_dir/profile.icc"
+  local log="$case_dir/fromxml.log"
+  local current next child i exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  if [ ! -f "$fixture" ]; then
+    fail_case "$name" "missing MCS calculator XML fixture"
+    return
+  fi
+  if ! mkdir -p "$case_dir"; then
+    fail_case "$name" "cannot create import-chain directory"
+    return
+  fi
+  rm -f "$built_icc" "$log"
+
+  sed 's|<SubElements/>|<Imports><Import Filename="i0000.xml"/></Imports><SubElements/>|' \
+    "$fixture" > "$main_xml"
+  if ! grep -Fq 'Filename="i0000.xml"' "$main_xml"; then
+    fail_case "$name" "failed to add calculator import"
+    return
+  fi
+
+  for ((i=0; i<depth; i++)); do
+    printf -v current 'i%04d.xml' "$i"
+    if ((i + 1 < depth)); then
+      printf -v next 'i%04d.xml' "$((i + 1))"
+      printf '<IccCalcImport><Imports><Import Filename="%s"/></Imports></IccCalcImport>\n' \
+        "$next" > "$case_dir/$current"
+    else
+      printf '<IccCalcImport/>\n' > "$case_dir/$current"
+    fi
+  done
+  if [ "$expected" = missing ]; then
+    printf '<IccCalcImport><Imports><Import Filename="missing-child.xml"/></Imports></IccCalcImport>\n' \
+      > "$case_dir/i0000.xml"
+  fi
+
+  (cd "$case_dir" && timeout 30 "$FROMXML" main.xml "$built_icc" > "$log" 2>&1) || exit_code=$?
+  if ! check_log "$name" "$log"; then
+    return
+  fi
+
+  if [ "$expected" = accept ]; then
+    if [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
+      fail_case "$name" "expected shallow import chain to parse (exit=$exit_code)"
+      sed -n '1,20p' "$log"
+      return
+    fi
+  else
+    if [ "$exit_code" -lt 1 ] || [ "$exit_code" -gt 123 ] || [ -e "$built_icc" ]; then
+      fail_case "$name" "expected graceful import rejection (exit=$exit_code)"
+      sed -n '1,20p' "$log"
+      return
+    fi
+    if [ "$expected" = depth ]; then
+      if ! grep -Fq 'Calculator import nesting exceeds 32 levels' "$log"; then
+        fail_case "$name" "missing import-depth diagnostic"
+        sed -n '1,20p' "$log"
+        return
+      fi
+    elif ! grep -Fq "Unable to import 'missing-child.xml" "$log"; then
+      fail_case "$name" "missing nested-import diagnostic"
+      sed -n '1,20p' "$log"
+      return
+    fi
+  fi
+
+  pass_case "$name"
+}
+
 require_tool "$FROMXML" "iccFromXml" || true
 require_tool "$DUMP" "iccDumpProfile" || true
 require_tool "$APPLYNCM" "iccApplyNamedCmm" || true
@@ -397,6 +571,18 @@ if [ "$FAIL" -eq 0 ]; then
   run_reject_profile "calcOverMem_tsav.icc"
   run_issue_1103_dump_profile_regression
   run_table102_operators
+  run_calc_position_boundary_case "calc-position-intmax-overflow" 2147483647 2 reject
+  run_calc_position_boundary_case "calc-position-past-end" 65535 2 reject
+  run_calc_position_boundary_case "calc-position-last-register" 65535 1 accept
+  run_calc_decl_width_case "calc-variable-member-overflow" \
+    '<Variables><Declare Name="x">a[65535] b</Declare></Variables>' \
+    'Temporary variable declaration exceeds 65535 channels'
+  run_calc_decl_width_case "calc-macro-local-overflow" \
+    '<Macros><Macro Name="m" Local="a[65535] b">{ in(0,3) out(0,3) }</Macro></Macros>' \
+    'Temporary macro local declaration exceeds 65535 channels'
+  run_calc_import_case "calc-import-shallow" 8 accept
+  run_calc_import_case "calc-import-depth" 40 depth
+  run_calc_import_case "calc-import-missing-child" 1 missing
 fi
 
 echo "Calculator regression tests: $PASS passed, $FAIL failed, $TOTAL total"

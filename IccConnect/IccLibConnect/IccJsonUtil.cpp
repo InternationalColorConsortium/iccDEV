@@ -468,22 +468,15 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
   if (!j.is_object())
     return false;
 
-  bool rv = false;
+  // JSON serialization can throw; finish it before opening the output file.
+  std::string str = j.dump(indent);
+  FILE* f = icOpenRegularWriteBinaryFile(szFname);
+  if (!f)
+    return false;
 
-  FILE* f;
-
-  f = icOpenRegularWriteBinaryFile(szFname);
-
-  if (f) {
-    std::string str = j.dump(indent);
-
-    if (fwrite(str.c_str(), 1, str.size(), f) == str.size())
-      rv = true;
-
-    if (!icFlushAndClose(f))
-      rv = false;
-  }
-
+  bool rv = fwrite(str.c_str(), 1, str.size(), f) == str.size();
+  if (!icFlushAndClose(f))
+    rv = false;
   return rv;
 }
 
