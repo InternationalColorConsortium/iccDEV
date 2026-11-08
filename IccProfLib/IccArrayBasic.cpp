@@ -71,6 +71,7 @@ namespace iccDEV {
 
 CIccArrayUnknown::CIccArrayUnknown(CIccTagArray *pTagArray, icArraySignature sigArray)
 {
+  m_pTagArray = pTagArray;
   m_pTag = pTagArray;
   m_sig = sigArray;
 }
@@ -139,9 +140,8 @@ icValidateStatus CIccArrayUnknown::Validate(std::string sigPath, std::string &sR
 
 
 CIccArrayColorantInfo::CIccArrayColorantInfo(CIccTagArray *pTagArray)
+  : CIccArrayUnknown(pTagArray, icSigColorantInfoArray)
 {
-  m_pTag = pTagArray;
-  m_sig = icSigColorantInfoArray;
 }
 
 
@@ -204,16 +204,15 @@ icValidateStatus CIccArrayColorantInfo::Validate(std::string sigPath, std::strin
 
 
 CIccArrayNamedColor::CIccArrayNamedColor(CIccTagArray *pTagArray)
+  : CIccArrayUnknown(pTagArray, icSigNamedColorArray)
 {
-  m_pTag = pTagArray;
-  m_sig = icSigNamedColorArray;
-
   m_list = new icNamedColorStructList;
 
   m_nDeviceSamples = 0;
   m_nPcsSamples = 0;
   m_nSpectralSamples = 0;
   m_spectralRange = m_biSpectralRange = {};
+  m_csPcs = icSigUnknownData;
   m_csDevice = icSigUnknownData;
   m_pZeroTint = NULL;
   m_csSpectralPcs = icSigNoSpectralData;

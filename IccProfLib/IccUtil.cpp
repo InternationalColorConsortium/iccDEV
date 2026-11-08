@@ -1033,20 +1033,30 @@ void icMatrixDump(std::string &sDump, icS15Fixed16Number *pMatrix)
   sDump += buf;
 }
 
+static const icChar *icWriteSigFallback(icChar *pBuf, size_t bufSize, const icChar *text)
+{
+  if (!pBuf || !bufSize)
+    return NULL;
+
+  snprintf(pBuf, bufSize, "%s", text);
+  return pBuf;
+}
+
 const icChar* icGet16bitSig(icChar* pBuf, size_t bufSize, icUInt16Number nSig, bool bGetHexVal)
 {
     icUInt16Number sig = nSig;
     icUInt8Number c;
 
+    if (!pBuf || !bufSize)
+      return NULL;
+
     if (!nSig) {
-      strcpy(pBuf, "NULL");
-      return pBuf;
+      return icWriteSigFallback(pBuf, bufSize, "NULL");
     }
 
     if (bufSize < 5 || bufSize > 256) {
       // this is caused by bad parameters, usually with bufSize replaced by the sig
-      strcpy(pBuf, "BADP");
-      return pBuf;
+      return icWriteSigFallback(pBuf, bufSize, "BADP");
     }
 
     pBuf[0] = '\'';
@@ -1073,15 +1083,16 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   icUInt32Number sig=nSig;
   icUInt8Number c;
 
+  if (!pBuf || !bufSize)
+    return NULL;
+
   if (!nSig) {
-    strcpy(pBuf, "NULL");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "NULL");
   }
   
   if (bufSize < 7 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
-    strcpy(pBuf, "BADP");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "BADP");
   }
 
   pBuf[0] = '\'';
@@ -1111,6 +1122,9 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   icUInt32Number sig=nSig;
   bool bGetHexVal = false;
 
+  if (!pBuf || !bufSize)
+    return NULL;
+
   // A signature that is entirely zero keeps the "NULL" display convention.  It is
   // not round-trip safe either -- icGetSigVal("NULL") packs the ASCII bytes into
   // 0x4E554C4C -- but that case is handled at the call sites, which write an empty
@@ -1118,14 +1132,12 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   // (#1356, #1361, #1843).  Only the partially-zero signatures below are the
   // formatter's own problem.
   if (!nSig) {
-    strcpy(pBuf, "NULL");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "NULL");
   }
 
   if (bufSize < 5 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
-    strcpy(pBuf, "BADP");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "BADP");
   }
 
   for (i=0; i<4; i++) {
@@ -1163,15 +1175,16 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 {
   icUInt32Number sig=nSig;
 
+  if (!pBuf || !bufSize)
+    return NULL;
+
   if (!nSig) {
-    strcpy(pBuf, "NULL");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "NULL");
   }
   
   if (bufSize < 7 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
-    strcpy(pBuf, "BADP");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "BADP");
   }
 
   switch (icGetColorSpaceType(nSig)) {
@@ -1229,15 +1242,16 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
 {
   icUInt32Number sig=nSig;
 
+  if (!pBuf || !bufSize)
+    return NULL;
+
   if (!nSig) {
-    strcpy(pBuf, "NULL");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "NULL");
   }
   
   if (bufSize < 7 || bufSize > 65535) {
     // this is caused by bad parameters, usually with bufSize replaced by the sig
-    strcpy(pBuf, "BADP");
-    return pBuf;
+    return icWriteSigFallback(pBuf, bufSize, "BADP");
   }
 
   switch (icGetColorSpaceType(nSig)) {
@@ -1647,8 +1661,10 @@ const icChar *CIccInfo::GetProfileFlagsName(icUInt32Number val, bool bCheckMCS/*
       strcpy(m_szStr+l, " | MCSConnectAny");
   }
 
-  if (val & icExtendedRangePCS)
-    strcpy(m_szStr + l, " | ExtendedRangePCS");
+  if (val & icExtendedRangePCS) {
+    size_t length = strlen(m_szStr);
+    snprintf(m_szStr + length, m_bufSize - length, " | ExtendedRangePCS");
+  }
 
 
   return m_szStr;

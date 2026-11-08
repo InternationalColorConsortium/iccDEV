@@ -105,6 +105,7 @@ protected:
 class ICCPROFLIB_API IIccArray
 {
 public:
+  IIccArray() : m_pTagArray(NULL) {}
   virtual ~IIccArray() {}
   virtual IIccArray* NewCopy(CIccTagArray *pNewTagArray) const = 0;
 
