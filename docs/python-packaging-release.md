@@ -203,14 +203,17 @@ does not use PyPI credentials or repository secrets.
 
 The `iccdev` and `iccdev-mcp` trusted publishers use owner
 `InternationalColorConsortium`, repository `iccDEV`, workflow
-`ci-latest-release.yml`, and environment `release`. Configure that GitHub
-environment with required maintainer approval. No API token or repository
+`ci-latest-release.yml`, and environment `release`. The production environment
+currently uses a deployment branch policy without required reviewers during
+iterative release testing. Maintainers control downstream publication through
+manual dispatch and explicit package selection. No API token or repository
 secret is needed.
 
 Dispatch `ci-latest-release.yml` from `master` and select `iccdev`,
 `iccdev-mcp`, or `both` for `pypi_packages`.
-Feature-branch dispatches cannot reach the release or publishing steps. The
-release job requires all native and Python producers, validates the full
+The release job has a separate branch allowlist and environment policy; PyPI
+and npm publication steps are additionally gated to `master`. The release job
+requires all native and Python producers, validates the full
 36-wheel `iccdev` inventory and the exact MCP wheel/sdist pair, generates
 SHA-256 and SHA-512 manifests, and publishes GitHub attestations before staging
 the 36 `iccdev` wheels and two MCP distributions in separate directories. Each
@@ -311,8 +314,8 @@ by maintainers, not from a PR branch or CI scratch artifact.
    ```
 
 4. Publish with the manual `ci-latest-release.yml` workflow from `master`.
-   Select the intended `pypi_packages` value and approve the protected
-   `release` environment.
+   Select the intended `pypi_packages` value and verify the `release`
+   environment's deployment branch policy.
    The workflow uses OIDC trusted publishing; never add a PyPI token to PR
    workflows, forked branches, logs, or reusable workflows that run untrusted
    code.
