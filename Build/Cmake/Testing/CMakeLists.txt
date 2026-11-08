@@ -4563,7 +4563,7 @@ function(iccdev_add_sparsematrix_union_validate_test)
   set_tests_properties(iccdev.sparsematrix-union-validate PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;security;sparsematrix;cwe-835;regression"
+    LABELS "iccdev;security;sparsematrix;cwe-835;issue-2991;regression"
   )
   if(WIN32)
     set(_sparse_union_windows_env_mods

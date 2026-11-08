@@ -75,6 +75,9 @@
 //      catches it against unfixed sources.
 //   4. Control: two matrices sharing one pattern must still union correctly, so the fix
 //      cannot pass by breaking the only case that used to work.
+//   5. A source whose row offsets run past its own column capacity, or descend, is
+//      refused rather than read through (#2991), by Union(), by Interp(), and from
+//      Validate().
 //
 // Header + IccProfLib only, no fixture and no I/O.
 //
@@ -322,6 +325,109 @@ void unionOfIdenticalPatternsStillWorks()
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Level 5 (#2991): a source's row offsets come from the profile.  Union() read
+// them without bounding them by that source's own column capacity, so an offset
+// past the end of the blob read beyond the allocation -- from the merge loop
+// (mtx1) and from the whole-row copy (mtx2).  Each case corrupts one source and
+// requires Union() to refuse it without reading through the bad offset.
+// Interp(), the tint path's twin, walks the same offsets and gets the same cases.
+// ---------------------------------------------------------------------------
+
+// Past the 64-word blob: column indices start at byte 14, so index 200 is byte
+// 414 of a 256-byte allocation.  Small enough that every product stays in range.
+const icUInt16Number kPastBlob = 200;
+
+bool combineWithCorruptRows(bool bInterp, bool bCorruptFirst,
+                            const icUInt16Number *pRowStart)
+{
+  std::vector<icFloatNumber> blobA, blobB, blobU(kWords, 0.0f);
+  if (!encode(blobA, kFullA) || !encode(blobB, kFullB)) {
+    check(false, "source bounds: fixtures encoded");
+    return true;
+  }
+
+  CIccSparseMatrix mA(&blobA[0], kWords * sizeof(icFloatNumber),
+                      icSparseMatrixFloatNum, true);
+  CIccSparseMatrix mB(&blobB[0], kWords * sizeof(icFloatNumber),
+                      icSparseMatrixFloatNum, true);
+  CIccSparseMatrix mU(&blobU[0], kWords * sizeof(icFloatNumber),
+                      icSparseMatrixFloatNum, false);
+  if (!mU.Init(kRows, kCols, /*bSetData=*/true)) {
+    check(false, "source bounds: destination initialised");
+    return true;
+  }
+
+  icUInt16Number *pRows = (bCorruptFirst ? mA : mB).GetRowStart();
+  for (int r = 0; r <= (int)kRows; r++)
+    pRows[r] = pRowStart[r];
+
+  return bInterp ? mU.Interp(0.5f, mA, 0.5f, mB) : mU.Union(mA, mB);
+}
+
+void combineRefusesSourceRowsPastTheirCapacity(bool bInterp)
+{
+  const char *op = bInterp ? "Interp()" : "Union()";
+  char msg[160];
+
+  // mtx1 row 0 starts past the blob; mtx2 row 0 is populated, so this reaches
+  // the merge loop's mtx1.m_ColumnIndices[offA] read.
+  const icUInt16Number firstPast[kRows + 1] = {
+    kPastBlob, kPastBlob + 1, kPastBlob + 1, kPastBlob + 1, kPastBlob + 1 };
+  std::snprintf(msg, sizeof(msg),
+                "source bounds: %s refuses an mtx1 row offset past its capacity", op);
+  check(!combineWithCorruptRows(bInterp, true, firstPast), msg);
+
+  // mtx2 row 1 starts past the blob; mtx1 row 1 is empty, so this reaches the
+  // whole-row memcpy() from mtx2.m_ColumnIndices[fB].
+  const icUInt16Number secondPast[kRows + 1] = {
+    kPastBlob, kPastBlob, kPastBlob + 2, kPastBlob + 2, kPastBlob + 2 };
+  std::snprintf(msg, sizeof(msg),
+                "source bounds: %s refuses an mtx2 row offset past its capacity", op);
+  check(!combineWithCorruptRows(bInterp, false, secondPast), msg);
+
+  // Descending offsets give a negative per-row count.
+  const icUInt16Number descending[kRows + 1] = { 0, 4, 2, 6, 8 };
+  std::snprintf(msg, sizeof(msg),
+                "source bounds: %s refuses descending row offsets", op);
+  check(!combineWithCorruptRows(bInterp, true, descending), msg);
+}
+
+void validateWithCorruptSecondMatrixReports()
+{
+  CIccTagSparseMatrixArray tag(2, kWords);
+  tag.SetMatrixType(icSparseMatrixFloatNum);
+
+  const icFloatNumber *pFull[2] = { kFullA, kFullB };
+  for (int i = 0; i < 2; i++) {
+    CIccSparseMatrix mtx;
+    if (!tag.GetSparseMatrix(mtx, i, /*bInitFromData=*/false) ||
+        !mtx.Init(kRows, kCols, /*bSetData=*/true) ||
+        !mtx.FillFromFullMatrix(const_cast<icFloatNumber *>(pFull[i]))) {
+      check(false, "source bounds: two-matrix fixture authored");
+      return;
+    }
+  }
+
+  // Validate() unions matrix 0 with matrix 1 before it checks matrix 1.
+  CIccSparseMatrix second;
+  if (!tag.GetSparseMatrix(second, 1, /*bInitFromData=*/true)) {
+    check(false, "source bounds: second matrix opened");
+    return;
+  }
+  icUInt16Number *pRows = second.GetRowStart();
+  const icUInt16Number past[kRows + 1] = {
+    kPastBlob, kPastBlob, kPastBlob + 2, kPastBlob + 2, kPastBlob + 2 };
+  for (int r = 0; r <= (int)kRows; r++)
+    pRows[r] = past[r];
+
+  std::string report;
+  const icValidateStatus status = tag.Validate("sigPath", report, NULL);
+  check(status == icValidateCriticalError,
+        "source bounds: Validate() reports a corrupt second matrix as critical");
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -338,6 +444,9 @@ int main(int argc, char **argv)
   unionOfDifferentPatternsIsTheMaskOfBothColumnSets();
   validateOfATwoMatrixSparseTagTerminates();
   unionOfIdenticalPatternsStillWorks();
+  combineRefusesSourceRowsPastTheirCapacity(/*bInterp=*/false);
+  combineRefusesSourceRowsPastTheirCapacity(/*bInterp=*/true);
+  validateWithCorruptSecondMatrixReports();
 
   if (g_fail)
     std::fprintf(stderr, "[sparse-union] %d assertion(s) failed\n", g_fail);
