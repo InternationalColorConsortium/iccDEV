@@ -10,11 +10,13 @@ BigTIFF support), libjpeg-turbo or libjpeg, libpng, zlib, libxml2,
 nlohmann-json, and wxWidgets when the GUI tool is built. Linux bundles also
 include the Debian common-license texts referenced by package copyright files.
 
-The macOS archive does not copy Homebrew dynamic libraries; their licenses
-remain with the separately installed formulae. It does include nlohmann-json
-notices because that header-only implementation is compiled into IccJSON.
-The macOS, Windows, and WASM bundles retain nlohmann-json's root license and
-the attributed runtime headers that identify additional copyright holders.
+The macOS tool archive does not copy Homebrew dynamic libraries; their
+licenses remain with the separately installed formulae. The Apple mobile
+archive contains static cores without Homebrew dynamic libraries. Both
+include nlohmann-json notices because that header-only implementation is
+compiled into IccJSON. The macOS, Apple mobile, Windows, and WASM bundles
+retain nlohmann-json's root license and the attributed runtime headers that
+identify additional copyright holders.
 
 Redistributors must keep those upstream notices with any bundled third-party
 binaries.

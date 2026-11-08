@@ -2720,12 +2720,14 @@ jobs:
             iccdev-linux-gcc \
             iccdev-linux-clang \
             iccdev-macos-clang \
+            iccdev-apple-mobile-core \
             iccdev-windows-msvc \
             iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
             expected_notice='iccDEV-Testing/THIRD-PARTY-NOTICES.md'
-            if [ "$name" = 'iccdev-wasm-release' ]; then
+            if [ "$name" = 'iccdev-wasm-release' ] ||
+                [ "$name" = 'iccdev-apple-mobile-core' ]; then
               expected_notice='THIRD-PARTY-NOTICES.md'
             fi
             if ! grep -Fxq "$expected_notice" <<< "$entries"; then
@@ -2754,7 +2756,11 @@ jobs:
             nlohmann/detail/output/serializer.hpp
             nlohmann/thirdparty/hedley/hedley.hpp
           )
-          for name in iccdev-macos-clang iccdev-windows-msvc iccdev-wasm-release; do
+          for name in \
+            iccdev-macos-clang \
+            iccdev-apple-mobile-core \
+            iccdev-windows-msvc \
+            iccdev-wasm-release; do
             archive="release-assets/$name.zip"
             entries="$(unzip -Z1 "$archive")"
             if [ "$name" = "iccdev-windows-msvc" ]; then

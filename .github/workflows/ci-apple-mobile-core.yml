@@ -88,6 +88,37 @@ jobs:
           rm -rf artifacts
           mkdir -p artifacts
           cp LICENSE.md artifacts/LICENSE.md
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md artifacts/
+          nlohmann_prefix="$(brew --prefix nlohmann-json)"
+          nlohmann_license_root="artifacts/third-party-licenses/nlohmann-json"
+          nlohmann_attribution_root="$nlohmann_license_root/runtime-attributions"
+          mkdir -p "$nlohmann_attribution_root"
+          cp -L "$nlohmann_prefix/LICENSE.MIT" "$nlohmann_license_root/LICENSE.MIT"
+          attribution_count=0
+          while IFS= read -r header; do
+            owners="$(grep '^// SPDX-FileCopyrightText:' "$header" || true)"
+            if [ -n "$owners" ] && grep -Fqv 'Niels Lohmann' <<< "$owners"; then
+              relative="${header#"$nlohmann_prefix/include/"}"
+              destination="$nlohmann_attribution_root/$relative"
+              mkdir -p "$(dirname "$destination")"
+              cp -L "$header" "$destination"
+              attribution_count=$((attribution_count + 1))
+            fi
+          done < <(
+            find "$nlohmann_prefix/include/nlohmann" -type f \
+              \( -name '*.hpp' -o -name '*.h' \) -print | sort
+          )
+          if [ "$attribution_count" -lt 4 ]; then
+            echo "::error::nlohmann-json runtime attribution headers are incomplete"
+            exit 1
+          fi
+          for attribution in \
+            nlohmann/detail/conversions/to_chars.hpp \
+            nlohmann/detail/meta/cpp_future.hpp \
+            nlohmann/detail/output/serializer.hpp \
+            nlohmann/thirdparty/hedley/hedley.hpp; do
+            test -s "$nlohmann_attribution_root/$attribution"
+          done
           artifact_manifest="artifacts/manifest.txt"
           : > "$artifact_manifest"
 

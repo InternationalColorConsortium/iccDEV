@@ -24,6 +24,16 @@ SPEC.loader.exec_module(VALIDATOR)
 
 def _artifact(root: Path, built: str = "apple-ios-device-core") -> Path:
     (root / "LICENSE.md").write_bytes((ROOT / "LICENSE.md").read_bytes())
+    (root / "THIRD-PARTY-NOTICES.md").write_bytes(
+        (ROOT / "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md").read_bytes()
+    )
+    license_root = root / "third-party-licenses/nlohmann-json"
+    license_root.mkdir(parents=True)
+    (license_root / "LICENSE.MIT").write_text("MIT License", encoding="utf-8")
+    for attribution in VALIDATOR.NLOHMANN_ATTRIBUTIONS:
+        path = license_root / "runtime-attributions" / attribution
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("Copyright attribution", encoding="utf-8")
     lines = []
     for preset, sdk in VALIDATOR.expected_presets().items():
         result = "built" if preset == built else "skipped: SDK unavailable"
@@ -55,6 +65,38 @@ def test_apple_release_artifact_requires_complete_license(tmp_path: Path) -> Non
         VALIDATOR.validate_artifact(artifact)
     license_file.write_text("Incomplete license", encoding="utf-8")
     with pytest.raises(ValueError, match="Missing or altered Apple mobile core LICENSE"):
+        VALIDATOR.validate_artifact(artifact)
+
+
+def test_apple_release_artifact_requires_third_party_notices(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path)
+    notice_file = artifact / "THIRD-PARTY-NOTICES.md"
+    notice_file.unlink()
+    with pytest.raises(
+        ValueError, match="Missing or altered Apple mobile core THIRD-PARTY-NOTICES"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+    notice_file.write_text("Incomplete notices", encoding="utf-8")
+    with pytest.raises(
+        ValueError, match="Missing or altered Apple mobile core THIRD-PARTY-NOTICES"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+
+
+def test_apple_release_artifact_requires_nlohmann_attributions(tmp_path: Path) -> None:
+    artifact = _artifact(tmp_path, built="apple-ios-device-extended-core")
+    license_root = artifact / "third-party-licenses/nlohmann-json"
+    (license_root / "LICENSE.MIT").unlink()
+    with pytest.raises(
+        ValueError, match="Missing Apple mobile core nlohmann-json LICENSE.MIT"
+    ):
+        VALIDATOR.validate_artifact(artifact)
+    (license_root / "LICENSE.MIT").write_text("MIT License", encoding="utf-8")
+    attribution = VALIDATOR.NLOHMANN_ATTRIBUTIONS[0]
+    (license_root / "runtime-attributions" / attribution).unlink()
+    with pytest.raises(
+        ValueError, match="Missing Apple mobile core nlohmann-json attribution"
+    ):
         VALIDATOR.validate_artifact(artifact)
 
 
@@ -95,6 +137,8 @@ def test_latest_release_consumes_validated_apple_artifact() -> None:
         if step.get("name") == "Build available Apple mobile core libraries"
     )
     assert "cp LICENSE.md artifacts/LICENSE.md" in build_step["run"]
+    assert "cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md artifacts/" in build_step["run"]
+    assert 'cp -L "$nlohmann_prefix/LICENSE.MIT"' in build_step["run"]
 
 
 def test_apple_runtime_smoke_routes_to_pr_without_simulators() -> None:

@@ -27,6 +27,16 @@ COMPONENTS = {
     ),
 }
 LICENSE = Path(__file__).resolve().parents[2] / "LICENSE.md"
+NOTICE = (
+    Path(__file__).resolve().parents[2]
+    / "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md"
+)
+NLOHMANN_ATTRIBUTIONS = (
+    "nlohmann/detail/conversions/to_chars.hpp",
+    "nlohmann/detail/meta/cpp_future.hpp",
+    "nlohmann/detail/output/serializer.hpp",
+    "nlohmann/thirdparty/hedley/hedley.hpp",
+)
 
 
 def expected_presets() -> dict[str, str]:
@@ -42,6 +52,21 @@ def validate_artifact(root: Path) -> int:
     license_file = root / "LICENSE.md"
     if not license_file.is_file() or license_file.read_bytes() != LICENSE.read_bytes():
         raise ValueError("Missing or altered Apple mobile core LICENSE.md")
+
+    notice_file = root / "THIRD-PARTY-NOTICES.md"
+    if not notice_file.is_file() or notice_file.read_bytes() != NOTICE.read_bytes():
+        raise ValueError("Missing or altered Apple mobile core THIRD-PARTY-NOTICES.md")
+
+    license_root = root / "third-party-licenses/nlohmann-json"
+    nlohmann_license = license_root / "LICENSE.MIT"
+    if not nlohmann_license.is_file() or not nlohmann_license.stat().st_size:
+        raise ValueError("Missing Apple mobile core nlohmann-json LICENSE.MIT")
+    for attribution in NLOHMANN_ATTRIBUTIONS:
+        path = license_root / "runtime-attributions" / attribution
+        if not path.is_file() or not path.stat().st_size:
+            raise ValueError(
+                f"Missing Apple mobile core nlohmann-json attribution: {attribution}"
+            )
 
     manifest = root / "manifest.txt"
     if not manifest.is_file() or not manifest.stat().st_size:
