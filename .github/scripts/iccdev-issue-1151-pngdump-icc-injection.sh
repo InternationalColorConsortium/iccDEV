@@ -37,8 +37,11 @@ export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 
 PNGDUMP="$TOOLS_DIR/IccPngDump/iccPngDump"
 INPUT_PNG="$OUTDIR/2x2-rgba--Rec2020rgbColorimetric.png"
+UNKNOWN_INPUT_PNG="$OUTDIR/2x2-rgba-with-unknown-chunks.png"
 INPUT_ICC="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 OUTPUT_PNG="$OUTDIR/foo.bar"
+UNKNOWN_OUTPUT_PNG="$OUTDIR/with-unknown-chunks-output.png"
+UNKNOWN_EXTRACTED_ICC="$OUTDIR/with-unknown-chunks-extracted.icc"
 LOGFILE="$OUTDIR/issue-1151-pngdump-icc-injection.log"
 EXPECTED_SHA256="98d2010c4d8e71bd4905441d55f86b366f57300d8cd44de2b72a5991c22da51c"
 
@@ -63,14 +66,17 @@ generate_png() {
     return 1
   fi
 
-  python3 - "$INPUT_PNG" "$EXPECTED_SHA256" <<'PY'
+  python3 - "$INPUT_PNG" "$UNKNOWN_INPUT_PNG" "$EXPECTED_SHA256" <<'PY'
 import base64
+import binascii
 import hashlib
 import pathlib
+import struct
 import sys
 
 png_path = pathlib.Path(sys.argv[1])
-expected = sys.argv[2]
+unknown_path = pathlib.Path(sys.argv[2])
+expected = sys.argv[3]
 data = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAG6mlDQ1BJQ0MgUHJvZmlsZQAA"
     "eJzNVntQlEcSH8QgqPjgIGKACz5OJC4EFnQf3zcz0GqEColPIsKiyAKaLXkEFojmXBEEREDg"
@@ -111,6 +117,75 @@ digest = hashlib.sha256(data).hexdigest()
 if digest != expected:
     raise SystemExit(f"unexpected generated PNG SHA256: {digest}")
 png_path.write_bytes(data)
+
+def make_chunk(kind, payload):
+    return (struct.pack(">I", len(payload)) + kind + payload +
+            struct.pack(">I", binascii.crc32(kind + payload) & 0xffffffff))
+
+signature = data[:8]
+chunks = []
+offset = len(signature)
+found_iccp = False
+while offset < len(data):
+    length = struct.unpack_from(">I", data, offset)[0]
+    kind = data[offset + 4:offset + 8]
+    end = offset + 12 + length
+    raw = data[offset:end]
+    if end > len(data):
+        raise SystemExit("truncated source PNG chunk")
+    if kind == b"iCCP":
+        chunks.append(make_chunk(b"vpAg", b"iccDEV-before-iCCP\x00\x01"))
+        chunks.append(raw)
+        chunks.append(make_chunk(b"vqAg", b"iccDEV-after-iCCP\x02\x03"))
+        found_iccp = True
+    else:
+        chunks.append(raw)
+    offset = end
+if not found_iccp or offset != len(data):
+    raise SystemExit("source PNG has no intact iCCP chunk")
+unknown_path.write_bytes(signature + b"".join(chunks))
+PY
+}
+
+check_unknown_chunks() {
+  python3 - "$UNKNOWN_OUTPUT_PNG" <<'PY'
+import binascii
+import pathlib
+import struct
+import sys
+
+data = pathlib.Path(sys.argv[1]).read_bytes()
+if data[:8] != b"\x89PNG\r\n\x1a\n":
+    raise SystemExit("invalid output PNG signature")
+expected = [
+    (b"vpAg", b"iccDEV-before-iCCP\x00\x01"),
+    (b"vqAg", b"iccDEV-after-iCCP\x02\x03"),
+]
+unknown = []
+iccp_count = 0
+seen_idat = False
+offset = 8
+while offset < len(data):
+    length = struct.unpack_from(">I", data, offset)[0]
+    kind = data[offset + 4:offset + 8]
+    payload = data[offset + 8:offset + 8 + length]
+    end = offset + 12 + length
+    if end > len(data):
+        raise SystemExit("truncated output PNG chunk")
+    stored_crc = struct.unpack_from(">I", data, end - 4)[0]
+    if binascii.crc32(kind + payload) & 0xffffffff != stored_crc:
+        raise SystemExit(f"CRC mismatch for {kind!r}")
+    if kind == b"IDAT":
+        seen_idat = True
+    elif kind == b"iCCP":
+        iccp_count += 1
+    elif kind in (b"vpAg", b"vqAg"):
+        if seen_idat:
+            raise SystemExit(f"unknown chunk {kind!r} moved after IDAT")
+        unknown.append((kind, payload))
+    offset = end
+if offset != len(data) or unknown != expected or iccp_count != 1:
+    raise SystemExit(f"unexpected unknown chunks or iCCP count: {unknown!r}, {iccp_count}")
 PY
 }
 
@@ -127,7 +202,7 @@ run_reproducer() {
     fail "failed to generate issue-1151 PNG"
   fi
 
-  rm -f "$LOGFILE" "$OUTPUT_PNG"
+  rm -f "$LOGFILE" "$OUTPUT_PNG" "$UNKNOWN_OUTPUT_PNG" "$UNKNOWN_EXTRACTED_ICC"
   timeout 30 "$PNGDUMP" "$INPUT_PNG" --write-icc "$INPUT_ICC" --output "$OUTPUT_PNG" > "$LOGFILE" 2>&1 || exit_code=$?
   if ! check_sanitizers "$LOGFILE"; then
     fail "sanitizer finding"
@@ -138,11 +213,30 @@ run_reproducer() {
   if [ "$exit_code" -ge 128 ]; then
     fail "iccPngDump crashed with signal $((exit_code - 128))"
   fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail "iccPngDump exited $exit_code"
+  fi
   if [ ! -s "$OUTPUT_PNG" ]; then
     fail "iccPngDump did not write output PNG"
   fi
 
-  echo "  [PASS] issue-1151-pngdump-icc-injection -- no sanitizer finding"
+  exit_code=0
+  timeout 30 "$PNGDUMP" "$UNKNOWN_INPUT_PNG" --write-icc "$INPUT_ICC" --output "$UNKNOWN_OUTPUT_PNG" >> "$LOGFILE" 2>&1 || exit_code=$?
+  check_sanitizers "$LOGFILE" || fail "sanitizer finding with unknown chunks"
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$UNKNOWN_OUTPUT_PNG" ]; then
+    fail "unknown-chunk injection failed with exit $exit_code"
+  fi
+  check_unknown_chunks || fail "unknown chunk order, data, location, or iCCP count changed"
+
+  exit_code=0
+  timeout 30 "$PNGDUMP" "$UNKNOWN_OUTPUT_PNG" "$UNKNOWN_EXTRACTED_ICC" >> "$LOGFILE" 2>&1 || exit_code=$?
+  check_sanitizers "$LOGFILE" || fail "sanitizer finding during replacement profile extraction"
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$UNKNOWN_EXTRACTED_ICC" ] ||
+     ! cmp -s "$INPUT_ICC" "$UNKNOWN_EXTRACTED_ICC"; then
+    fail "replacement ICC profile did not round-trip byte-for-byte"
+  fi
+
+  echo "  [PASS] issue-1151-pngdump-icc-injection -- profile and unknown chunks preserved"
 }
 
 echo "=== iccPngDump issue-1151 ICC injection regression ==="

@@ -321,7 +321,7 @@ public:
     { CloseFile(); }
 
   void OpenFile( const std::string &filename, float pageWidth, float pageHeight );
-  void CloseFile();
+  bool CloseFile();
 
 public:
 

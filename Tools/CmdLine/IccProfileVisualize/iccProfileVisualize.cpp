@@ -2000,6 +2000,7 @@ int main(int argc, char* argv[])
   }
 
   filename_list fileList = parse_arguments(argc,argv);
+  bool failed = false;
 
   for (auto &file : fileList) {
     std::string sanitizedFile = icSanitizeFileName( file );
@@ -2011,6 +2012,7 @@ int main(int argc, char* argv[])
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", sanitizedFile.c_str() );
+        failed = true;
         continue;
       }
 
@@ -2026,24 +2028,30 @@ int main(int argc, char* argv[])
       else
         count = outputDataToPDF( data, basename );
       
+      // A profile with nothing to plot is not a failure; a profile whose pages
+      // could not be written is.
       if (!count) {
         LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
+        if (!data.pages.empty())
+          failed = true;
       }
 
       delete pIcc;
     }   // end try
     catch (const std::exception& e) {
       LogAnError(stderr, "%s: ERROR exception: '%s'\n", sanitizedFile.c_str() , e.what() );
+      failed = true;
     }
     catch (...) {
       LogAnError(stderr, "%s: ERROR: unknown exception\n", sanitizedFile.c_str() );
+      failed = true;
     }
 
     // NOTE - consume error logs here if needed, so exceptions are included
 
   } // end for file list
 
-  return 0;
+  return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 /******************************************************************************/

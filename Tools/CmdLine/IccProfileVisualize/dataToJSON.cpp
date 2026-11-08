@@ -367,9 +367,15 @@ size_t outputDataToJSON( profileVisualizationData &data, const std::string &base
 
   writeFooterJSON( out );
 
+  // Finish allocating the serialized text before opening the output file.
+  std::string text = out.str();
   FILE* outFile = icOpenRegularWriteTextFile(JSONPath.c_str());
-  if (!WriteJSONTextFile(outFile, out.str())) {
+  if (!outFile) {
     LogAnError(stderr, "JSON writing error in '%s': unable to open regular output file\n", JSONPath.c_str());
+    return 0;
+  }
+  if (!WriteJSONTextFile(outFile, text)) {
+    LogAnError(stderr, "JSON writing error in '%s': unable to write regular output file\n", JSONPath.c_str());
     return 0;
   }
 

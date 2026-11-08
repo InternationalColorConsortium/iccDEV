@@ -678,20 +678,17 @@ static bool CopyPngAncillaryChunks(png_structp read_ptr,
     int unknown_count = png_get_unknown_chunks(read_ptr, read_info,
                                                 &unknown_chunks);
     if (unknown_count > 0) {
-        // iCCP is replaced with the requested profile below.
-        std::vector<png_unknown_chunk> preserved_chunks;
-        preserved_chunks.reserve(static_cast<size_t>(unknown_count));
+        // iCCP is replaced below. Avoid a C++ container across libpng calls:
+        // libpng can longjmp on an allocation error while copying a chunk.
+        int output_index = 0;
         for (int i = 0; i < unknown_count; ++i) {
-            if (memcmp(unknown_chunks[i].name, "iCCP", 4) != 0)
-                preserved_chunks.push_back(unknown_chunks[i]);
-        }
-        if (!preserved_chunks.empty()) {
-            png_set_unknown_chunks(write_ptr, write_info, preserved_chunks.data(),
-                                   static_cast<int>(preserved_chunks.size()));
-            for (size_t i = 0; i < preserved_chunks.size(); ++i)
-                png_set_unknown_chunk_location(write_ptr, write_info,
-                                               static_cast<int>(i),
-                                               preserved_chunks[i].location);
+            if (memcmp(unknown_chunks[i].name, "iCCP", 4) == 0)
+                continue;
+            png_unknown_chunk chunk = unknown_chunks[i];
+            png_set_unknown_chunks(write_ptr, write_info, &chunk, 1);
+            png_set_unknown_chunk_location(write_ptr, write_info,
+                                           output_index, chunk.location);
+            ++output_index;
         }
     }
     return true;
