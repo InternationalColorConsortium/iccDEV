@@ -5,8 +5,8 @@
 #                 https://color.org
 #
 # Last Updated: 2026-11-08 UTC
-#               Refresh source pin for version 2.3.2.5
-#               Pin to 0dc248a1 (#3028)
+#               Refresh source pin for version 2.4.2.6
+#               Pin to 482b66c8 (#3028)
 # Remark:       vcpkg CI targets Windows 2022 (x64-windows)
 #
 # portfile.cmake - vcpkg port for iccDEV (RefIccMAX)
@@ -42,8 +42,8 @@ else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
-        REF 0dc248a10fc5bdf5b3a9ea90831d048938d438fb
-        SHA512 617b705b42d298df5d925bfc3eb6ff8bed6946503c8b191afb63beaa05dc5f947694fafd021cbc0d24f410878f840614dfa5d56a96c990456c94fd2e0290fd6c
+        REF 482b66c87b905e84042d8eabf87221d232d44392
+        SHA512 45102ea9382e9c2aee2132ac235d31e41b9d048c85de2c33fab63e7b000309a344208a69381cfd1b86a6d13ba98d28118c2949c465eda93e90ed57451d13a04d
         HEAD_REF master
     )
 endif()
