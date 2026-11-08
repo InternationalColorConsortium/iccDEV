@@ -63,6 +63,7 @@ set(_required_vars
   ICCDEV_LIB_SUBDIRS
   ICCDEV_HAVE_JSON
   ICCDEV_HAVE_CONNECT
+  ICCDEV_EXPECTED_PACKAGE_VERSION
 )
 
 foreach(_required_var IN LISTS _required_vars)
@@ -590,7 +591,7 @@ file(WRITE "${_config_src}/consumer.cpp" "${_consumer_source}")
 file(WRITE "${_config_src}/CMakeLists.txt" [=[
 cmake_minimum_required(VERSION 3.16...3.29)
 project(IccDevInstalledConfigConsumer LANGUAGES CXX)
-find_package(RefIccMAX CONFIG REQUIRED)
+find_package(RefIccMAX ${ICCDEV_EXPECTED_PACKAGE_VERSION} EXACT CONFIG REQUIRED)
 # A static-only install exports only RefIccMAX::IccProfLib2-static, and
 # RefIccMAXConfig.cmake then synthesises the generic name as an INTERFACE
 # IMPORTED wrapper that has neither IMPORTED_LOCATION nor
@@ -641,7 +642,9 @@ target_link_libraries(iccdev-installed-consumer PRIVATE RefIccMAX::IccConnect2)
 endif()
 
 _run_consumer("CONFIG mode" "${_config_src}" "${_work_root}/build-config"
-  "${_prefix_config}" "-DRefIccMAX_DIR=${_package_dir}" _config_error)
+  "${_prefix_config}"
+  "-DRefIccMAX_DIR=${_package_dir};-DICCDEV_EXPECTED_PACKAGE_VERSION=${ICCDEV_EXPECTED_PACKAGE_VERSION}"
+  _config_error)
 _note("${_arm_log}")
 set(_config_cfg_stdout "${_arm_stdout}")
 set(_config_run_stdout "${_arm_run_stdout}")

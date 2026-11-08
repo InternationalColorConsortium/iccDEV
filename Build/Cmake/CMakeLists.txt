@@ -263,11 +263,11 @@ if(APPLE)
   endif()
 endif()
 
-# Version components (4-part version: 2.3.2.4)
+# Version components (4-part version: 2.3.2.5)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 2)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 4)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 5)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
@@ -2350,7 +2350,7 @@ CONFIGURE_FILE (
 
 write_basic_package_version_file(
   "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-  VERSION "${REFICCMAX_MAJOR_VERSION}.${REFICCMAX_MINOR_VERSION}.${REFICCMAX_MICRO_VERSION}"
+  VERSION "${${PROJECT_UP_NAME}_VERSION}"
   COMPATIBILITY SameMajorVersion
 )
 
