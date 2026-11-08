@@ -721,6 +721,9 @@ jobs:
           # content-hash identities are reviewed analyzer-modeling false positives.
           # A changed source line, function, path, or diagnostic remains actionable
           # and fails the job so that the baseline cannot drift silently.
+          # The IccProfileVisualize PDF/JSON reports assume fdopen() can return
+          # stdout. Both callers pass nonempty filenames, so the opened regular
+          # file is closed by icFlushAndClose() on every reachable path.
           is_reviewed_false_positive() {
             case "$1" in
               'Tools/CmdLine/IccCmdLineUtil.h|icSha256File|Stream already in EOF|9aba913bc0fe76b25c71547da10b68da' | \
@@ -736,6 +739,8 @@ jobs:
               'Tools/CmdLine/IccProfilePlot/MiniTIFF.cpp|WriteTIFF|Resource leak|2222e639d697969968cd3ea9c59183c3' | \
               'IccConnect/IccLibConnect/IccJsonUtil.cpp|saveJsonAs|Resource leak|29db7ce8d2bae091782aefe01b4b2bff' | \
               'Tools/CmdLine/IccProfilePlot/MiniPDF.cpp|CloseFile|Resource leak|6c3bedb35809b66b71f6bbeb51e804cc' | \
+              'Tools/CmdLine/IccProfileVisualize/MiniPDF.cpp|CloseFile|Resource leak|5289b00349e0d17e42d26db60e442592' | \
+              'Tools/CmdLine/IccProfileVisualize/dataToJSON.cpp|outputDataToJSON|Resource leak|8b089989995bcd31fc682d57569414ad' | \
               'IccConnect/IccLibConnect/IccCmmConfig.cpp|toIt8|Resource leak|6fa21eca8aff53685574c31d9b149ae3' | \
               'Tools/CmdLine/IccProfilePlot/MiniSVG.cpp|CloseFile|Resource leak|bcb4da4aa1215ef6868e7a37b6156bad' | \
               'Tools/CmdLine/IccJpegDump/iccJpegDump.cpp|ExtractIccFromJpeg|Resource leak|d9ed6da13d55b573439a18caaac16929' | \
