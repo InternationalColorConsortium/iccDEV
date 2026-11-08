@@ -109,6 +109,42 @@ int main()
   text<CIccFloat64Array>("float64", false, "1e400");
   text<CIccFloat64Array>("float64", false, "nan");
 
+  // #3023: ParseText kept a token in a 256-byte buffer and read only its
+  // prefix, so 256 zeros then "1e10" was stored as 0.  The whole token is
+  // the value, in text form as in element form, for each array type.
+  const std::string zeros(256, '0');
+  {
+    CIccFloatArray arr;
+    const std::string body = zeros + "1e10 " + zeros + "0.5";
+    check(arr.ParseTextArray(body.c_str()) && arr.GetSize() == 2 &&
+          arr.GetBuf()[0] == 1e10f && arr.GetBuf()[1] == 0.5f,
+          "float text tokens longer than 255 characters keep their value");
+  }
+  {
+    CIccFloat32Array arr;
+    const std::string body = zeros + "1e10";
+    check(arr.ParseTextArray(body.c_str()) && arr.GetSize() == 1 &&
+          arr.GetBuf()[0] == 1e10f,
+          "float32 text token longer than 255 characters keeps its value");
+  }
+  {
+    CIccFloat64Array arr;
+    const std::string body = zeros + "1e300";
+    check(arr.ParseTextArray(body.c_str()) && arr.GetSize() == 1 &&
+          arr.GetBuf()[0] == 1e300,
+          "float64 text token longer than 255 characters keeps its value");
+  }
+  {
+    CIccUInt16Array arr;
+    const std::string body = zeros + "513";
+    check(arr.ParseTextArray(body.c_str()) && arr.GetSize() == 1 &&
+          arr.GetBuf()[0] == 513,
+          "uInt16 text token longer than 255 characters keeps its value");
+  }
+  // The long token is still validated whole: an invalid tail is refused.
+  text<CIccFloatArray>("float", false, (zeros + "1e39").c_str());
+  text<CIccFloatArray>("float", false, (zeros + "1x").c_str());
+
   elements(true,  "0.25", "0.75");
   elements(false, "0.25", "nan");
   elements(false, "inf", "0.75");

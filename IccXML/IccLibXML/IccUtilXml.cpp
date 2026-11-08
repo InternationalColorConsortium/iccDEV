@@ -1351,27 +1351,25 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
   // caller compares the count returned with the count it expected, so
   // returning 0 refuses the array.
 
-  icUInt32Number n = 0, b = 0;
+  icUInt32Number n = 0;
   bool bInNum = false;
-  char num[256] = {0};
+  // The whole token, however long: a fixed buffer kept only a prefix, and a
+  // long but valid spelling such as 300 zeros then "1e10" was read as 0 (#3023).
+  std::string num;
 
   while ( (n < nSize) && *szText ) {
     if (icIsNumChar(*szText)) {
       if (!bInNum) {
         bInNum = true;
-        b=0;
+        num.clear();
       }
-      num[b] = *szText;
- 
-      if (b+2<sizeof(num))
-        b++;
+      num += *szText;
     }
     else {
       if (bInNum) {
-        num[b] = 0;
-        if (!icXmlFloatTokenValid<T>(num))
+        if (!icXmlFloatTokenValid<T>(num.c_str()))
           return 0;
-        pBuf[n] = icParseArrayValue<T>(num);
+        pBuf[n] = icParseArrayValue<T>(num.c_str());
         n++;
         bInNum = false;
       }
@@ -1383,10 +1381,9 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
     szText++;
   }
   if ( bInNum && (n < nSize) ) {
-    num[b] = 0;
-    if (!icXmlFloatTokenValid<T>(num))
+    if (!icXmlFloatTokenValid<T>(num.c_str()))
       return 0;
-    pBuf[n] = icParseArrayValue<T>(num);
+    pBuf[n] = icParseArrayValue<T>(num.c_str());
     n++;
   } 
 

@@ -1767,7 +1767,10 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
               }
 
               CIccFloatArray data;
-              data.ParseTextArray(pChild);
+              if (!data.ParseTextArray(pChild)) {
+                parseStr += "Invalid FullMatrix data\n";
+                return false;
+              }
               if (data.GetSize()==(icUInt32Number)nRows*nCols) {
                 if (!mtx.FillFromFullMatrix(data.GetBuf()))
                   parseStr += "Exceeded maximum number of sparse matrix entries\n";
@@ -2978,7 +2981,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
 
     if (pChild->children && pChild->children->content) {
       CIccFloatArray vals;
-      vals.ParseTextArray((icChar*)pChild->children->content);
+      if (!vals.ParseTextArray((icChar*)pChild->children->content)) {
+        parseStr += "Invalid ObserverFuncs samples\n";
+        return false;
+      }
       if (vals.GetSize()!=m_observerRange.steps*3)
         return false;
       m_observer = new (std::nothrow) icFloatNumber[m_observerRange.steps*3];
@@ -3047,7 +3053,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
 
     if (pChild->children && pChild->children->content) {
       CIccFloatArray vals;
-      vals.ParseTextArray((icChar*)pChild->children->content);
+      if (!vals.ParseTextArray((icChar*)pChild->children->content)) {
+        parseStr += "Invalid IlluminantSPD samples\n";
+        return false;
+      }
       if (vals.GetSize()!=m_illuminantRange.steps)
         return false;
       m_illuminant = new (std::nothrow) icFloatNumber[m_illuminantRange.steps];
