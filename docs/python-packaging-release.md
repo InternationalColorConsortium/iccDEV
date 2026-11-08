@@ -198,8 +198,9 @@ validation library. Install the matching tool bundle or compiled `iccdev`
 binding wheel separately for those capabilities. Namespace fixes for #2798
 and fail-closed transform behavior for #2797 must remain intact.
 For an isolated client use `uvx iccdev-mcp`. The rolling-release workflow
-publishes the exact `iccdev-mcp` version through PyPI trusted publishing and
-does not use PyPI credentials or repository secrets.
+can publish the exact `iccdev-mcp` version through PyPI trusted publishing
+when it is selected and eligible. It does not use PyPI credentials or
+repository secrets.
 
 ### Trusted PyPI publication
 
@@ -222,6 +223,50 @@ the 36 `iccdev` wheels and two MCP distributions in separate directories. Each
 PyPI action uses the release job's `id-token: write` permission and protected
 `release` environment; it receives no username, password, API token,
 repository secret, or mutable cache.
+
+Before downstream publication, a read-only planning job checks each selected
+PyPI or npm package independently. It verifies the public package's trusted
+publisher provenance, identifies that package's last published source commit,
+and requires the current four-part CMake core version to be newer than the core
+version at that commit. It also requires the requested PyPI or npm package
+version to be unused. A GitHub rolling binary release is not the baseline for
+this decision: one package can be published later even after another package
+has already used the new core version. Missing or conflicting provenance,
+registry errors, and occupied package versions deny only the affected
+downstream publication. The GitHub release, checksums, and attestations still
+proceed when their producer jobs succeed.
+
+A partially uploaded public release can be the newest baseline. The planner
+verifies every file that remains public and requires one trusted source commit.
+The staged candidate still requires the complete 36-wheel or two-distribution
+inventory before publication. A partially uploaded version remains occupied;
+recovery uses a new package version and a CMake core version newer than the
+partial baseline's attested source.
+
+For npm, the planner verifies the fetched SLSA bundle with Sigstore against
+the ICC release workflow identity and GitHub OIDC issuer, checks its source
+commit and package digest, then independently runs `npm audit signatures` on
+an exact install. The parsed statement comes from the bundle that Sigstore
+verified.
+
+The release job rechecks each target version immediately before its publisher
+to catch a version occupied after planning. Its summary reports eligibility,
+target availability, and actual publication separately. If an explicitly
+selected package was not published, a separate job marks the workflow
+unsuccessful while retaining the successful GitHub release. Rerun with only
+the missing package selected after resolving its version or registry issue;
+do not retry an already published immutable package version. The compiled
+`iccdev` and pure-Python `iccdev-mcp` packages have separate version fields that
+can be synchronized to the four-part CMake core version. npm `iccdev` uses a
+separate three-part SemVer version.
+
+Each publisher requires an eligibility decision from the current workflow run
+attempt. GitHub's **Re-run failed jobs** can reuse a successful planner's
+outputs from an earlier attempt, so it cannot publish a selected downstream
+package until the planner runs again. Use **Re-run all jobs** or a new manual
+dispatch to repeat the public provenance and core-version checks. npm staging
+also requires successful release-archive attestation and GitHub release
+creation; another package publisher's failure does not stop it.
 
 After upload, the workflow waits for PyPI availability, installs the exact
 published versions from the public index, runs the installed `iccdev`
@@ -316,8 +361,8 @@ by maintainers, not from a PR branch or CI scratch artifact.
    ```
 
 4. Publish with the manual `ci-latest-release.yml` workflow from `master`.
-   Select the intended `pypi_packages` value and verify the `release`
-   environment's deployment branch policy.
+   Select the intended `pypi_packages` value, use an unused Python package
+   version, and verify the `release` environment's deployment branch policy.
    The workflow uses OIDC trusted publishing; never add a PyPI token to PR
    workflows, forked branches, logs, or reusable workflows that run untrusted
    code.

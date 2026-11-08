@@ -120,6 +120,7 @@ jobs:
           /tmp/iccdev-preflight/bin/python -m pip install --upgrade pip --quiet
           /tmp/iccdev-preflight/bin/python -m pip install \
             'cibuildwheel==3.4.0' \
+            'cryptography==50.0.2' \
             'pytest>=9.0.3,<10' \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
@@ -174,6 +175,8 @@ jobs:
             --rootdir . \
             --import-mode=importlib \
             .github/tests/test_apple_mobile_release_artifact.py \
+            .github/tests/test_downstream_oidc_gate.py \
+            .github/tests/test_downstream_oidc_workflow.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_python_release_wheels.py \
             .github/tests/test_wasm_workflow.py \

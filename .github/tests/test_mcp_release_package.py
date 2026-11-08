@@ -142,7 +142,8 @@ def test_release_uses_opt_in_trusted_pypi_publication_and_public_smoke():
     assert "'release'" in release["environment"]["name"]
     steps = {step["name"]: step for step in release["steps"]}
     stage = steps["Stage validated PyPI distributions"]
-    assert "inputs.pypi_packages != 'none'" in stage["if"]
+    assert "needs.downstream-plan.outputs.pypi_iccdev == 'true'" in stage["if"]
+    assert "needs.downstream-plan.outputs.pypi_mcp == 'true'" in stage["if"]
     assert "validate-python-release-wheels.py release-assets --release" in stage["run"]
     assert "validate-mcp-release-package.py release-assets" in stage["run"]
     wheel_validator = runpy.run_path(
