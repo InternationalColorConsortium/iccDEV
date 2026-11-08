@@ -2323,10 +2323,13 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           unset ICCDEV_BUILD_DIR ICCDEV_VALIDATION_LIBRARY ICCDEV_TOOLS_DIR PYTHONPATH || true
-          python -m pip install "build>=1.2,<1.7" "twine>=5,<8" "PyYAML>=6,<7"
+          python -m pip install "build>=1.2,<1.7" "twine>=5,<8" "PyYAML>=6,<7" \
+            "cryptography==50.0.2"
           python -m pip install -e "./iccdev-mcp[dev,rest]"
           python -m pytest --rootdir . --import-mode=importlib \
             -o asyncio_default_fixture_loop_scope=function \
+            .github/tests/test_downstream_oidc_gate.py \
+            .github/tests/test_downstream_oidc_workflow.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_wasm_workflow.py -q
           python -m pytest --rootdir . --import-mode=importlib \
@@ -2367,10 +2370,105 @@ jobs:
     with:
       release-artifact: true
 
+  downstream-plan:
+    name: Check downstream OIDC eligibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    outputs:
+      pypi_iccdev: ${{ steps.oidc_gate.outputs.pypi_iccdev }}
+      pypi_mcp: ${{ steps.oidc_gate.outputs.pypi_mcp }}
+      npm_iccdev: ${{ steps.oidc_gate.outputs.npm_iccdev }}
+      selected_but_blocked: ${{ steps.oidc_gate.outputs.selected_but_blocked }}
+      reason_pypi_iccdev: ${{ steps.oidc_gate.outputs.reason_pypi_iccdev }}
+      reason_pypi_mcp: ${{ steps.oidc_gate.outputs.reason_pypi_mcp }}
+      reason_npm_iccdev: ${{ steps.oidc_gate.outputs.reason_npm_iccdev }}
+      gate_outcome: ${{ steps.oidc_gate.outcome }}
+      planner_run_attempt: ${{ steps.oidc_gate.outputs.planner_run_attempt }}
+    steps:
+      - name: Checkout full source history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python for provenance verification
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.13"
+
+      # preflight: allow-package-install reason=read-only-downstream-provenance-bootstrap
+      - name: Install downstream provenance verifier
+        if: >-
+          ${{ github.event_name == 'workflow_dispatch' &&
+              github.ref == 'refs/heads/master' &&
+              (inputs.pypi_packages == 'iccdev' ||
+               inputs.pypi_packages == 'iccdev-mcp' ||
+               inputs.pypi_packages == 'both' ||
+               inputs.npm_packages == 'iccdev') }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          python3 -m pip install --no-cache-dir --require-hashes \
+            --only-binary=:all: --index-url https://pypi.org/simple \
+            -r .github/ci/downstream-oidc-requirements.txt
+
+      - name: Set up Node.js for npm provenance verification
+        if: >-
+          ${{ github.event_name == 'workflow_dispatch' &&
+              github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Evaluate selected downstream packages
+        id: oidc_gate
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          PYPI_PACKAGES: ${{ inputs.pypi_packages }}
+          NPM_PACKAGES: ${{ inputs.npm_packages }}
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          python3 .github/scripts/check-downstream-oidc-gate.py \
+            --repo-root . \
+            --pypi-packages "${PYPI_PACKAGES:-none}" \
+            --npm-packages "${NPM_PACKAGES:-none}" \
+            --npm-version "$NPM_VERSION" \
+            --github-output "$GITHUB_OUTPUT" \
+            --json-output downstream-oidc-gate.json
+          printf 'planner_run_attempt=%s\n' "$(sanitize_line "$GITHUB_RUN_ATTEMPT")" >> "$GITHUB_OUTPUT"
+
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels, mcp-package, apple-mobile-core]
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-publish-colourbill-ctrl' }}
+    needs: [linux, macos, windows, wasm, cpack-linux, doxygen, python-wheels, mcp-package, apple-mobile-core, downstream-plan]
+    if: >-
+      ${{ !cancelled() &&
+          (github.ref == 'refs/heads/master' ||
+           github.ref == 'refs/heads/ci-fix-windows-packaging-failure' ||
+           github.ref == 'refs/heads/ci-publish-colourbill-ctrl') &&
+          needs.linux.result == 'success' &&
+          needs.macos.result == 'success' &&
+          needs.windows.result == 'success' &&
+          needs.wasm.result == 'success' &&
+          needs.cpack-linux.result == 'success' &&
+          needs.doxygen.result == 'success' &&
+          needs.python-wheels.result == 'success' &&
+          needs.mcp-package.result == 'success' &&
+          needs.apple-mobile-core.result == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: >-
@@ -2382,6 +2480,10 @@ jobs:
       contents: write  # Required to publish the latest release.
       id-token: write  # Required for artifact attestation identity.
       attestations: write  # Required to publish release archive provenance.
+    outputs:
+      pypi_iccdev_publication: ${{ steps.pypi_iccdev.outcome }}
+      pypi_mcp_publication: ${{ steps.pypi_mcp.outcome }}
+      npm_iccdev_publication: ${{ steps.npm_iccdev.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -2962,18 +3064,26 @@ jobs:
             --latest
 
       - name: Stage validated PyPI distributions
-        if: ${{ inputs.pypi_packages != 'none' && github.ref == 'refs/heads/master' }}
+        id: stage_pypi
+        if: >-
+          ${{ github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              steps.attest.outcome == 'success' &&
+              steps.publish.outcome == 'success' &&
+              (needs.downstream-plan.outputs.pypi_iccdev == 'true' ||
+               needs.downstream-plan.outputs.pypi_mcp == 'true') }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          PYPI_PACKAGES: ${{ inputs.pypi_packages }}
+          PYPI_ICCDEV_ALLOWED: ${{ needs.downstream-plan.outputs.pypi_iccdev }}
+          PYPI_MCP_ALLOWED: ${{ needs.downstream-plan.outputs.pypi_mcp }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
-          if [[ "$PYPI_PACKAGES" == "iccdev" || "$PYPI_PACKAGES" == "both" ]]; then
+          if [[ "$PYPI_ICCDEV_ALLOWED" == "true" ]]; then
             python3 .github/scripts/validate-python-release-wheels.py release-assets --release
             mkdir -p pypi-iccdev
             cp release-assets/iccdev-*.whl pypi-iccdev/
@@ -2983,7 +3093,7 @@ jobs:
               exit 1
             fi
           fi
-          if [[ "$PYPI_PACKAGES" == "iccdev-mcp" || "$PYPI_PACKAGES" == "both" ]]; then
+          if [[ "$PYPI_MCP_ALLOWED" == "true" ]]; then
             python3 .github/scripts/validate-mcp-release-package.py release-assets
             mkdir -p pypi-iccdev-mcp
             cp release-assets/iccdev_mcp-*.whl release-assets/iccdev_mcp-*.tar.gz \
@@ -2995,22 +3105,70 @@ jobs:
             fi
           fi
 
+      - name: Recheck iccdev PyPI target availability
+        id: target_pypi_iccdev
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.pypi_iccdev == 'true' &&
+              steps.stage_pypi.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          python3 .github/scripts/check-downstream-oidc-gate.py \
+            --check-target-only --repo-root . \
+            --pypi-packages iccdev --npm-packages none --npm-version "" \
+            --github-output "$GITHUB_OUTPUT" \
+            --json-output target-pypi-iccdev.json
+
       - name: Publish iccdev to PyPI
         id: pypi_iccdev
         if: >-
-          ${{ github.ref == 'refs/heads/master' &&
-              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              needs.downstream-plan.outputs.pypi_iccdev == 'true' &&
+              steps.stage_pypi.outcome == 'success' &&
+              steps.target_pypi_iccdev.outputs.target_pypi_iccdev_available == 'true' }}
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: pypi-iccdev/
           attestations: true
           verbose: true
 
+      - name: Recheck iccdev-mcp PyPI target availability
+        id: target_pypi_mcp
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.pypi_mcp == 'true' &&
+              steps.stage_pypi.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          python3 .github/scripts/check-downstream-oidc-gate.py \
+            --check-target-only --repo-root . \
+            --pypi-packages iccdev-mcp --npm-packages none --npm-version "" \
+            --github-output "$GITHUB_OUTPUT" \
+            --json-output target-pypi-mcp.json
+
       - name: Publish iccdev-mcp to PyPI
         id: pypi_mcp
         if: >-
-          ${{ github.ref == 'refs/heads/master' &&
-              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              needs.downstream-plan.outputs.pypi_mcp == 'true' &&
+              steps.stage_pypi.outcome == 'success' &&
+              steps.target_pypi_mcp.outputs.target_pypi_mcp_available == 'true' }}
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           packages-dir: pypi-iccdev-mcp/
@@ -3018,7 +3176,13 @@ jobs:
           verbose: true
 
       - name: Set up Node.js for npm publication
-        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        id: setup_npm_node
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              steps.attest.outcome == 'success' &&
+              steps.publish.outcome == 'success' &&
+              needs.downstream-plan.outputs.npm_iccdev == 'true' }}
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
         with:
           node-version: "24"
@@ -3026,7 +3190,14 @@ jobs:
           package-manager-cache: false
 
       - name: Stage validated npm distribution
-        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        id: stage_npm
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              steps.attest.outcome == 'success' &&
+              steps.publish.outcome == 'success' &&
+              needs.downstream-plan.outputs.npm_iccdev == 'true' &&
+              steps.setup_npm_node.outcome == 'success' }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -3118,11 +3289,39 @@ jobs:
             fi
           done
 
+      - name: Recheck iccdev npm target availability
+        id: target_npm_iccdev
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.npm_iccdev == 'true' &&
+              steps.stage_npm.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          NPM_VERSION: ${{ inputs.npm_version }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          python3 .github/scripts/check-downstream-oidc-gate.py \
+            --check-target-only --repo-root . \
+            --pypi-packages none --npm-packages iccdev \
+            --npm-version "$NPM_VERSION" \
+            --github-output "$GITHUB_OUTPUT" \
+            --json-output target-npm-iccdev.json
+
       # preflight: allow-token-exposure reason=npm-oidc-trusted-publishing
       # preflight: allow-package-install reason=npm-oidc-validated-tarball-publish
       - name: Publish iccdev to npm
         id: npm_iccdev
-        if: ${{ github.ref == 'refs/heads/master' && inputs.npm_packages == 'iccdev' }}
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/master' &&
+              needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) &&
+              needs.downstream-plan.outputs.npm_iccdev == 'true' &&
+              steps.stage_npm.outcome == 'success' &&
+              steps.target_npm_iccdev.outputs.target_npm_iccdev_available == 'true' }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -3159,7 +3358,7 @@ jobs:
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
               steps.pypi_iccdev.outcome == 'success' &&
               steps.setup_public_iccdev_python.outcome == 'success' &&
-              (inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') }}
+              needs.downstream-plan.outputs.pypi_iccdev == 'true' }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
         env:
@@ -3201,7 +3400,7 @@ jobs:
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
               steps.pypi_mcp.outcome == 'success' &&
               steps.setup_public_iccdev_python.outcome == 'success' &&
-              (inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') }}
+              needs.downstream-plan.outputs.pypi_mcp == 'true' }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
         env:
@@ -3239,7 +3438,8 @@ jobs:
         id: verify_public_iccdev_npm
         if: >-
           ${{ !cancelled() && github.ref == 'refs/heads/master' &&
-              steps.npm_iccdev.outcome == 'success' && inputs.npm_packages == 'iccdev' }}
+              steps.npm_iccdev.outcome == 'success' &&
+              needs.downstream-plan.outputs.npm_iccdev == 'true' }}
         continue-on-error: true
         shell: bash --noprofile --norc {0}
         env:
@@ -3315,6 +3515,24 @@ jobs:
           BASH_ENV: /dev/null
           RELEASE_OUTCOME: ${{ steps.publish.outcome }}
           ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
+          OIDC_GATE_OUTCOME: ${{ needs.downstream-plan.outputs.gate_outcome }}
+          OIDC_PLAN_BLOCKED: ${{ needs.downstream-plan.outputs.selected_but_blocked }}
+          OIDC_PLAN_ATTEMPT: ${{ needs.downstream-plan.outputs.planner_run_attempt }}
+          OIDC_PLAN_CURRENT: ${{ needs.downstream-plan.outputs.planner_run_attempt == format('{0}', github.run_attempt) }}
+          PYPI_REQUESTED: ${{ inputs.pypi_packages }}
+          NPM_REQUESTED: ${{ inputs.npm_packages }}
+          PYPI_ICCDEV_ELIGIBLE: ${{ needs.downstream-plan.outputs.pypi_iccdev }}
+          PYPI_MCP_ELIGIBLE: ${{ needs.downstream-plan.outputs.pypi_mcp }}
+          NPM_ICCDEV_ELIGIBLE: ${{ needs.downstream-plan.outputs.npm_iccdev }}
+          PYPI_ICCDEV_REASON: ${{ needs.downstream-plan.outputs.reason_pypi_iccdev }}
+          PYPI_MCP_REASON: ${{ needs.downstream-plan.outputs.reason_pypi_mcp }}
+          NPM_ICCDEV_REASON: ${{ needs.downstream-plan.outputs.reason_npm_iccdev }}
+          PYPI_ICCDEV_TARGET: ${{ steps.target_pypi_iccdev.outputs.target_pypi_iccdev_available }}
+          PYPI_MCP_TARGET: ${{ steps.target_pypi_mcp.outputs.target_pypi_mcp_available }}
+          NPM_ICCDEV_TARGET: ${{ steps.target_npm_iccdev.outputs.target_npm_iccdev_available }}
+          PYPI_ICCDEV_TARGET_REASON: ${{ steps.target_pypi_iccdev.outputs.reason_target_pypi_iccdev }}
+          PYPI_MCP_TARGET_REASON: ${{ steps.target_pypi_mcp.outputs.reason_target_pypi_mcp }}
+          NPM_ICCDEV_TARGET_REASON: ${{ steps.target_npm_iccdev.outputs.reason_target_npm_iccdev }}
           PYPI_ICCDEV_OUTCOME: ${{ steps.pypi_iccdev.outcome }}
           PYPI_MCP_OUTCOME: ${{ steps.pypi_mcp.outcome }}
           NPM_ICCDEV_OUTCOME: ${{ steps.npm_iccdev.outcome }}
@@ -3347,6 +3565,17 @@ jobs:
             echo "- Commit: \`${GITHUB_SHA:0:7}\`"
             echo "- Release publication: ${RELEASE_OUTCOME:-skipped}"
             echo "- Artifact attestation: ${ATTESTATION_OUTCOME:-skipped}"
+            echo "- Downstream OIDC eligibility check: ${OIDC_GATE_OUTCOME:-skipped}"
+            echo "- Downstream planner attempt: ${OIDC_PLAN_ATTEMPT:-none}; current attempt: ${GITHUB_RUN_ATTEMPT}; current approval: ${OIDC_PLAN_CURRENT:-false}"
+            echo "- Requested downstream selection blocked during planning: ${OIDC_PLAN_BLOCKED:-unknown}"
+            echo "- PyPI selection: ${PYPI_REQUESTED:-none}"
+            echo "- npm selection: ${NPM_REQUESTED:-none}"
+            echo "- PyPI iccdev eligibility: ${PYPI_ICCDEV_ELIGIBLE:-false} (${PYPI_ICCDEV_REASON:-not-evaluated})"
+            echo "- PyPI iccdev-mcp eligibility: ${PYPI_MCP_ELIGIBLE:-false} (${PYPI_MCP_REASON:-not-evaluated})"
+            echo "- npm iccdev eligibility: ${NPM_ICCDEV_ELIGIBLE:-false} (${NPM_ICCDEV_REASON:-not-evaluated})"
+            echo "- PyPI iccdev target available: ${PYPI_ICCDEV_TARGET:-false} (${PYPI_ICCDEV_TARGET_REASON:-not-evaluated})"
+            echo "- PyPI iccdev-mcp target available: ${PYPI_MCP_TARGET:-false} (${PYPI_MCP_TARGET_REASON:-not-evaluated})"
+            echo "- npm iccdev target available: ${NPM_ICCDEV_TARGET:-false} (${NPM_ICCDEV_TARGET_REASON:-not-evaluated})"
             echo "- PyPI iccdev publication: ${PYPI_ICCDEV_OUTCOME:-skipped}"
             echo "- PyPI iccdev-mcp publication: ${PYPI_MCP_OUTCOME:-skipped}"
             echo "- npm iccdev publication: ${NPM_ICCDEV_OUTCOME:-skipped}"
@@ -3364,3 +3593,37 @@ jobs:
             sanitize_line "$line"
             printf '\n'
           done >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+  downstream-selection-rejected:
+    name: Selected downstream publication incomplete
+    needs: release
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch' &&
+          github.ref == 'refs/heads/master' &&
+          needs.release.result == 'success' &&
+          (((inputs.pypi_packages == 'iccdev' || inputs.pypi_packages == 'both') &&
+            needs.release.outputs.pypi_iccdev_publication != 'success') ||
+           ((inputs.pypi_packages == 'iccdev-mcp' || inputs.pypi_packages == 'both') &&
+            needs.release.outputs.pypi_mcp_publication != 'success') ||
+           (inputs.npm_packages == 'iccdev' &&
+            needs.release.outputs.npm_iccdev_publication != 'success')) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Report rejected downstream selection
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+          echo "::error::A selected downstream package was not published; see the Release Summary for gate and registry diagnostics."
+          exit 1
