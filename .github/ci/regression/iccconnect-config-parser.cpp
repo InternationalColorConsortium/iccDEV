@@ -43,6 +43,16 @@
 #include "IccCmmConfig.h"
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 static int check(bool condition, const char* label)
 {
@@ -53,6 +63,43 @@ static int check(bool condition, const char* label)
 
   std::fprintf(stderr, "iccconnect-config-parser: FAIL  %s\n", label);
   return 1;
+}
+
+static bool parseIt8Text(CIccCfgColorData& data, const char* text, bool& parsed)
+{
+  std::string path;
+  FILE* file = nullptr;
+#ifdef _WIN32
+  char directory[MAX_PATH], name[MAX_PATH];
+  DWORD length = GetTempPathA(MAX_PATH, directory);
+  if (!length || length >= MAX_PATH || !GetTempFileNameA(directory, "ic8", 0, name))
+    return false;
+  path = name;
+  file = std::fopen(name, "wb");
+  if (!file) {
+    std::remove(name);
+    return false;
+  }
+#else
+  char name[] = "/tmp/iccconnect-config-it8-XXXXXX";
+  int descriptor = mkstemp(name);
+  if (descriptor < 0)
+    return false;
+  path = name;
+  file = fdopen(descriptor, "wb");
+  if (!file) {
+    close(descriptor);
+    std::remove(name);
+    return false;
+  }
+#endif
+
+  size_t textLength = std::strlen(text);
+  bool written = std::fwrite(text, 1, textLength, file) == textLength;
+  bool closed = std::fclose(file) == 0;
+  parsed = written && closed && data.fromIt8(path.c_str());
+  std::remove(path.c_str());
+  return written && closed;
 }
 
 int main()
@@ -393,6 +440,130 @@ int main()
     };
     failures += check(search.fromArgs(args, 9, true) == 0,
                       "search apply rejects -ENV: pairs immediately before -INIT");
+  }
+
+  // IT8 groups must retain their own channel indices and destination/source
+  // roles, even when a source group appears before the destination group.
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t6\nBEGIN_DATA_FORMAT\n"
+      "LAB_L\tLAB_A\tLAB_B\tXYZ_X\tXYZ_Y\tXYZ_Z\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "11\t22\t33\t0.125\t0.25\t0.5\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_space == icSigLabData && data.m_srcSpace == icSigXYZData;
+    if (values) {
+      const CIccCfgDataEntryPtr& entry = data.m_data.front();
+      values = entry->m_values == std::vector<icFloatNumber>{11, 22, 33} &&
+               entry->m_srcValues == std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f};
+    }
+    failures += check(values, "IT8 parses three LAB and XYZ channels without overread");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t3\nBEGIN_DATA_FORMAT\n"
+      "SRC_RGB_R\tSRC_RGB_G\tSRC_RGB_B\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.125\t0.25\t0.5\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_space == icSigRgbData;
+    if (values) {
+      const CIccCfgDataEntryPtr& entry = data.m_data.front();
+      values = entry->m_values == std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f} &&
+               entry->m_srcValues.empty();
+    }
+    failures += check(values, "IT8 SRC-only file supplies the input values");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = true;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t2\nBEGIN_DATA_FORMAT\n"
+      "TINT\tNAME\nEND_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.5\nEND_DATA\n", parsed);
+    failures += check(written && !parsed, "IT8 rejects a short data row");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t4\nBEGIN_DATA_FORMAT\n"
+      "SRC_RGB_R\tSRC_RGB_G\tSRC_RGB_B\tTINT\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.125\t0.25\t0.5\t0.75\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_space == icSigNamedData && data.m_srcSpace == icSigRgbData;
+    if (values) {
+      const CIccCfgDataEntryPtr& entry = data.m_data.front();
+      values = entry->m_values == std::vector<icFloatNumber>{0.75f} &&
+               entry->m_srcValues == std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f};
+    }
+    failures += check(values, "IT8 keeps TINT and SRC_RGB groups aligned");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t6\nBEGIN_DATA_FORMAT\n"
+      "SRC_RGB_R\tSRC_RGB_G\tSRC_RGB_B\tRGB_R\tRGB_G\tRGB_B\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.125\t0.25\t0.5\t0.625\t0.75\t0.875\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_space == icSigRgbData && data.m_srcSpace == icSigRgbData;
+    if (values) {
+      const CIccCfgDataEntryPtr& entry = data.m_data.front();
+      values = entry->m_values == std::vector<icFloatNumber>{0.625f, 0.75f, 0.875f} &&
+               entry->m_srcValues == std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f};
+    }
+    failures += check(values, "IT8 keeps source-first RGB groups distinct");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t3\nBEGIN_DATA_FORMAT\n"
+      "RGB_R\tRGB_G\tRGB_B\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.125\t0.25\t0.5\t\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_data.front()->m_values ==
+                    std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f};
+    failures += check(values, "IT8 accepts a data row with a trailing tab");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = false;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t3\nBEGIN_DATA_FORMAT\n"
+      "3COLOR_1\t3COLOR_2\t3COLOR_3\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.125\t0.25\t0.5\nEND_DATA\n", parsed);
+    bool values = written && parsed && data.m_data.size() == 1 &&
+                  data.m_data.front()->m_values ==
+                    std::vector<icFloatNumber>{0.125f, 0.25f, 0.5f};
+    failures += check(values, "IT8 indexes an nCOLOR group that is the first group");
+  }
+
+  {
+    CIccCfgColorData data;
+    bool parsed = true;
+    bool written = parseIt8Text(data,
+      "CGATS.17\nNUMBER_OF_FIELDS\t1\nBEGIN_DATA_FORMAT\n"
+      "2000000000COLOR_1\n"
+      "END_DATA_FORMAT\nNUMBER_OF_SETS\t1\nBEGIN_DATA\n"
+      "0.5\nEND_DATA\n", parsed);
+    failures += check(written && !parsed,
+                      "IT8 refuses an nCOLOR channel count above 65535");
   }
 
   return failures ? 1 : 0;

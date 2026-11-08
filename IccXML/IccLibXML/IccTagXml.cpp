@@ -1621,7 +1621,10 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
           n++;
 
       }
-      Reset(n, nChannelsPerMatrix);
+      if (!Reset(n, nChannelsPerMatrix)) {
+        parseStr += "Unable to allocate SparseMatrixArray data\n";
+        return false;
+      }
       m_nMatrixType = (icSparseMatrixType)nMatrixType;
 
       icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
