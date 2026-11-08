@@ -1120,6 +1120,113 @@ countofchannels_65536_channel_write
 responsecurve_65536_measurement_types
 
 ###############################################################################
+# textDescriptionType must fail gracefully when its ASCII buffer cannot grow.
+###############################################################################
+
+textdescription_allocation_failure() {
+  local name="xml-textdescription-allocation-failure"
+  local fixture="$TESTING_DIR/V2/v2GrayTRC.xml"
+  local xml="$OUTDIR/textdescription-allocation.xml"
+  local interposer="$OUTDIR/textdescription-fail-realloc.so"
+  local control_log="$OUTDIR/${name}-control.log"
+  local failure_log="$OUTDIR/${name}-failure.log"
+  local status=0
+
+  if [ "$(uname -s)" != Linux ]; then
+    skip "$name" "glibc realloc fault injection runs on Linux"
+    return
+  fi
+  if ! getconf GNU_LIBC_VERSION >/dev/null 2>&1; then
+    skip "$name" "glibc realloc fault injection requires glibc"
+    return
+  fi
+  if ! command -v cc >/dev/null 2>&1 ||
+     ! command -v python3 >/dev/null 2>&1 ||
+     ! command -v nm >/dev/null 2>&1 ||
+     [ ! -x "$FROMXML" ] || [ ! -f "$fixture" ]; then
+    skip "$name" "compiler, python3, nm, iccFromXml, or v2 XML fixture missing"
+    return
+  fi
+  # ASan supplies its own realloc interceptor ahead of LD_PRELOAD and would
+  # bypass the failure injection. The plain build owns this check.  grep reads
+  # all of nm's output: with -q it exits at the first match, nm takes SIGPIPE,
+  # and under pipefail the pipeline reports 141 instead of a match.
+  if nm -D "$FROMXML" 2>/dev/null | grep '__asan_init' >/dev/null; then
+    skip "$name" "ASan intercepts realloc before LD_PRELOAD"
+    return
+  fi
+
+  if ! python3 - "$fixture" "$xml" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+marker = "iccDEV v2 grayscale display profile (grayTRC)"
+if source.count(marker) != 1:
+    raise SystemExit("textDescriptionType fixture marker changed")
+Path(sys.argv[2]).write_text(source.replace(marker, "A" * 4096))
+PY
+  then
+    fail "$name" "could not prepare XML fixture"
+    return
+  fi
+
+  if ! cc -shared -fPIC -x c -o "$interposer" - <<'C'
+#include <errno.h>
+#include <stddef.h>
+#include <unistd.h>
+
+extern void *__libc_realloc(void *, size_t);
+
+void *realloc(void *ptr, size_t size)
+{
+  if (ptr && size == 4097) {
+    static const char marker[] = "injected textDescriptionType realloc failure\n";
+    write(2, marker, sizeof(marker) - 1);
+    errno = ENOMEM;
+    return NULL;
+  }
+  return __libc_realloc(ptr, size);
+}
+C
+  then
+    fail "$name" "could not compile allocation fault injector"
+    return
+  fi
+
+  rm -f "$OUTDIR/${name}-control.icc" "$OUTDIR/${name}-failure.icc"
+  "$FROMXML" "$xml" "$OUTDIR/${name}-control.icc" >"$control_log" 2>&1 || status=$?
+  if [ "$status" -ne 0 ] || [ ! -s "$OUTDIR/${name}-control.icc" ]; then
+    fail "$name" "control profile did not parse (exit $status)"
+    return
+  fi
+
+  status=0
+  LD_PRELOAD="$interposer" "$FROMXML" "$xml" "$OUTDIR/${name}-failure.icc" >"$failure_log" 2>&1 || status=$?
+  # A sanitizer or static runtime that resolves realloc ahead of LD_PRELOAD
+  # never calls the shim, so the marker is missing: nothing was injected.
+  if ! grep -F 'injected textDescriptionType realloc failure' "$failure_log" >/dev/null; then
+    skip "$name" "realloc interposition unavailable (sanitizer or static runtime)"
+    return
+  fi
+  if [ "$status" -lt 1 ] || [ "$status" -ge 128 ] || [ -e "$OUTDIR/${name}-failure.icc" ]; then
+    fail "$name" "injected failure did not reject gracefully (exit $status)"
+    return
+  fi
+  if ! grep -Fq 'injected textDescriptionType realloc failure' "$failure_log" ||
+     ! grep -Fq 'Memory error allocating textDescriptionType ASCII data' "$failure_log"; then
+    fail "$name" "did not reach the intended allocation and diagnostic"
+    return
+  fi
+  check_sanitizers "$name" "$failure_log" || return
+  pass "$name (allocation failure rejected without signal)"
+}
+
+echo
+echo "=== textDescriptionType allocation failure ==="
+textdescription_allocation_failure
+
+###############################################################################
 
 echo
 echo "=== Summary ==="
