@@ -53,10 +53,12 @@ PowerShell prologues in the reusable native jobs. The release summary
 sanitizes dynamic values and reports actual publication and attestation
 outcomes separately from locally staged assets.
 
-Dispatch on a work branch builds and tests artifacts without publishing a
-release; the existing release job branch allowlist stays in force. After
-merge, a maintainer can manually run the workflow on `master` to publish a
-new rolling Latest Build. Existing release assets are not modified.
+Dispatch on a branch outside the release job's allowlist builds and tests
+artifacts without publishing a GitHub release. Allowlisted branches pass the
+job's branch predicate, subject to the selected environment's deployment
+branch policy; PyPI and npm publication remain gated to `master`.
+After merge, a maintainer can manually run the workflow on `master` to publish
+a new rolling Latest Build. Existing release assets are not modified.
 
 Users on CPython 3.11-3.14 install the published wheel from PyPI:
 
