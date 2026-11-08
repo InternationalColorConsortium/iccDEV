@@ -51,6 +51,7 @@ set -uo pipefail
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:-Build/Tools}"
 TESTING_DIR="${ICCDEV_TESTING_DIR:-Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-xml-parser-regressions}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 mkdir -p "$OUTDIR"
 
 # Absolute paths before any tool path is derived from them: the round-trip case
@@ -1118,6 +1119,68 @@ responsecurve_profile_reads_back
 measurement_reserved_not_inherited
 countofchannels_65536_channel_write
 responsecurve_65536_measurement_types
+
+###############################################################################
+# Long numeric tokens must not be accepted as a truncated prefix.
+###############################################################################
+
+numeric_token_observer_kept() {
+  local name="xml-observer-long-numeric-token"
+  local fixture="$REPO_ROOT/.github/ci/test-data/ub-profileversion-negative-1845.xml"
+  local control="$OUTDIR/${name}-control.xml"
+  local longer="$OUTDIR/${name}.xml"
+  local control_icc="$OUTDIR/${name}-control.icc"
+  local longer_icc="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ] || [ ! -f "$fixture" ]; then
+    fail "$name" "iccFromXml or tracked XML fixture is missing"
+    return
+  fi
+
+  # #3023: the same ObserverFuncs sample spelled with 300 leading zeros must
+  # give the same profile.  A fixed token buffer read only its prefix, zeros.
+  if ! python3 - "$fixture" "$control" "$longer" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+version = '<ProfileVersion>-12.</ProfileVersion>'
+created = '<CreationDateTime>now</CreationDateTime>'
+sample = '0.001368'
+if any(source.count(text) != 1 for text in (version, created, sample)):
+    raise SystemExit('XML fixture changed: expected version/date/sample not found once')
+control = source.replace(version, '<ProfileVersion>5.00</ProfileVersion>')
+control = control.replace(created, '<CreationDateTime>2026-11-08T00:00:00</CreationDateTime>')
+Path(sys.argv[2]).write_text(control)
+Path(sys.argv[3]).write_text(control.replace(sample, '0' * 300 + sample))
+PY
+  then
+    fail "$name" "could not generate the XML control and long spelling"
+    return
+  fi
+
+  rm -f "$control_icc" "$longer_icc" "$logfile"
+  if ! "$FROMXML" "$control" "$control_icc" >"$logfile" 2>&1 || [ ! -s "$control_icc" ]; then
+    fail "$name" "valid observer control did not convert"
+    return
+  fi
+  check_sanitizers "$name (control)" "$logfile" || return
+  if ! "$FROMXML" "$longer" "$longer_icc" >"$logfile" 2>&1 || [ ! -s "$longer_icc" ]; then
+    fail "$name" "the long spelling of a valid sample did not convert"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  if ! cmp -s "$control_icc" "$longer_icc"; then
+    fail "$name" "the long spelling changed the profile"
+    return
+  fi
+  pass "$name (300 leading zeros keep the sample's value)"
+}
+
+echo
+echo "=== XML numeric token bounds ==="
+numeric_token_observer_kept
 
 ###############################################################################
 
