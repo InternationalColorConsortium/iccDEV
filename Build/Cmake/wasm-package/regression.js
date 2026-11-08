@@ -122,8 +122,19 @@ main().catch(e=>{console.error(e);process.exit(1);});
 const testingWork = path.join(work, 'Testing');
 cp.execFileSync('cp', ['-a', TESTING + '/.', testingWork + '/']);
 // Strip CRLF from any *.sh (defensive - Windows checkouts)
-cp.execFileSync('bash', ['-c',
-  `find ${JSON.stringify(testingWork)} -name '*.sh' -exec sed -i 's/\\r$//' {} +`]);
+function normalizeShellScripts(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const file = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      normalizeShellScripts(file);
+    } else if (entry.isFile() && entry.name.endsWith('.sh')) {
+      const contents = fs.readFileSync(file, 'utf8');
+      const normalized = contents.replace(/\r(?=\n|$)/g, '');
+      if (normalized !== contents) fs.writeFileSync(file, normalized);
+    }
+  }
+}
+normalizeShellScripts(testingWork);
 
 const createAllProfiles = path.join(testingWork, 'CreateAllProfiles.sh');
 
