@@ -486,7 +486,7 @@ run_calc_import_case() {
   local main_xml="$case_dir/main.xml"
   local built_icc="$case_dir/profile.icc"
   local log="$case_dir/fromxml.log"
-  local current next child i exit_code=0
+  local current next i exit_code=0
 
   TOTAL=$((TOTAL + 1))
   if [ ! -f "$fixture" ]; then
