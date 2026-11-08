@@ -28,7 +28,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 // CTest contract: the XML reader refuses malformed numeric attributes it used to
-// read with sscanf() (#2836, #2839, #2840).
+// read with sscanf() (#2836, #2839, #2840), including DeviceAttributes
+// VendorSpecific in the header.
 //
 // sscanf("%u") and sscanf("%x") stop at the first character they cannot use
 // and report success, so a malformed value loaded as its leading digits and
@@ -59,6 +60,7 @@
 #include <libxml/tree.h>
 
 #include <cstdio>
+#include <initializer_list>
 #include <string>
 
 #ifdef USEICCDEVNAMESPACE
@@ -88,6 +90,7 @@ const char *kTemplate =
   "  <PCS>XYZ </PCS>\n"
   "  <CreationDateTime>2026-10-13T15:05:00</CreationDateTime>\n"
   "  <ProfileFlags EmbeddedInFile=\"false\" UseWithEmbeddedDataOnly=\"false\" @FLAGS@/>\n"
+  "  <DeviceAttributes ReflectiveOrTransparency=\"reflective\" GlossyOrMatte=\"glossy\" @ATTR@/>\n"
   "  <PCSIlluminant><XYZNumber X=\"0.9642\" Y=\"1.0\" Z=\"0.8249\"/></PCSIlluminant>\n"
   " </Header>\n"
   " <Tags>\n"
@@ -111,11 +114,28 @@ const char *kTemplate =
 std::string fill(const std::string &key, const std::string &text)
 {
   std::string s = kTemplate;
-  const char *keys[] = { "@FLAGS@", "@TAGRES@", "@ELEMRES@", "@SUBRES@", "@TINTRES@" };
+  const char *keys[] = { "@FLAGS@", "@ATTR@", "@TAGRES@", "@ELEMRES@", "@SUBRES@", "@TINTRES@" };
   for (const char *k : keys) {
     size_t at = s.find(k);
     s.replace(at, std::string(k).size(), key == k ? text : std::string());
   }
+  return s;
+}
+
+std::string pseqVendor(const char *value)
+{
+  std::string s = fill("", "");
+  std::string tag =
+    "<profileSequenceDescTag><profileSequenceDescType><ProfileSequence><ProfileDesc>"
+    "<DeviceManufacturerSignature>test</DeviceManufacturerSignature>"
+    "<DeviceModelSignature>test</DeviceModelSignature>"
+    "<DeviceAttributes ReflectiveOrTransparency=\"reflective\" VendorSpecific=\"";
+  tag += value;
+  tag += "\"/><Technology></Technology>"
+         "<DeviceManufacturer><multiLocalizedUnicodeType/></DeviceManufacturer>"
+         "<DeviceModel><multiLocalizedUnicodeType/></DeviceModel>"
+         "</ProfileDesc></ProfileSequence></profileSequenceDescType></profileSequenceDescTag>";
+  s.insert(s.find("</Tags>"), tag);
   return s;
 }
 
@@ -173,6 +193,42 @@ int main()
 
   pair("ProfileFlags VendorFlags", "@FLAGS@", "VendorFlags", "80000000", "0g1",
        0x80000000LL, [](CIccProfile &p) { return (long long)(p.m_Header.flags & 0xFFFF0000u); });
+
+  pair("DeviceAttributes VendorSpecific", "@ATTR@", "VendorSpecific",
+       "0000000100000000", "100000000x", 0x100000000LL,
+       [](CIccProfile &p) { return (long long)p.m_Header.attributes; });
+  for (const char *bad : {"-1", "+100", " -1", "\t+100", "10000000000000000", "", "  "}) {
+    CIccProfileXml profile;
+    std::string err;
+    check(!parse(fill("@ATTR@", std::string("VendorSpecific=\"") + bad + "\""), profile, err),
+          std::string("DeviceAttributes VendorSpecific ") + bad + ": refused");
+  }
+  {
+    CIccProfileXml profile;
+    std::string err;
+    check(parse(fill("@ATTR@", "VendorSpecific=\"1\""), profile, err) &&
+          profile.m_Header.attributes == 1,
+          "DeviceAttributes VendorSpecific legacy named bit parses");
+  }
+  {
+    CIccProfileXml profile;
+    std::string err;
+    check(parse(fill("@ATTR@", "VendorSpecific=\" 100000000 \""), profile, err) &&
+          profile.m_Header.attributes == 0x100000000LL,
+          "DeviceAttributes VendorSpecific with surrounding white space parses");
+  }
+  {
+    CIccProfileXml profile;
+    std::string err;
+    check(parse(pseqVendor("0000000100000000"), profile, err),
+          "ProfileDesc VendorSpecific valid value parses");
+  }
+  {
+    CIccProfileXml profile;
+    std::string err;
+    check(!parse(pseqVendor("-1"), profile, err),
+          "ProfileDesc VendorSpecific negative value refused");
+  }
 
   pair("profile tag reserved", "@TAGRES@", "reserved", "0000000a", "0000000ax", 0xa,
        [](CIccProfile &p) {

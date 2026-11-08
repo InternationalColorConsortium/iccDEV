@@ -706,9 +706,12 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 		else if (!icXmlStrCmp(pNode->name, "DeviceModel")) {
 		  m_Header.model = icXmlGetChildSigVal(pNode);
 		}
-		else if (!icXmlStrCmp(pNode->name, "DeviceAttributes")) {
-			m_Header.attributes = icGetDeviceAttrValue(pNode);
-		}
+    else if (!icXmlStrCmp(pNode->name, "DeviceAttributes")) {
+      if (!icGetDeviceAttrValue(pNode, m_Header.attributes)) {
+        parseStr += "Invalid DeviceAttributes VendorSpecific\n";
+        return false;
+      }
+    }
 		else if (!icXmlStrCmp(pNode->name, "RenderingIntent")) {
           if (!pNode->children || !pNode->children->content) {
             parseStr += "Cannot parse RenderingIntent, no value specified\n";
@@ -1183,14 +1186,34 @@ bool CIccProfileXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  xmlNode *hdrNode = icXmlFindNode(pNode->children, "Header");
+  xmlNode *hdrNode = NULL;
+  xmlNode *tagNode = NULL;
+
+  for (xmlNode *node = pNode->children; node; node = node->next) {
+    if (node->type != XML_ELEMENT_NODE)
+      continue;
+
+    if (!icXmlStrCmp(node->name, "Header")) {
+      if (hdrNode) {
+        parseStr += "Duplicate Header element in IccProfile\n";
+        return false;
+      }
+      hdrNode = node;
+    }
+    else if (!icXmlStrCmp(node->name, "Tags")) {
+      if (tagNode) {
+        parseStr += "Duplicate Tags element in IccProfile\n";
+        return false;
+      }
+      tagNode = node;
+    }
+  }
 
   // parse header
   if (!hdrNode || !ParseBasic(hdrNode, parseStr))
     return false;
 
   // parse each tag
-  xmlNode *tagNode = icXmlFindNode(pNode->children, "Tags");
   if (!tagNode)
     return false;
 

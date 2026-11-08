@@ -1290,6 +1290,69 @@ echo "=== textDescriptionType allocation failure ==="
 textdescription_allocation_failure
 
 ###############################################################################
+# A profile has one Header and one Tags section.
+###############################################################################
+
+echo
+echo "=== Duplicate top-level profile sections ==="
+
+top_level_sections_control() {
+  local name="xml-top-level-sections-control" source="$TESTING_DIR/Named/NamedColorV4.xml"
+  local logfile="$OUTDIR/xml-top-level-sections-control.log"
+  if [ ! -x "$FROMXML" ] || [ ! -f "$source" ]; then
+    skip "$name" "iccFromXml or NamedColorV4.xml missing"
+    return
+  fi
+  if ! "$FROMXML" "$source" "$OUTDIR/$name.icc" >"$logfile" 2>&1 ||
+     [ ! -s "$OUTDIR/$name.icc" ]; then
+    fail "$name" "single Header and Tags sections were refused"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (single sections accepted)"
+}
+
+duplicate_top_level_section() {
+  local section="$1" name="xml-duplicate-top-level-$1"
+  local source="$TESTING_DIR/Named/NamedColorV4.xml"
+  local file="$OUTDIR/$name.xml" logfile="$OUTDIR/$name.log" profile="$OUTDIR/$name.icc"
+  if [ ! -x "$FROMXML" ] || [ ! -f "$source" ]; then
+    skip "$name" "iccFromXml or NamedColorV4.xml missing"
+    return
+  fi
+  if ! python3 - "$source" "$file" "$section" <<'PY'
+import sys
+from pathlib import Path
+source, target, section = sys.argv[1:]
+data = Path(source).read_text()
+closing = "</IccProfile>"
+if data.count(closing) != 1:
+    raise SystemExit("fixture has no unique IccProfile closing tag")
+extra = ("<Header><ProfileVersion>9.99</ProfileVersion></Header>"
+         if section == "Header" else "<Tags><unrecognizedType/></Tags>")
+Path(target).write_text(data.replace(closing, extra + closing))
+PY
+  then
+    fail "$name" "could not construct fixture"
+    return
+  fi
+  rm -f "$profile"
+  "$FROMXML" "$file" "$profile" >"$logfile" 2>&1
+  local status=$?
+  if [ "$status" -lt 1 ] || [ "$status" -ge 128 ] || [ -e "$profile" ] ||
+     ! grep -Fq "Duplicate $section element in IccProfile" "$logfile"; then
+    fail "$name" "expected attributed graceful refusal (exit $status)"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (duplicate $section refused)"
+}
+
+top_level_sections_control
+duplicate_top_level_section Header
+duplicate_top_level_section Tags
+
+###############################################################################
 
 echo
 echo "=== Summary ==="

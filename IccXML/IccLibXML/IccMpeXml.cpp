@@ -1425,6 +1425,11 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   m_list->clear();
   for (pNode=pNode->children; pNode; pNode=pNode->next) {
     if (pNode->type == XML_ELEMENT_NODE) {
+      if (m_list->size() >= (std::numeric_limits<icUInt16Number>::max)()) {
+        parseStr += "SegmentedCurve has more than 65535 segments\n";
+        return false;
+      }
+
       icFloatNumber start = 0, end = 0;
       if (!icGetSegPos(icXmlAttrValue(pNode, "Start"), start) ||
           !icGetSegPos(icXmlAttrValue(pNode, "End"), end)) {

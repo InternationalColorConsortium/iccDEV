@@ -66,6 +66,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 
 #ifdef USEICCDEVNAMESPACE
@@ -199,6 +200,45 @@ int main()
         check(false, label, buf);
       }
     }
+  }
+
+  /* 4. The binary segment count is 16-bit.  A 65536th XML segment used to
+     wrap that count to zero while Write() still emitted every segment. */
+  {
+    const std::string first = seg("-inf", "0", kPass);
+    const std::string middle = seg("0", "0", kPass);
+    const std::string last = seg("0", "+inf", kPass);
+    const size_t maxSegments = (std::numeric_limits<icUInt16Number>::max)();
+    std::string segments;
+    segments.reserve((maxSegments + 1) * middle.size());
+    segments += first;
+    for (size_t i = 0; i < maxSegments - 2; i++)
+      segments += middle;
+    segments += last;
+
+    std::string parseStr;
+    CIccSegmentedCurveXml accepted;
+    check(parseCurve(segments, accepted, parseStr), "65535 segments accepted",
+          "refused: " + parseStr);
+    CIccMemIO io;
+    check(io.Alloc(4 * 1024 * 1024, true), "65535 segments written", "no memory for curve");
+    check(accepted.Write(&io), "65535 segments written", "Write() refused representable count");
+    CIccFormulaCurveSegment *extra = new CIccFormulaCurveSegment(icMaxFloat32Number,
+                                                                 icMaxFloat32Number);
+    bool inserted = accepted.Insert(extra);
+    if (!inserted)
+      delete extra;
+    check(inserted, "65536 programmatic segments", "Insert() refused appended segment");
+    check(!accepted.Write(&io), "65536 programmatic segments",
+          "Write() narrowed an unrepresentable count");
+
+    segments.insert(segments.size() - last.size(), middle);
+    parseStr.clear();
+    CIccSegmentedCurveXml refused;
+    check(!parseCurve(segments, refused, parseStr), "65536 segments refused",
+          "parsed a count that wraps to zero on Write()");
+    check(has(parseStr, "more than 65535 segments"), "65536 segments refused",
+          "missing count diagnostic: " + parseStr);
   }
 
   if (g_fail) {
