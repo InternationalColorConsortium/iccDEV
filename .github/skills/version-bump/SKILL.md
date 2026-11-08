@@ -19,7 +19,7 @@ Use this skill when updating the iccDEV release version.
 
 | File | Symbol or content |
 |------|-------------------|
-| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables |
+| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables and full-version CMake package metadata |
 | `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER` |
 | `vcpkg.json`, `Build/Cmake/vcpkg.json` | package version |
 | `ports/iccdev/vcpkg.json` | package version and reset `port-version` |
@@ -40,7 +40,8 @@ inherit the version from `Build/Cmake/CMakeLists.txt`.
 1. Update all active version references.
 2. Search all tracked files for the old version and review every match. Preserve
    clearly dated historical plans and captured output as historical evidence.
-3. Build and verify the version in generated binaries or package metadata.
+3. Build and verify the version in generated binaries and package metadata,
+   including an installed `find_package(RefIccMAX X.Y.Z.W EXACT CONFIG REQUIRED)` consumer.
 4. Update release-facing docs only when they contain explicit version text.
 5. Commit the release references, then update `REF` and `SHA512` together in
    `ports/iccdev/portfile.cmake` to pin that immutable commit. Verify the

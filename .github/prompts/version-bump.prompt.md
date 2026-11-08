@@ -8,7 +8,7 @@ Use this prompt when bumping the iccDEV version number (`OLD_VERSION` -> `NEW_VE
 
 | File | Symbol or content | Type |
 |------|-------------------|------|
-| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables | CMake variables |
+| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables and full-version `ConfigVersion.cmake` | CMake package metadata |
 | `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER`, when intentionally maintained as a source header | Source header |
 | `vcpkg.json`, `Build/Cmake/vcpkg.json` | Package version | vcpkg manifests |
 | `ports/iccdev/vcpkg.json` | Package version; reset `port-version` | Overlay port manifest |
@@ -76,9 +76,14 @@ mkdir -p Build && cd Build
 cmake ../Build/Cmake -DCMAKE_BUILD_TYPE=Debug
 make -j$(nproc)
 
-# Verify version in built library
-strings IccProfLib/libIccProfLib2.so.* | grep 'NEW_VERSION'
+# Verify installed-package metadata and its consumer contract
+grep -F 'set(PACKAGE_VERSION "NEW_VERSION")' RefIccMAXConfigVersion.cmake
+ctest -R '^iccdev.installed-package-consumer$' --output-on-failure
 ```
+
+The installed consumer must resolve the exact four-part version with
+`find_package(RefIccMAX NEW_VERSION EXACT CONFIG REQUIRED)`; checking only the
+library filename or an unversioned package lookup misses this contract.
 
 ### 5. Commit the version references
 

@@ -11219,6 +11219,7 @@ function(iccdev_add_installed_package_consumer_test)
       "-DICCDEV_HAVE_SHARED=${ENABLE_SHARED_LIBS}"
       "-DICCDEV_HAVE_JSON=${_have_json}"
       "-DICCDEV_HAVE_CONNECT=${_have_connect}"
+      "-DICCDEV_EXPECTED_PACKAGE_VERSION=${REFICCMAX_VERSION}"
       -P "${CMAKE_CURRENT_LIST_DIR}/RunInstalledPackageConsumerTest.cmake"
   )
   # Generous because the test performs three nested configure+build cycles on
