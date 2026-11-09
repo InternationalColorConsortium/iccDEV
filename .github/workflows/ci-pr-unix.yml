@@ -67,6 +67,11 @@ on:
         required: false
         default: ""
         type: string
+      pr_number:
+        description: "Resolved PR number for isolated concurrency"
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
 
 # Concurrency is set at job level so each matrix cell has its own group.
@@ -86,7 +91,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'macos-latest' && 45 || 20 }}
     concurrency:
-      group: pr-unix-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+      group: pr-unix-${{ github.event_name }}-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}-${{ inputs.target-sha || github.event.pull_request.head.sha || github.sha }}-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ github.run_id }}
       cancel-in-progress: true
     defaults:
       run:

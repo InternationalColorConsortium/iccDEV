@@ -197,10 +197,8 @@ uses the same helper, requiring native validation. It is manual-dispatch only;
 when dispatched from `master`, `ci-qa-pr-docker-testing`,
 `ci-publish-colourbill-ctrl`, or a release tag, it publishes the corresponding
 approved image tags. Other feature branches remain non-publishing.
-The read-only `ci-docker-pr` caller uses it when building the changed Dockerfile;
-its trusted-base-image-only path does not claim to test a new runtime. No PR
-runtime artifacts are uploaded. The MCP package workflow includes the shared
-scanner and smoke helper paths in its test triggers.
+The MCP package workflow includes the shared scanner and smoke helper paths in
+its test triggers.
 
 The sole supported Dockerfile is the unified sanitizer image. Do not reintroduce
 retired per-variant Dockerfiles to test optional native-library behavior.
@@ -467,7 +465,7 @@ environment, workflow and Dockerfile policy, shipped analyzer inventory,
 runtime behavior, and image health check.
 
 ```bash
-command -v docker gh actionlint zizmor hadolint trivy
+command -v docker gh jactionlint zizmor hadolint trivy
 git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
 PREFLIGHT_BASE_REF=origin/master .github/scripts/preflight-safety-checks.sh --require-tools
 
@@ -514,7 +512,7 @@ dependencies over time.
 ### SAST and image scanning
 
 `preflight-safety-checks.sh --require-tools` runs the workflow, shell,
-Dockerfile, and configuration SAST checks, including actionlint, yamllint,
+Dockerfile, and configuration SAST checks, including jactionlint, yamllint,
 zizmor, ShellCheck, hadolint, and Trivy configuration scanning. For
 component-partitioned cppcheck and clang-tidy reports, use the exact
 maintainer static-analysis reproduction in \ref md_docs_2build "the build guide".

@@ -48,6 +48,8 @@ gates in the screening record when their contracts apply.
 | Sanitizer regression gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for initial PR validation and explicit final dispatches. |
 | Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone manual caller for the reusable Linux and Windows workflow-security audits. |
 | Rebase safety gate | `.github/workflows/ci-rebase-safety.yml` | Lightweight ancestry validation for same-repository PR synchronize events. |
+| PR CI label dispatcher | `.github/workflows/ci-maintainer-pr-dispatch.yml` | Maintainer-label requests dispatched from the trusted `master` workflow with exact PR head input. |
+| PR status labeler | `.github/workflows/update-labels.yml` | API-only current-head validation on PR events and trusted workflow completions. |
 | MATLAB native gate | `.github/workflows/ci-matlab.yml` | Manual Windows MSVC, Linux x86_64, and Apple Silicon macOS MEX QA; separate Docker interoperability. |
 | MATLAB release bundles | `.github/workflows/ci-latest-release.yml` | Linux x86_64, macOS arm64, and Windows x64 MEX builds with staged MATLAB QA and payload verification. |
 | Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
@@ -121,9 +123,19 @@ scheduled lanes.
 ## Rebase and Final Validation
 
 Opening, reopening, or marking a PR ready for review runs its path-scoped
-automatic gates once. A subsequent `synchronize` event runs
-`ci-rebase-safety` as its only validation lane; it verifies that the PR head
-contains the event base without rebuilding the full matrix.
+automatic gates. A subsequent `synchronize` event runs `ci-rebase-safety`
+for ancestry and `ci-pr-action` in its bounded fast lane for the new head.
+The fast lane does not restart the full matrix. `ci-pr-action` publishes an
+exact-head `PR Summary` result; the trusted status labeler refreshes after
+validation completes. Check that result, the current head, labels, draft
+state, and merge state before reporting `Merge Ready`.
+
+If automatic validation is absent on an open same-repository PR targeting
+`master`, dispatch `ci-pr-action` from the trusted `master` workflow with
+the PR number and exact expected head SHA, then manually refresh
+`update-labels.yml` if its completion-triggered refresh is absent. See
+`label-system.md` for commands and the non-`master`-base stacked PR limit.
+This iterative fast lane does not replace the final full-scope lanes below.
 
 Before merging a rebased source PR, explicitly dispatch the applicable final
 lanes on the PR head. Use the full core matrix for source, build, or test
@@ -132,7 +144,9 @@ documented paths or contracts apply. `ci-pr-action` includes MCP validation
 for full core runs; `ci-mcp-server` remains available for an isolated rerun.
 
 ```bash
-gh workflow run ci-pr-action.yml --ref <head-branch> -f ci_scope=full
+gh workflow run ci-pr-action.yml --ref master -f ci_scope=full \
+  -f pr_number=<open-master-target-pr-number> \
+  -f expected_head_sha=<40-character-head-sha>
 gh workflow run ci-sanitizer-regression.yml --ref <head-branch>
 gh workflow run ci-json-roundtrip.yml --ref <head-branch>
 gh workflow run ci-mcp-server.yml --ref <head-branch>
@@ -140,13 +154,12 @@ gh workflow run ci-matlab.yml --ref <head-branch>
 gh workflow run ci-risk-analysis-gate.yml --ref <head-branch>
 ```
 
-The lightweight workflow publishes only `Rebase Safety`, not the protected
-`PR Summary` context: ancestry alone is not evidence of successful validation.
-The protected summary remains pending until explicit validation succeeds for
-the current PR head. A maintainer records that final-run evidence before merge.
-Rebases and ordinary pushes both emit `synchronize`; neither automatically
-restarts the full matrix. Manual risk analysis checks every workflow's Bash
-prologue, even when the target and audit base SHA coincide.
+`Rebase Safety` proves ancestry only; it does not satisfy the protected
+`PR Summary` context. A maintainer records both the automatic fast-lane and
+final full-scope evidence for the current PR head before merge. Rebases and
+ordinary pushes both emit `synchronize`; neither automatically restarts the
+full matrix. Manual risk analysis checks every workflow's Bash prologue,
+even when the target and audit base SHA coincide.
 
 ## When to Add a Script
 
@@ -209,8 +222,11 @@ Every edited workflow `run:` block must keep these properties:
 - No unbounded glob or `xargs` batching into repeated writes to one fixed report
   output; use an input list or unique staged outputs.
 - Least-privilege permissions.
-- `pull_request_target` and `workflow_run` automation must not checkout or run
-  PR-controlled code before mutating trusted state such as labels or checks.
+- `pull_request_target` and `workflow_run` status automation must use trusted
+  default-branch definitions and API metadata only. It must never checkout or
+  run PR-controlled code before mutating trusted state such as labels or checks.
+  A workflow completion is a refresh signal, not proof of PR success; resolve
+  the current head and its required aggregate result before applying labels.
 - `pull_request` workflows that build PR code must source `.github/scripts`
   helpers and sanitizers from a trusted base checkout, not from PR-controlled
   content, unless a test-only exception is explicitly marked for preflight.
@@ -316,7 +332,7 @@ dependency, packaged MCP, and Docker-workflow changes require the local
 canonical-image build and smoke in `docs/regression-container.md`; only
 `ci-docker` publishes images.
 
-Local review should include YAML parsing, `actionlint`, `yamllint`, direct
+Local review should include YAML parsing, `jactionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
 checks when container files are in scope, CodeQL Actions analysis, and CodeQL
 query-pack resolution when CodeQL workflows or queries are touched.

@@ -44,6 +44,8 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 pr_workflow="$repo_root/.github/workflows/ci-pr-action.yml"
 mcp_workflow="$repo_root/.github/workflows/ci-mcp-server.yml"
 tool_workflow="$repo_root/.github/workflows/ci-iccdev-tool-tests.yml"
+pr_unix_workflow="$repo_root/.github/workflows/ci-pr-unix.yml"
+apple_workflow="$repo_root/.github/workflows/ci-apple-platform-smoke.yml"
 unix_workflow="$repo_root/.github/workflows/_build-test-unix.yml"
 windows_workflow="$repo_root/.github/workflows/_build-test-windows.yml"
 pr_windows_workflow="$repo_root/.github/workflows/ci-pr-win.yml"
@@ -52,7 +54,44 @@ risk_workflow="$repo_root/.github/workflows/ci-risk-analysis-gate.yml"
 cfl_workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 ctest_file="$repo_root/Build/Cmake/Testing/CMakeLists.txt"
 
-grep -Fq 'instrumentation: core' "$pr_workflow"
+# Fast-lane tool tests use sanitized Release; the full PR route uses core Debug.
+tool_tests_job="$(awk '
+  /^  tool-tests:$/ { in_job=1; next }
+  in_job && /^  [[:alnum:]_-]+:$/ { exit }
+  in_job { print }
+' "$pr_workflow")"
+grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' <<< "$tool_tests_job"
+grep -Fq "tool_build_type: \${{ needs.detect-src.outputs.fast_lane == 'true' && 'Release' || 'Debug' }}" <<< "$tool_tests_job"
+grep -Fq "instrumentation: \${{ needs.detect-src.outputs.fast_lane == 'true' && 'sanitizers' || 'core' }}" <<< "$tool_tests_job"
+
+# Trusted-master dispatches share github.ref, and separate PRs may share a
+# commit. Reusable lanes need the resolved PR number, exact head, and caller
+# run ID so concurrent requests for the same PR/head cannot cancel each other.
+require_head_concurrency() {
+  local workflow="$1"
+  local input_name="$2"
+  local group
+  group="$(grep -A6 -E '^[[:space:]]+group:' "$workflow")"
+  if [[ "$group" != *'inputs.pr_number'* || "$group" != *"inputs.$input_name"* ||
+        "$group" != *'github.run_id'* ]]; then
+    echo "[FAIL] Missing PR/head/request concurrency identity: $workflow" >&2
+    exit 1
+  fi
+  grep -q '^      pr_number:$' "$workflow"
+}
+for workflow in "$tool_workflow" "$mcp_workflow" "$pr_windows_workflow"; do
+  require_head_concurrency "$workflow" target_sha
+done
+for workflow in "$pr_unix_workflow" "$apple_workflow"; do
+  require_head_concurrency "$workflow" target-sha
+done
+# A PR event and trusted-master dispatch for the same PR/head may run together.
+# shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
+grep -Fq 'group: pr-unix-${{ github.event_name }}-' "$pr_unix_workflow"
+# All six ci-pr-action calls to these reusable lanes must pass its resolved PR.
+# shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
+test "$(grep -Fc 'pr_number: ${{ needs.detect-src.outputs.pr_number }}' "$pr_workflow")" -eq 6
+
 grep -Fq 'uses: ./.github/workflows/ci-mcp-server.yml' "$pr_workflow"
 grep -Fq 'needs.detect-src.outputs.mcp_changed' "$pr_workflow"
 grep -Fq 'MCP_RESULT:' "$pr_workflow"

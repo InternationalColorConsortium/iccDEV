@@ -20,7 +20,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 2. Validate workflow syntax and governance:
 
    ```bash
-   actionlint .github/workflows/ci-afl-smoke.yml
+   jactionlint --profile correctness --no-color .github/workflows/ci-afl-smoke.yml
    yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
    .github/scripts/preflight-safety-checks.sh --require-tools
    ```

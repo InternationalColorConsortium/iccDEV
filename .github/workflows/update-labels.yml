@@ -19,14 +19,25 @@ name: ci-status-label
 # yamllint disable rule:line-length
 
 on:
-  # Intentionally do not use workflow_run: this labeler has pull-requests: write
-  # and updates CI labels from schedule/manual runs instead of reacting to
-  # untrusted workflow completions.
+  # Completion triggers a trusted default-branch scan of current PR API state.
+  # This workflow never checks out or executes a PR-controlled head.
   schedule:
     - cron: '0 */4 * * *'
   pull_request_target:  # zizmor: ignore[dangerous-triggers] trusted labeler; never checks out PR head
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  workflow_run:  # zizmor: ignore[dangerous-triggers] metadata-only default-branch label refresh
+    workflows: [ci-pr-action, ci-codeql-security]
+    types: [completed]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Open same-repository PR to refresh; leave empty for all open PRs'
+        required: false
+        type: string
+      expected_head_sha:
+        description: 'Exact PR head SHA; required with pr_number'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -34,18 +45,26 @@ permissions:
   checks: read  # Required to evaluate GitHub Actions check runs.
 
 concurrency:
-  group: pr-status-labeler-${{ github.event.pull_request.number || 'batch' }}
+  group: pr-status-labeler-${{ github.event.pull_request.number || inputs.pr_number || 'batch' }}
   cancel-in-progress: true
 
 jobs:
   label-status:
     name: PR status labeler
+    if: >-
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.head_repository.full_name == github.repository) &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/master') &&
+      (github.event.action != 'labeled' ||
+       github.event.label.name == 'ci:codeql' ||
+       github.event.label.name == 'codeql-ready')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       pull-requests: write  # Required to update PR status labels.
       statuses: read  # Required to evaluate legacy commit statuses.
       checks: read  # Required to evaluate GitHub Actions check runs.
+      actions: read  # Required to verify the run behind a PR Summary commit status.
 
     steps:
       # preflight: allow-token-exposure reason=pr-status-query
@@ -56,7 +75,10 @@ jobs:
           BASH_ENV: /dev/null
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          GH_EVENT_NAME: ${{ github.event_name }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number || '' }}
+          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha || '' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -69,7 +91,7 @@ jobs:
             local value="$2"
 
             case "$key" in
-              prs|mode) ;;
+              prs|mode|expected_head_sha) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -84,12 +106,30 @@ jobs:
             printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
           }
 
-          if [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
+          if [[ "$GH_EVENT_NAME" == "workflow_dispatch" &&
+                ( -n "$DISPATCH_PR_NUMBER" || -n "$EXPECTED_HEAD_SHA" ) ]]; then
+            if [[ ! "$DISPATCH_PR_NUMBER" =~ ^[1-9][0-9]*$ ||
+                  ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "A focused dispatch requires a numeric PR and its exact 40-character head SHA" >&2
+              exit 1
+            fi
+            pr_data=$(gh api "repos/${GH_REPO}/pulls/${DISPATCH_PR_NUMBER}")
+            if ! jq -e --arg repo "$GH_REPO" --arg sha "$EXPECTED_HEAD_SHA" \
+              '.state == "open" and .base.ref == "master" and .head.repo.full_name == $repo and .head.sha == $sha' \
+              <<< "$pr_data" >/dev/null; then
+              echo "Focused dispatch PR is closed, cross-repository, off master, or no longer at the expected head" >&2
+              exit 1
+            fi
+            write_github_output prs "$DISPATCH_PR_NUMBER"
+            write_github_output mode "single"
+            write_github_output expected_head_sha "$EXPECTED_HEAD_SHA"
+            echo "Processing exact head of PR #$DISPATCH_PR_NUMBER"
+          elif [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
             write_github_output prs "$EVENT_PR"
             write_github_output mode "single"
             echo "Processing PR from event: #$EVENT_PR"
           else
-            # Schedule / dispatch with no number -> scan all open PRs
+            # Schedule, dispatch, or completion with no PR number scans open PRs.
             OPEN_PRS=$(gh pr list --repo "$GH_REPO" --state open --json number -q '.[].number' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
             if [[ ! "$OPEN_PRS" =~ ^[0-9[:space:]]*$ ]]; then
               echo "Invalid PR list returned by gh" >&2
@@ -116,6 +156,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_LIST: ${{ steps.pr_list.outputs.prs }}
+          EXPECTED_HEAD_SHA: ${{ steps.pr_list.outputs.expected_head_sha || '' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -146,10 +187,28 @@ jobs:
             printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
           }
 
+          read_status_data() {
+            local head="$1"
+            # Preserve the status ID so a newer pending request on this same
+            # head cannot be mistaken for the status evaluated earlier.
+            # shellcheck disable=SC2016
+            gh api "repos/${GH_REPO}/commits/$head/status" \
+              --jq '([.statuses[]? | select(.context == "PR Summary")][0]) as $summary | [
+                (.state // "unknown"),
+                ((.total_count // 0) | tostring),
+                ($summary.state // "none"),
+                ($summary.creator.login // ""),
+                ($summary.target_url // ""),
+                ($summary.description // ""),
+                ($summary.created_at // ""),
+                (($summary.id // "") | tostring)
+              ] | join("|")'
+          }
+
           evaluate_pr() {
             local pr="$1"
 
-            local pr_data is_cross head is_draft merge_state current_labels
+            local pr_data is_cross head is_draft merge_state current_labels require_codeql
             pr_data=$(gh pr view "$pr" --repo "$GH_REPO" \
               --json isCrossRepository,headRefOid,isDraft,mergeStateStatus,labels)
             is_cross=$(jq -r '.isCrossRepository' <<< "$pr_data")
@@ -163,20 +222,64 @@ jobs:
               echo "$pr|skipped|Could not determine HEAD SHA" >> "$RESULTS_FILE"
               return
             fi
+            if [[ -n "${EXPECTED_HEAD_SHA:-}" && "$head" != "$EXPECTED_HEAD_SHA" ]]; then
+              echo "$pr|pending|HEAD changed after dispatch; labels unchanged" >> "$RESULTS_FILE"
+              return
+            fi
 
-            # Query commit statuses API
-            local status_data state status_count
-            status_data=$(gh api "repos/${GH_REPO}/commits/$head/status" \
-              --jq '"\(.state)|\(.total_count)"' 2>/dev/null || echo "unknown|0")
-            state="${status_data%%|*}"
-            status_count="${status_data##*|}"
+            # Query the exact head's combined status and its newest PR Summary
+            # status. A trusted master-ref dispatch posts this status on the
+            # PR head while its check run remains attached to master.
+            local status_data state status_count summary_status summary_creator summary_url summary_description summary_created
+            status_data=$(read_status_data "$head" 2>/dev/null || echo "unknown|0|none|||||")
+            IFS='|' read -r state status_count summary_status summary_creator summary_url summary_description summary_created _ <<< "$status_data"
             if [[ ! "$status_count" =~ ^[0-9]+$ ]]; then
               status_count=0
+            fi
+
+            # A commit status alone is not proof of validation. Require the
+            # the exact status description, a same-repository run URL, and a
+            # completed successful ci-pr-action dispatch using the trusted
+            # master workflow. GITHUB_TOKEN statuses can have a null creator;
+            # a named non-Actions creator is rejected. Match the status time to
+            # that run's lifetime and its display title to this exact PR and
+            # head before replacing a missing head check run.
+            local summary_verified=false run_prefix run_id run_data run_name run_status run_conclusion run_event run_branch run_path run_started run_updated run_title
+            local summary_epoch started_epoch updated_epoch
+            run_prefix="https://github.com/${GH_REPO}/actions/runs/"
+            if [[ "$summary_status" == "success" &&
+                  ( -z "$summary_creator" || "$summary_creator" == "github-actions[bot]" ) &&
+                  "$summary_description" == "Manual validation: success" &&
+                  "$summary_url" == "$run_prefix"* ]]; then
+              run_id="${summary_url#"$run_prefix"}"
+              if [[ "$run_id" =~ ^[1-9][0-9]*$ ]]; then
+                run_data=$(gh api "repos/${GH_REPO}/actions/runs/${run_id}" \
+                  --jq '[.name // "", .status // "", .conclusion // "", .event // "", .head_branch // "", .path // "", .run_started_at // "", .updated_at // "", .display_title // ""] | join("|")' \
+                  2>/dev/null || echo "||||||||")
+                IFS='|' read -r run_name run_status run_conclusion run_event run_branch run_path run_started run_updated run_title <<< "$run_data"
+                summary_epoch=$(date -u -d "$summary_created" +%s 2>/dev/null || echo "")
+                started_epoch=$(date -u -d "$run_started" +%s 2>/dev/null || echo "")
+                updated_epoch=$(date -u -d "$run_updated" +%s 2>/dev/null || echo "")
+                if [[ "$run_name" == "ci-pr-action" &&
+                      "$run_status" == "completed" &&
+                      "$run_conclusion" == "success" &&
+                      "$run_event" == "workflow_dispatch" &&
+                      "$run_branch" == "master" &&
+                      "$run_path" == ".github/workflows/ci-pr-action.yml" &&
+                      "$run_title" == "PR #${pr} @ ${head}" &&
+                      "$summary_epoch" =~ ^[0-9]+$ &&
+                      "$started_epoch" =~ ^[0-9]+$ &&
+                      "$updated_epoch" =~ ^[0-9]+$ ]] &&
+                   (( started_epoch <= summary_epoch && summary_epoch <= updated_epoch )); then
+                  summary_verified=true
+                fi
+              fi
             fi
 
             is_draft=$(jq -r '.isDraft' <<< "$pr_data")
             merge_state=$(jq -r '.mergeStateStatus // "UNKNOWN"' <<< "$pr_data")
             current_labels=$(jq -r '[.labels[].name | select(. == "passed" or . == "failed" or . == "pending" or . == "Merge Ready")] | sort | join(",")' <<< "$pr_data")
+            require_codeql=$(jq -r '[.labels[].name] | any(. == "ci:codeql" or . == "codeql-ready")' <<< "$pr_data")
 
             # Query Check Runs API (Actions uses this, not statuses)
             local check_conclusion
@@ -195,7 +298,7 @@ jobs:
                   | if length == 0 then "none"
                     elif any(. == "failure" or . == "timed_out" or . == "cancelled" or . == "action_required") then "failure"
                     elif any(. == "pending" or . == "null" or . == null) then "pending"
-                    elif ($runs | any(.name == "PR Summary" and .status == "completed" and .conclusion == "success") | not) then "pending"
+                    elif ($runs | any(.name == "PR Summary" and .status == "completed" and .conclusion == "success") | not) then "missing-summary"
                     elif all(. == "success" or . == "skipped" or . == "neutral") then "success"
                     else "unknown" end
                 end' 2>/dev/null) || {
@@ -203,15 +306,76 @@ jobs:
               check_conclusion="unknown"
             }
 
+            # A maintainer's CodeQL control label makes that same-head check
+            # mandatory until the label is removed. A label event can arrive
+            # before CodeQL starts, so missing and unfinished checks stay pending.
+            # Ignore skipped label-triggered runs. A same-named check from
+            # another workflow is not CodeQL evidence; verify each check's
+            # suite against the expected workflow and exact head first.
+            local codeql_conclusion=not-required
+            if [[ "$require_codeql" == "true" ]]; then
+              local codeql_candidates codeql_status codeql_result codeql_suite_id codeql_run_matches
+              codeql_conclusion=missing
+              codeql_candidates=$(gh api --paginate --slurp \
+                "repos/${GH_REPO}/commits/$head/check-runs?per_page=100&filter=all&check_name=CodeQL%20Security%20Analysis" \
+                | jq -r '
+                  [.[] | .check_runs[]
+                    | select(.name == "CodeQL Security Analysis" and
+                             .app.slug == "github-actions" and
+                             .conclusion != "skipped" and
+                             (.id | type) == "number" and
+                             (.check_suite.id | type) == "number")
+                    | [.id, .status, (.conclusion // ""), .check_suite.id]]
+                  | sort_by(.[0]) | reverse | .[] | .[1:] | map(tostring) | join("|")' 2>/dev/null) || {
+                echo "CodeQL check-run query failed for PR $pr; keeping validation pending" >&2
+                codeql_conclusion="unknown"
+              }
+              if [[ "$codeql_conclusion" != "unknown" ]]; then
+                while IFS='|' read -r codeql_status codeql_result codeql_suite_id; do
+                  [[ -n "$codeql_suite_id" ]] || continue
+                  codeql_run_matches=$(gh api \
+                    "repos/${GH_REPO}/actions/runs?check_suite_id=${codeql_suite_id}&per_page=100" \
+                    | jq -r --arg head "$head" --argjson suite "$codeql_suite_id" \
+                      '[.workflow_runs[] | select(.check_suite_id == $suite and
+                        .path == ".github/workflows/ci-codeql-security.yml" and
+                        .head_sha == $head)] | length' 2>/dev/null) || {
+                    echo "CodeQL workflow identity query failed for PR $pr; keeping validation pending" >&2
+                    codeql_conclusion="unknown"
+                    break
+                  }
+                  [[ "$codeql_run_matches" =~ ^[1-9][0-9]*$ ]] || continue
+                  if [[ "$codeql_status" != "completed" ]]; then
+                    codeql_conclusion="pending"
+                  elif [[ "$codeql_result" == "success" ]]; then
+                    codeql_conclusion="success"
+                  elif [[ "$codeql_result" == "failure" || "$codeql_result" == "timed_out" ||
+                          "$codeql_result" == "cancelled" || "$codeql_result" == "action_required" ]]; then
+                    codeql_conclusion="failure"
+                  else
+                    codeql_conclusion="pending"
+                  fi
+                  break
+                done <<< "$codeql_candidates"
+              fi
+            fi
+
             # Combine results
             local combined
-            if [[ "$state" == "failure" || "$state" == "error" || "$check_conclusion" == "failure" ]]; then
+            if [[ "$state" == "failure" || "$state" == "error" ||
+                  "$check_conclusion" == "failure" || "$codeql_conclusion" == "failure" ]]; then
               combined="failure"
-            elif [[ "$state" == "unknown" || "$check_conclusion" == "pending" || "$check_conclusion" == "none" || "$check_conclusion" == "unknown" ]]; then
+            elif [[ "$state" == "unknown" || "$check_conclusion" == "pending" ||
+                    "$check_conclusion" == "unknown" ||
+                    ( "$require_codeql" == "true" && "$codeql_conclusion" != "success" ) ]]; then
               combined="pending"
             elif [[ "$check_conclusion" == "success" ]] &&
                  [[ "$state" == "success" || "$status_count" -eq 0 ]]; then
               combined="success"
+            elif [[ "$summary_verified" == "true" && "$state" == "success" &&
+                    ( "$check_conclusion" == "missing-summary" || "$check_conclusion" == "none" ) ]]; then
+              combined="success"
+            elif [[ "$check_conclusion" == "missing-summary" || "$check_conclusion" == "none" ]]; then
+              combined="pending"
             elif [[ "$state" == "pending" ]]; then
               combined="pending"
             else
@@ -244,7 +408,7 @@ jobs:
             esac
 
             if [[ -n "$added" ]]; then
-              local desired_labels latest_head
+              local desired_labels latest_head latest_status_data
               desired_labels=$(jq -nr --arg labels "$added" '$labels | split(",") | sort | join(",")')
               if [[ "$current_labels" == "$desired_labels" ]]; then
                 added=""; removed=""
@@ -254,12 +418,25 @@ jobs:
                   echo "$pr|pending|HEAD changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
                   return
                 fi
+                # Batch and focused labeler jobs have different concurrency
+                # groups. A maintainer request can post a new pending status
+                # while this job is evaluating an older successful result.
+                # Re-read just before mutation and leave newer status for the
+                # dispatcher's focused refresh to label.
+                if ! latest_status_data=$(read_status_data "$head" 2>/dev/null); then
+                  echo "$pr|pending|Status changed or unavailable during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
+                if [[ "$latest_status_data" != "$status_data" ]]; then
+                  echo "$pr|pending|Status changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
                 gh pr edit "$pr" --repo "$GH_REPO" \
                   --add-label "$added" --remove-label "$removed"
                 LABELED=$((LABELED + 1))
               fi
             fi
-            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
+            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion codeql=$codeql_conclusion summary_status=$summary_status verified=$summary_verified merge=$merge_state draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
           }
 
           for pr in ${PR_LIST}; do

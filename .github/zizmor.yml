@@ -1,8 +1,6 @@
-# zizmor 1.30 recommends GitHub's new self-repository $/ syntax. Keep this
-# audit deferred while released actionlint rejects that syntax and GitHub
-# Enterprise Server does not support it. Re-enable the audit after both
-# compatibility boundaries are removed.
-# https://github.com/rhysd/actionlint/issues/711
+# zizmor recommends GitHub's self-repository $/ syntax. Keep this
+# audit deferred while GitHub Enterprise Server does not support it.
+# Re-enable the audit after that compatibility boundary is removed.
 rules:
   self-repository:
     disable: true

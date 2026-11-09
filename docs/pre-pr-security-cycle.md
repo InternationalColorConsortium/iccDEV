@@ -21,7 +21,13 @@ the smallest useful evidence.
 4. On the PR head, use `ci-pr-action` with `ci_scope=full` for final
    cross-platform builds, profile checks, and representative CTest coverage.
    This final PR gate does not replace the local checks or comprehensive
-   pre-PR screening.
+   pre-PR screening. An iterative push or rebase on an open same-repository
+   PR targeting `master` starts the bounded fast lane automatically; the
+   status labeler refreshes after validation completes. Verify the current
+   head, `PR Summary`, labels, and merge state. If an automatic run is absent,
+   dispatch the trusted `master` workflow with the PR number and exact head
+   SHA, then refresh the labeler manually; see `label-system.md` for commands
+   and the stacked-PR limitation.
 
 ## Loop
 
@@ -34,7 +40,7 @@ the smallest useful evidence.
    build the MATLAB dependencies and run the focused MATLAB QA instead.
 3. Run SAST appropriate to the change:
    - workflow edits: `audit-workflow-governance.prompt.md`, YAML parse,
-     `actionlint`, full-workflow preflight canaries, trusted-base helper review,
+     `jactionlint`, full-workflow preflight canaries, trusted-base helper review,
      CodeQL Actions analysis, and direct-expression scans;
    - Python script edits: Python syntax checks and CodeQL Python analysis;
    - shell script edits: ShellCheck; CodeQL Actions still covers inline workflow
@@ -110,7 +116,7 @@ CodeQL is required for workflow and Python script changes through preflight, and
 for C/C++ or CMake-relevant security changes through the full CodeQL workflow.
 The local fast lane intentionally defers CodeQL to the full local or hosted
 gate; it is an iteration aid, not the final security signal.
-Pair it with workflow-governance checks, actionlint, yamllint, ShellCheck, and
+Pair it with workflow-governance checks, jactionlint, yamllint, ShellCheck, and
 container scanners because no single tool covers the full CI threat model.
 
 DAST in this repository usually means exercising built binaries and packaged

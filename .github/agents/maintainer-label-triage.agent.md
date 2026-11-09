@@ -19,6 +19,13 @@ labels using `docs/label-system.md` and
    skip unchanged writes, and never treat ancestry checks as validation.
    Verify any PR CI control label is declared in the manifest, restricted to
    same-repository PRs, and dispatched only by a write-authorized maintainer.
+   A same-repository `master`-target PR push or rebase starts the bounded
+   `ci-pr-action` fast lane; completion refreshes status labels. Verify
+   exact-head `PR Summary`, labels, and merge state. If automatic validation
+   or refresh is absent, report the trusted-`master` PR-number dispatch and
+   manual labeler fallback. The labeler never launches CI. Audit every
+   maintainer `ci:*` label route: `ci:codeql`/`codeql-ready` runs CodeQL,
+   and `ci:skip` cannot mark ready.
 6. For issues labeled `CodeQL`, distinguish an alert-only report from completed
    technical triage. Keep `needs-triage` when there is no parser-to-tool
    reachability evidence or false-positive rationale. Accept a false-positive

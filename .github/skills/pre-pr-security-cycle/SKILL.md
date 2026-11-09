@@ -56,7 +56,13 @@ security automation.
 10. Open the PR only after explicit user authorization and a passing readiness
     gate. Run `ci-pr-action` with `ci_scope=full` on the PR head for final
     cross-platform builds, profile checks, and representative CTest coverage;
-    it does not replace local or pre-PR screening.
+    it does not replace local or pre-PR screening. A push or rebase on an
+    open same-repository PR targeting `master` starts the bounded fast lane
+    automatically; completion refreshes status labels. Verify the current
+    head, `PR Summary`, labels, and merge state. If the automatic run is
+    absent, dispatch the trusted `master` workflow with `pr_number` and
+    `expected_head_sha`, then refresh labels manually. Follow
+    `../../../docs/label-system.md` for commands and stacked-PR limits.
 11. Prepare a concise handoff.
 
 For focused local iteration, run
@@ -74,7 +80,7 @@ and PR-head results distinct in the handoff.
 
 | Change | Required static checks |
 |--------|------------------------|
-| Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, `zizmor`, CodeQL Actions analysis, expression-in-run scan |
+| Workflow YAML | Workflow governance prompt, YAML parse, `jactionlint`, `zizmor`, CodeQL Actions analysis, expression-in-run scan |
 | Python script | Python syntax check and CodeQL Python analysis |
 | Shell script | ShellCheck and `zizmor`; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
 | C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security`; query changes also require a positive fixture and a safe negative control |

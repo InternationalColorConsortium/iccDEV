@@ -198,7 +198,7 @@ agent-policy surfaces.
   actionable findings over exhaustive comment volume. No comment is better
   than a low-value concern.
 - For workflow changes, use the trusted workflow/static-analysis guidance.
-  Consider YAML parsing, `actionlint`, `yamllint`, `zizmor`, and CodeQL Actions
+  Consider YAML parsing, pinned `jactionlint`, `yamllint`, `zizmor`, and CodeQL Actions
   results as applicable; do not duplicate a confirmed automated finding without
   additional impact or remediation context.
 - Use repository MCP context or agent skills only when relevant to the changed

@@ -18,7 +18,7 @@ updating, or merging an iccDEV PR.
 1. Scope the smallest complete change.
 2. Build and run nearest deterministic tests.
 3. Run SAST:
-   - workflow changes: governance audit, YAML parse, `actionlint`, CodeQL
+   - workflow changes: governance audit, YAML parse, `jactionlint`, CodeQL
      Actions analysis, expression injection scan, and trusted-base helper
      boundary review;
    - Python script changes: syntax check and CodeQL Python analysis;
@@ -49,7 +49,13 @@ updating, or merging an iccDEV PR.
 8. Open the PR only with explicit user authorization after readiness passes.
    Run `ci-pr-action` with `ci_scope=full` on the PR head for final
    cross-platform builds, profile checks, and representative CTest coverage.
-   This gate does not replace local or pre-PR screening.
+   This gate does not replace local or pre-PR screening. Each iterative
+   push or rebase on an open same-repository `master`-target PR starts the
+   bounded fast lane and a completion-triggered status-label refresh. Verify
+   the current head, `PR Summary`, labels, and merge state. If automatic
+   validation is absent, manually dispatch the trusted `master` workflow
+   with `pr_number` and `expected_head_sha`, then refresh labels. Use
+   `docs/label-system.md` for commands and stacked-PR limits.
 9. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 
 ## Handoff Format

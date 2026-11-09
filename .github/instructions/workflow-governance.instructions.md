@@ -262,13 +262,13 @@ trigger unless the caller gate is removed to prevent duplicate checks.
 `ci-preflight-safety.yml` runs the local pre-flight script on workflow and hook
 changes. When any workflow changes, workflow scanners run against the full
 `.github/workflows/` set so changed reusable callers cannot hide risk in
-unchanged callees. It installs and runs actionlint, yamllint, shellcheck, zizmor,
+unchanged callees. It installs and runs jactionlint, yamllint, shellcheck, zizmor,
 CodeQL Actions analysis, and CodeQL query resolution, then delegates repository-specific checks to
 `.github/scripts/preflight-safety-checks.sh`. Dockerfile changes are checked
 with hadolint and Trivy config scanning when those tools or Docker are available.
 Use that script locally before pushing maintainer-owned infrastructure changes.
 The local script intentionally runs only the deterministic subset of
-`ci-pr-risk-security-analysis.yml`: changed-workflow YAML parsing, actionlint,
+`ci-pr-risk-security-analysis.yml`: changed-workflow YAML parsing, jactionlint,
 yamllint, zizmor, SHA pin checks, dangerous-trigger checks, run-block expression
 injection checks, checkout credential checks, shellcheck for changed scripts,
 cache/artifact publish-boundary canaries, CodeQL Actions analysis for workflow
@@ -315,18 +315,24 @@ Treat these green-run signals as actionable:
 - Static vcpkg triplets linked against the wrong CRT.
 - Matrix configurations that skip smoke tests for non-Debug variants.
 
-Use YAML parsing, `actionlint`, shellcheck, `yamllint`, `zizmor`, and the
+Use YAML parsing, pinned `jactionlint` with the `correctness` profile,
+shellcheck, `yamllint`, `zizmor`, and the
 workflow permission audit for workflow files. Use `hadolint`, Trivy config, or
 equivalent Dockerfile checks when container files are in scope. Run CodeQL for
 related C/C++ or CMake changes, not as the workflow YAML checker.
+The CI commit pin is in `ci-preflight-safety.yml`; local maintainers can install
+its immutable v2.5.0 release with:
 
-The repository-level `.github/zizmor.yml` temporarily disables zizmor 1.30's
+```bash
+GOTOOLCHAIN=go1.27.3 go install github.com/jdx/jactionlint/v2/cmd/jactionlint@v2.5.0
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+The repository-level `.github/zizmor.yml` temporarily disables zizmor's
 `self-repository` audit. Keep same-repository `uses:` references in the `./`
-form until released actionlint supports GitHub's `$/` form
-([actionlint #711](https://github.com/rhysd/actionlint/issues/711)) and the
-repository no longer needs GitHub Enterprise Server compatibility.
-Remove the exception and migrate all local references together; do not suppress
-actionlint's syntax validation per workflow.
+form while GitHub Enterprise Server compatibility is required. Remove the
+exception and migrate all local references together; keep jactionlint's syntax
+validation enabled per workflow.
 
 The pre-flight gate must include Dockerfile paths when container files change.
 Dockerfile checks are blocking for changed container files: avoid advisory-only
@@ -337,7 +343,7 @@ Before merging workflow changes, run:
 
 ```bash
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML OK')"
-actionlint -no-color .github/workflows/<workflow>.yml
+jactionlint --profile correctness --no-color .github/workflows/<workflow>.yml
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' .github/workflows/<workflow>.yml
 zizmor .github/workflows/<workflow>.yml
 gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
