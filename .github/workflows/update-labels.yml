@@ -408,16 +408,11 @@ jobs:
             esac
 
             if [[ -n "$added" ]]; then
-              local desired_labels latest_head latest_status_data
+              local desired_labels latest_status_data latest_pr_data latest_head latest_require_codeql
               desired_labels=$(jq -nr --arg labels "$added" '$labels | split(",") | sort | join(",")')
               if [[ "$current_labels" == "$desired_labels" ]]; then
                 added=""; removed=""
               else
-                latest_head=$(gh pr view "$pr" --repo "$GH_REPO" --json headRefOid -q .headRefOid)
-                if [[ "$latest_head" != "$head" ]]; then
-                  echo "$pr|pending|HEAD changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
-                  return
-                fi
                 # Batch and focused labeler jobs have different concurrency
                 # groups. A maintainer request can post a new pending status
                 # while this job is evaluating an older successful result.
@@ -429,6 +424,25 @@ jobs:
                 fi
                 if [[ "$latest_status_data" != "$status_data" ]]; then
                   echo "$pr|pending|Status changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
+                # A CodeQL control label can also change on the same head
+                # without changing PR Summary. Check the requirement again
+                # immediately before applying labels from this evaluation.
+                if ! latest_pr_data=$(gh pr view "$pr" --repo "$GH_REPO" \
+                  --json headRefOid,labels 2>/dev/null) ||
+                   ! latest_head=$(jq -r '.headRefOid // empty' <<< "$latest_pr_data") ||
+                   ! latest_require_codeql=$(jq -r '[.labels[].name] | any(. == "ci:codeql" or . == "codeql-ready")' \
+                     <<< "$latest_pr_data"); then
+                  echo "$pr|pending|PR requirements unavailable during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
+                if [[ "$latest_head" != "$head" ]]; then
+                  echo "$pr|pending|HEAD changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
+                  return
+                fi
+                if [[ "$latest_require_codeql" != "$require_codeql" ]]; then
+                  echo "$pr|pending|CodeQL requirement changed during evaluation; labels unchanged" >> "$RESULTS_FILE"
                   return
                 fi
                 gh pr edit "$pr" --repo "$GH_REPO" \

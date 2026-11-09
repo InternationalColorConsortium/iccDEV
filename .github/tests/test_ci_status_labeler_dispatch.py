@@ -58,8 +58,8 @@ MOCK_GH = r'''
 gh() {
   case "$1:$2" in
     pr:view)
-      if [[ "$*" == *"--json headRefOid -q .headRefOid"* ]]; then
-        printf '%s\n' "$LATEST_HEAD"
+      if [[ "$*" == *"--json headRefOid,labels"* ]]; then
+        printf '%s\n' "$LATEST_PR_DATA"
       else
         printf '%s\n' "$PR_DATA"
       fi
@@ -186,6 +186,7 @@ def run_labeler(*, status_line, later_status_line="", fail_later_status=False,
                 checks=None, codeql_checks=None, codeql_runs=None,
                 codeql_fail_suite="", labels=None,
                 draft=False, merge_state="CLEAN", latest_head="head",
+                later_labels=None,
                 expected_head_sha=""):
     if checks is None:
         checks = [{"name": "Rebase Safety", "status": "completed",
@@ -208,6 +209,8 @@ def run_labeler(*, status_line, later_status_line="", fail_later_status=False,
         }
     if labels is None:
         labels = ["pending"]
+    if later_labels is None:
+        later_labels = labels
     # Existing cases vary a single field in the run metadata; supply the
     # matching PR/head title unless a case explicitly tests that field.
     if run_line.count("|") == 7:
@@ -223,7 +226,10 @@ def run_labeler(*, status_line, later_status_line="", fail_later_status=False,
             STATUS_QUERY_FAIL_AFTER="1" if fail_later_status else "0",
             STATUS_QUERY_COUNT_FILE=str(scratch / "status-query-count"),
             RUN_LINE=run_line,
-            LATEST_HEAD=latest_head,
+            LATEST_PR_DATA=json.dumps({
+                "headRefOid": latest_head,
+                "labels": [{"name": label} for label in later_labels],
+            }),
             CHECK_PAGES=json.dumps([{"check_runs": checks}]),
             CODEQL_PAGES=json.dumps([{"check_runs": codeql_checks}]),
             CODEQL_RUNS=json.dumps(codeql_runs), CODEQL_FAIL_SUITE=codeql_fail_suite,
@@ -360,6 +366,30 @@ def test_status_change_during_batch_or_focused_evaluation_skips_stale_labels():
 
         result, writes = run_labeler(
             status_line=TRUSTED_STATUS, fail_later_status=True,
+            expected_head_sha=expected_head_sha,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert writes == []
+
+
+def test_codeql_requirement_change_during_evaluation_skips_stale_labels():
+    for expected_head_sha in ("", "head"):
+        for control_label in ("ci:codeql", "codeql-ready"):
+            result, writes = run_labeler(
+                status_line=TRUSTED_STATUS, labels=["pending"],
+                later_labels=["pending", control_label],
+                expected_head_sha=expected_head_sha,
+            )
+            assert result.returncode == 0, (control_label, result.stdout, result.stderr)
+            assert writes == [], (control_label, writes)
+
+        result, writes = run_labeler(
+            status_line=TRUSTED_STATUS,
+            labels=["pending", "ci:codeql"], later_labels=["pending"],
+            codeql_checks=[{
+                "name": "CodeQL Security Analysis", "status": "completed",
+                "conclusion": "success",
+            }],
             expected_head_sha=expected_head_sha,
         )
         assert result.returncode == 0, result.stdout + result.stderr

@@ -155,9 +155,11 @@ gh() {
             # statuses supersede them; timestamp ties fail closed.
             ("direct-newer", "", status(102, "pending", newer_url, "2026-11-08T10:02:00Z"), 0, 0),
             ("direct-tie", "", status(102, "pending", newer_url, "2026-11-08T10:01:00Z"), 0, 0),
-            ("direct-older-pending", "", status(101, "pending", request_url, "2026-11-08T10:00:00Z"), 0, 0),
+            ("direct-older-pending", "", status(101, "pending", request_url, "2026-11-08T10:00:00Z"), 0, 1),
+            ("direct-older-pending-failure", "", status(101, "pending", request_url,
+                                                        "2026-11-08T10:00:00Z"), 0, 1),
             ("direct-skip", "", status(101, "pending", request_url, "2026-11-08T10:00:00Z",
-                                           "Maintainer label ci:skip: validation requested"), 0, 0),
+                                           "Maintainer label ci:skip: validation requested"), 0, 1),
             ("direct-older-terminal", "", status(101, "success", request_url, "2026-11-08T10:00:00Z"), 0, 1),
             ("direct-newer-terminal", "", status(102, "success", newer_url, "2026-11-08T10:02:00Z"), 0, 0),
             ("same-run", "", status(101, "success", run_url, "2026-11-08T10:02:00Z"), 0, 1),
@@ -172,7 +174,8 @@ gh() {
                            GH_EVENT_NAME="workflow_dispatch", CURRENT_RUN_ID="42",
                            REQUEST_STATUS_ID=request_status_id,
                            RUN_CREATED_AT="2026-11-08T10:01:00Z",
-                           VALIDATION_RESULT="success", LATEST_STATUS=latest_status,
+                           VALIDATION_RESULT="failure" if name == "direct-older-pending-failure"
+                           else "success", LATEST_STATUS=latest_status,
                            QUERY_STATUS="1" if name == "query-failure" else "0",
                            WRITE_LOG=str(write_log),
                            RUN_URL=run_url)
@@ -182,6 +185,8 @@ gh() {
                                  result.stdout + result.stderr)
                 writes = write_log.read_text().splitlines() if write_log.exists() else []
                 self.assertEqual(len(writes), expected_writes, (name, writes))
+                if name == "direct-older-pending-failure":
+                    self.assertIn("state=failure", writes[0])
                 if name == "own-failed-rerun":
                     self.assertIn("state=success", writes[0])
 
@@ -195,7 +200,7 @@ gh() {
 gh() {
   case "$*" in
     "pr view "*"--json isCrossRepository,"*) printf '%s\\n' "$PR_DATA" ;;
-    "pr view "*"--json headRefOid -q .headRefOid") printf '%s\\n' "$LATEST_HEAD" ;;
+    "pr view "*"--json headRefOid,labels") printf '%s\\n' "$LATEST_PR_DATA" ;;
     "api "*"check-runs"*)
       if [[ "$#" != 4 || "$2" != "--paginate" || "$3" != "--slurp" ]]; then
         printf 'Invalid paginated gh api arguments: %s\\n' "$*" >&2
@@ -237,7 +242,11 @@ gh() {
                     GH_REPO="example/repo", PR_LIST="1",
                     GITHUB_OUTPUT=str(root / "output"),
                     GITHUB_WORKSPACE=temp, WRITE_LOG=str(root / "writes"),
-                    WRITE_STATUS=write_status, LATEST_HEAD=latest_head,
+                    WRITE_STATUS=write_status,
+                    LATEST_PR_DATA=json.dumps({
+                        "headRefOid": latest_head,
+                        "labels": [{"name": label} for label in labels],
+                    }),
                     CHECK_STATUS=check_status,
                     STATUS_QUERY_LOG=str(root / "status-queries"),
                     SECOND_STATUS="pending|1" if name == "changed-after-read" else "",

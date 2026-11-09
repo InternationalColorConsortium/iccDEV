@@ -1587,11 +1587,8 @@ jobs:
               exit 0
             fi
           elif [[ -n "$latest_state" && "$latest_url" != "$RUN_URL" ]]; then
-            if [[ "$latest_state" == pending ]]; then
-              echo "An outstanding validation request owns PR Summary; leaving it pending"
-              exit 0
-            fi
-            # Direct manual runs have no dispatcher marker.
+            # Direct manual runs have no dispatcher marker. An older pending
+            # label request must not hide this run's result.
             # A status created at or after this run began takes precedence;
             # same-second ties are conservatively treated as newer.
             latest_created_at=$(jq -r '.created_at // empty' <<< "$latest_summary")
