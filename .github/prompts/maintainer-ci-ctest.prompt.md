@@ -52,18 +52,25 @@ Choose the smallest gate that proves the behavior:
   CTests. It does not substitute for the exhaustive pre-PR matrix or local
   preflight.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus
-  non-sanitized GCC core tool validation and the latest CTest by default, with
-  Windows opt-in. It does not run Docker verification for a container-surface
-  change.
+  GCC ASAN+UBSAN Release tool validation and the latest CTest by default, with
+  Windows opt-in. Container-surface changes require separate local image
+  validation.
 - `ci-pr-action` auto: default path-scoped selection. Source, build, and test
   changes select the full matrix; documentation-only changes use the constrained
   fast-lane settings. Workflow-only changes keep the core orchestrator at setup
   and finalization while the standalone preflight check remains path-scoped.
   Container-only changes use that security check and local container validation.
-- Rebase safety: `synchronize` runs only `ci-rebase-safety`, which verifies the
-  PR head contains its event base. Dispatch each applicable final lane manually
-  against the rebased PR head; do not restore automatic full-matrix triggers.
-  Keep `Rebase Safety` separate from `PR Summary` so ancestry cannot approve
+- An open same-repository `master`-target PR push or rebase runs
+  `ci-pr-action` fast lane and `ci-rebase-safety`. A trusted completion
+  event refreshes status labels. Verify the current head, `PR Summary`,
+  labels, and merge state before reporting `Merge Ready`. If an automatic
+  run is absent, dispatch the trusted `master` workflow with PR number and
+  exact head SHA, then refresh labels manually. An upper stacked PR with a
+  non-`master` base cannot use PR-number dispatch.
+- Rebase safety verifies that the PR head contains its event base; it does
+  not replace the fast lane or the final full matrix. Dispatch each
+  applicable final lane explicitly against the rebased PR head. Keep
+  `Rebase Safety` separate from `PR Summary` so ancestry cannot approve
   unvalidated source pushes. Manual security audits check all Bash prologues.
 - MATLAB compatibility: `ci-matlab` is manual-dispatch only because its
   multi-platform MEX and container lanes consume scarce runner capacity.
@@ -117,7 +124,7 @@ Choose the smallest gate that proves the behavior:
   Package and upload the developer report with `always()` so a failed registry
   scan retains its classifier counters and raw evidence.
 - Container changes require the local canonical-image build and smoke in
-  `docs/regression-container.md`. The Docker PR verification job is disabled.
+  `docs/regression-container.md`.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.
@@ -192,7 +199,7 @@ Workflow YAML:
 
 ```bash
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML parse OK')"
-actionlint -no-color .github/workflows/<workflow>.yml
+jactionlint --profile correctness --no-color .github/workflows/<workflow>.yml
 ```
 
 Apple mobile core and simulator smoke on macOS:

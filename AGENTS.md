@@ -41,6 +41,14 @@ shares one source of truth. Update rules here, not in the mirrors.
   `ci-pr-action` on the PR head for final cross-platform builds, profile
   checks, and representative CTest coverage; it does not replace the local
   or pre-PR screening.
+- An open same-repository PR targeting `master` runs `ci-pr-action` fast lane
+  on each push or rebase. The trusted status labeler refreshes after validation
+  completes. Verify its exact current head, `PR Summary`, labels, and merge
+  state before reporting readiness. For a manual retry, dispatch the trusted
+  `master` workflow with `pr_number` and `expected_head_sha`; use
+  `docs/label-system.md` for commands and stacked-PR limits. The automatic
+  fast lane does not replace the final full-scope PR gate.
+  Keep the final full-scope PR gate in the readiness sequence above.
 - Before the first automated review, record a `base...HEAD` contract matrix for
   every changed cross-cutting surface: producer, consumer, build/runtime
   behavior, platform or toolchain boundary, CI trigger, dependency owner, and

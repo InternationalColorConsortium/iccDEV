@@ -99,6 +99,11 @@ on:
         required: false
         default: ''
         type: string
+      pr_number:
+        description: 'Resolved PR number for isolated concurrency'
+        required: false
+        default: ''
+        type: string
       instrumentation:
         description: 'Build instrumentation: core or sanitizers'
         required: false
@@ -276,7 +281,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}-${{ inputs.instrumentation || 'sanitizers' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}-${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}-${{ inputs.tool_build_type || 'Debug' }}-${{ inputs.instrumentation || 'sanitizers' }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:

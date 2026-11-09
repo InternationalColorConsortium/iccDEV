@@ -28,6 +28,11 @@ on:
         required: false
         default: ""
         type: string
+      pr_number:
+        description: "Resolved PR number for isolated concurrency"
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       target_sha:
@@ -38,7 +43,10 @@ on:
 
 concurrency:
   # Direct Windows runs must not interrupt an active reusable Windows gate.
-  group: ci-pr-win-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    ci-pr-win-${{ github.event_name }}-${{
+    inputs.pr_number || github.event.pull_request.number || github.ref }}-${{
+    inputs.target_sha || github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
   cancel-in-progress: false
 
 env:

@@ -79,7 +79,7 @@ For workflow and packaging changes:
 
 ```bash
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/ci-pr-action.yml','.github/workflows/ci-iccdev-tool-tests.yml']]; print('YAML parse OK')"
-actionlint -no-color .github/workflows/<workflow>.yml
+jactionlint --profile correctness --no-color .github/workflows/<workflow>.yml
 python3 .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format shell
 ```
 

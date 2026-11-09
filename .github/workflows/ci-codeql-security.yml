@@ -57,7 +57,8 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository &&
         github.event.pull_request.state == 'open' &&
         github.event.action == 'labeled' &&
-        github.event.label.name == 'codeql-ready'
+        (github.event.label.name == 'codeql-ready' ||
+         github.event.label.name == 'ci:codeql')
       )
     name: CodeQL Security Analysis
     runs-on: ubuntu-latest
@@ -68,6 +69,34 @@ jobs:
       security-events: write  # Required to upload SARIF code scanning results.
 
     steps:
+      # preflight: allow-token-exposure reason=maintainer-codeql-label-authentication
+      - name: Verify maintainer-applied CodeQL label
+        if: github.event_name == 'pull_request'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          LABEL_ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [[ ! "$LABEL_ACTOR" =~ ^[A-Za-z0-9-]+$ ]]; then
+            echo "Invalid CodeQL label actor" >&2
+            exit 1
+          fi
+          actor_permission="$(gh api \
+            "repos/${GH_REPOSITORY}/collaborators/${LABEL_ACTOR}/permission" \
+            --jq '.permission')"
+          case "$actor_permission" in
+            admin|maintain|write) ;;
+            *)
+              echo "CodeQL label actor lacks repository write permission" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:

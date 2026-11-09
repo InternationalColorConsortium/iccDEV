@@ -4,11 +4,14 @@
 ##                 All rights reserved.
 ##                 https://color.org
 #
-## Intent: Dispatch bounded PR validation from an explicit maintainer label.
+## Intent: Dispatch bounded PR validation from explicit maintainer CI labels.
 #
 ###############################################################
 
 name: ci-maintainer-pr-dispatch
+
+# Label names and pinned validation arguments exceed yamllint's default width.
+# yamllint disable rule:line-length
 
 permissions:
   contents: read
@@ -21,21 +24,25 @@ permissions:
     types:
       - labeled
 
-concurrency:
-  group: "maintainer-pr-dispatch-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
-  cancel-in-progress: false
-
 jobs:
   dispatch:
     if: >-
       github.event.action == 'labeled' &&
-      github.event.label.name == 'ci:run-auto'
-    name: Dispatch auto-scoped PR validation
+      (contains(fromJSON('["ci:run-auto","ci:full","ci:fast-lane","ci:no-windows","ci:warnings-fail","ci:skip"]'), github.event.label.name) ||
+       startsWith(github.event.label.name, 'ci:ctest-last-'))
+    name: Dispatch maintainer-selected PR validation
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Serialize request statuses with the PR Summary finalizer.
+    # Keep every queued request; the default pending slot drops older jobs.
+    concurrency:
+      group: pr-summary-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+      cancel-in-progress: false
+      queue: max
     permissions:
       actions: write
       pull-requests: write
+      statuses: write
 
     steps:
       # preflight: allow-token-exposure reason=maintainer-pr-validation-dispatch
@@ -48,6 +55,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_ACTOR: ${{ github.actor }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -61,6 +70,30 @@ jobs:
             echo "Invalid pull request head SHA" >&2
             exit 1
           fi
+          if [[ ! "$EVENT_ACTOR" =~ ^[A-Za-z0-9-]+$ ]]; then
+            echo "Invalid label actor" >&2
+            exit 1
+          fi
+
+          case "$EVENT_LABEL" in
+            ci:run-auto) scope=auto ;;
+            ci:full) scope=full ;;
+            ci:skip) scope=skip ;;
+            ci:fast-lane|ci:no-windows|ci:warnings-fail)
+              scope=fast-lane
+              ;;
+            ci:ctest-last-*)
+              if [[ ! "$EVENT_LABEL" =~ ^ci:ctest-last-([1-9]|10)$ ]]; then
+                echo "Invalid CTest label" >&2
+                exit 1
+              fi
+              scope=fast-lane
+              ;;
+            *)
+              echo "Unsupported CI control label" >&2
+              exit 1
+              ;;
+          esac
 
           actor_permission="$(gh api \
             "repos/${GH_REPOSITORY}/collaborators/${EVENT_ACTOR}/permission" \
@@ -88,12 +121,68 @@ jobs:
             exit 1
           fi
           if [[ "$head_sha" != "$EVENT_HEAD_SHA" ]]; then
-            echo "PR head changed after the label event; reapply ci:run-auto" >&2
+            echo "PR head changed after the label event; reapply $EVENT_LABEL" >&2
             exit 1
           fi
-          gh workflow run ci-pr-action.yml --repo "$GH_REPOSITORY" \
-            --ref master \
-            -f pr_number="$PR_NUMBER" \
-            -f expected_head_sha="$EVENT_HEAD_SHA" \
-            -f ci_scope=auto
-          gh pr edit "$PR_NUMBER" --repo "$GH_REPOSITORY" --remove-label ci:run-auto
+          if ! jq -e --arg label "$EVENT_LABEL" \
+            '[.labels[].name] | index($label) != null' <<< "$pr_json" >/dev/null; then
+            echo "CI control label was removed after the event" >&2
+            exit 1
+          fi
+
+          # A new request must invalidate any older successful summary on this
+          # exact head before the queued validation begins. The downstream run
+          # posts success or failure only after its final aggregate job.
+          request_status_id=$(gh api --method POST "repos/${GH_REPOSITORY}/statuses/${EVENT_HEAD_SHA}" \
+            -f context='PR Summary' -f state=pending \
+            -f description="Maintainer label $EVENT_LABEL: validation requested" \
+            -f target_url="$RUN_URL" --jq '.id')
+          if [[ ! "$request_status_id" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Pending PR Summary status ID is invalid" >&2
+            exit 1
+          fi
+
+          # Clear any older passed/Merge Ready labels immediately. In
+          # particular, ci:skip has no downstream validation completion event.
+          gh workflow run update-labels.yml --repo "$GH_REPOSITORY" \
+            --ref master -f pr_number="$PR_NUMBER" \
+            -f expected_head_sha="$EVENT_HEAD_SHA"
+
+          if [[ "$scope" == skip ]]; then
+            echo "ci:skip requested: no validation dispatched; PR Summary remains pending"
+            gh pr edit "$PR_NUMBER" --repo "$GH_REPOSITORY" \
+              --remove-label "$EVENT_LABEL"
+            exit 0
+          fi
+
+          if [[ "$scope" == fast-lane ]]; then
+            mapfile -t ctest_labels < <(jq -r \
+              '.labels[].name | select(test("^ci:ctest-last-([1-9]|10)$"))' \
+              <<< "$pr_json")
+            if (( ${#ctest_labels[@]} > 1 )); then
+              echo "Choose only one ci:ctest-last-N label" >&2
+              exit 1
+            fi
+            ctest_limit=1
+            if (( ${#ctest_labels[@]} == 1 )); then
+              ctest_limit="${ctest_labels[0]##*-}"
+            fi
+            if [[ "$EVENT_LABEL" == ci:ctest-last-* ]]; then
+              ctest_limit="${EVENT_LABEL##*-}"
+            fi
+
+            gh workflow run ci-pr-action.yml --repo "$GH_REPOSITORY" \
+              --ref master -f pr_number="$PR_NUMBER" \
+              -f expected_head_sha="$EVENT_HEAD_SHA" \
+              -f request_status_id="$request_status_id" \
+              -f ci_scope=fast-lane -f ctest_recent_limit="$ctest_limit" \
+              -f include_windows=false -f warning_policy=fail
+          else
+            gh workflow run ci-pr-action.yml --repo "$GH_REPOSITORY" \
+              --ref master -f pr_number="$PR_NUMBER" \
+              -f expected_head_sha="$EVENT_HEAD_SHA" \
+              -f request_status_id="$request_status_id" -f ci_scope="$scope"
+          fi
+
+          gh pr edit "$PR_NUMBER" --repo "$GH_REPOSITORY" \
+            --remove-label "$EVENT_LABEL"

@@ -178,8 +178,8 @@ Run local checks on Windows before pushing:
 git diff --check
 python -c "import json; [json.load(open(p)) for p in ['vcpkg.json', 'Build/Cmake/vcpkg.json', 'ports/iccdev/vcpkg.json', 'examples/hello-iccdev/vcpkg.json']]; print('vcpkg JSON OK')"
 python -c "import yaml; yaml.safe_load(open('.github/workflows/ci-vcpkg-ports.yml')); print('YAML parse OK')"
-actionlint -no-color .github/workflows/ci-vcpkg-ports.yml
-actionlint -no-color .github/workflows/vcpkg-packages.yml
+jactionlint --profile correctness --no-color .github/workflows/ci-vcpkg-ports.yml
+jactionlint --profile correctness --no-color .github/workflows/vcpkg-packages.yml
 ```
 
 Final proof for these failures requires a GitHub-hosted Windows runner. Monitor

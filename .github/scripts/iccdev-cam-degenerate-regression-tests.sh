@@ -210,13 +210,11 @@ run_cam_degenerate_helper() {
 # and that denominator is exactly zero at m_La == -0.2f.
 #
 # This needs its own helper rather than another case in cam-degenerate.cpp. The
-# division happens inside IccProfLib, so it is only instrumented when the library
-# itself was compiled with -fsanitize=float-divide-by-zero -- and no CI lane both
-# enables that and runs ctest (the float-sanitized build in ci-docker-pr.yml
-# builds iccDumpProfile only). Sanitizer flags on the helper alone would not see
-# it, so the helper compiles IccCAM.cpp into its own binary instead. Its copy of
-# the converter then wins for the calls the helper makes, and the check works
-# against an ordinary non-sanitized library build.
+# division happens inside IccProfLib, so sanitizer flags on the helper alone
+# cannot instrument an ordinary library build. The helper compiles IccCAM.cpp
+# into its own binary instead. Its copy of the converter then wins for the
+# calls the helper makes, so this check works against an ordinary
+# non-sanitized library build.
 #
 # The value contract for these luminances is asserted separately, as case 7 of
 # cam-degenerate.cpp; it cannot catch the division, because a negative m_La

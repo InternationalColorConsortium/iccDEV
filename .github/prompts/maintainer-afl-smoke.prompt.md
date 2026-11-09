@@ -95,7 +95,7 @@ handoff.
 ```bash
 bash -n .github/scripts/iccdev-afl-smoke.sh
 shellcheck .github/scripts/iccdev-afl-smoke.sh
-actionlint .github/workflows/ci-afl-smoke.yml
+jactionlint --profile correctness --no-color .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
 .github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30

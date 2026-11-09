@@ -57,12 +57,65 @@ Do not dispatch fast lane for a fork, a closed PR, or an untrusted contributor.
 An agent can prepare commands and inspect runs, but cannot treat fast-lane
 success as merge approval.
 
+## Automatic Validation and Manual Retry
+
+For an open same-repository PR targeting `master`, each push or rebase starts
+the bounded `ci-pr-action` fast lane and `ci-rebase-safety`. A trusted
+completion event refreshes status labels after validation. Verify the PR's
+current head and `PR Summary` status before calling it ready. If the automatic
+run is absent, retry from the trusted `master` workflow definition:
+
+```bash
+gh pr view <pr-number> --repo InternationalColorConsortium/iccDEV \
+  --json state,isCrossRepository,baseRefName,headRefName,headRefOid
+gh workflow run ci-pr-action --repo InternationalColorConsortium/iccDEV \
+  --ref master -f ci_scope=auto -f pr_number=<pr-number> \
+  -f expected_head_sha=<40-character-head-sha>
+gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
+```
+
+This run's `headSha` is `master`; its explicit `PR Summary` commit status is
+published on the API-resolved PR head. If the completion-triggered labeler
+does not appear, run its manual fallback:
+
+```bash
+gh workflow run update-labels.yml --repo InternationalColorConsortium/iccDEV \
+  --ref master
+gh run list --repo InternationalColorConsortium/iccDEV \
+  --workflow update-labels.yml --branch master --event workflow_dispatch \
+  --json databaseId,createdAt,status,conclusion,url --limit 5
+gh run watch <labeler-run-id> --repo InternationalColorConsortium/iccDEV \
+  --exit-status
+gh pr view <pr-number> --repo InternationalColorConsortium/iccDEV \
+  --json headRefOid,isDraft,mergeStateStatus,labels \
+  --jq '{headRefOid,isDraft,mergeStateStatus,labels:[.labels[].name]}'
+```
+
+The labeler refreshes status labels but does not run CI. Capture its run ID
+from the dispatch URL, watch it to terminal success, then verify the PR's
+`headRefOid` still matches the validated SHA and inspect `passed`,
+`Merge Ready`, draft state, and
+`mergeStateStatus`. `Merge Ready` requires `passed`, a non-draft PR, and
+`CLEAN` merge state; report the actual state when it is absent. Save the
+validation run ID, API-resolved PR head SHA, selected/skipped jobs, and
+`PR Summary` status. A trusted manual dispatch run's `headSha` is `master`;
+use its explicit commit status to identify the validated PR head.
+A manually dispatched check may not appear in `gh pr checks`; inspect its
+run ID.
+Run `ci_scope=full` separately for the final PR-head readiness gate.
+
+The PR-number dispatch rejects an upper stacked PR whose base is another
+branch. Branch-only screening does not API-resolve the PR/base and cannot
+establish PR API-synced merge readiness. After the bottom PR merges, run
+`gh stack sync --remote origin`, confirm the upper PR's retargeted base
+and head, then validate the newly `master`-based PR's current head.
+
 ## Maintainer Fast Lane
 
 Fast lane applies only to an open same-repository PR and runs exact GCC 15.2
-Release LTO plus GCC 15.2 ASAN+UBSAN Debug tool validation. It defaults to
-the latest CTest, with Windows opt-in. It does not run Docker verification for
-container-surface changes. It is an accelerator, not a
+Release LTO plus GCC 15.2 ASAN+UBSAN Release tool validation. It defaults to
+the latest CTest, with Windows opt-in. The fast lane does not build a
+Docker image. It is an accelerator, not a
 replacement for required PR gates or the long-cycle `ci_scope=full` gate.
 
 Confirm the target before dispatch:
@@ -76,9 +129,10 @@ Only a maintainer with current repository permission may dispatch:
 
 ```bash
 gh workflow run ci-pr-action --repo InternationalColorConsortium/iccDEV \
-  --ref <branch> \
+  --ref master \
   -f ci_scope=fast-lane \
   -f pr_number=<open-same-repository-pr-number> \
+  -f expected_head_sha=<40-character-head-sha> \
   -f ctest_recent_limit=1 \
   -f include_windows=false \
   -f warning_policy=fail
@@ -88,15 +142,14 @@ Find and watch the resulting run:
 
 ```bash
 gh run list --repo InternationalColorConsortium/iccDEV \
-  --workflow ci-pr-action --branch <branch> --event workflow_dispatch \
+  --workflow ci-pr-action --branch master --event workflow_dispatch \
   --json databaseId,headSha,status,conclusion --limit 1
 gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
-Trigger shared-concurrency runs sequentially. Add Windows only when the change
-needs that surface. Container-surface changes, including the unified Dockerfile,
-packaged MCP source, and `ci-docker-pr.yml`, require local canonical-image
-validation; `ci-pr-action` does not run a Docker PR lane. Escalate to
+Dispatches are isolated by PR and event. Add Windows only when the change
+needs that surface. Container-surface changes, including the unified Dockerfile
+and packaged MCP source, require local canonical-image validation. Escalate to
 `ci_scope=full` when the changed surface or merge policy requires the long
 cycle.
 

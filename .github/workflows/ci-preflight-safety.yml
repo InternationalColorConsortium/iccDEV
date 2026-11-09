@@ -128,7 +128,25 @@ jobs:
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+          # jactionlint v2.5.0 supports GitHub's concurrency.queue syntax.
+          GOTOOLCHAIN=go1.27.3 go install \
+            github.com/jdx/jactionlint/v2/cmd/jactionlint@9e87e8f34edfc00b849a27807e26eff9d00b936d
+          # The trusted-base scanner still calls actionlint -no-color while
+          # this change is under review. Keep that invocation functional.
+          cat > "$(go env GOPATH)/bin/actionlint" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          args=()
+          for arg in "$@"; do
+            if [[ "$arg" == -no-color ]]; then
+              args+=(--no-color)
+            else
+              args+=("$arg")
+            fi
+          done
+          exec "$(dirname "$0")/jactionlint" --profile correctness "${args[@]}"
+          SH
+          chmod 755 "$(go env GOPATH)/bin/actionlint"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
           # Keep this pin synchronized with the other workflow pins and Dockerfile.
@@ -320,7 +338,7 @@ jobs:
 
           raise SystemExit(1 if failures else 0)
           PY
-            actionlint -no-color "${workflow_files[@]}"
+            jactionlint --profile correctness --no-color "${workflow_files[@]}"
           yamllint_config='{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}'
           yamllint -d "$yamllint_config" "${workflow_files[@]}"
           zizmor "${workflow_files[@]}"

@@ -1075,10 +1075,10 @@ PY
   run_check "workflow fixed-output batching policy" \
     run_workflow_fixed_output_batching_policy
 
-  if command -v actionlint >/dev/null 2>&1; then
-    run_check "actionlint" actionlint -no-color "${workflow_files[@]}"
+  if command -v jactionlint >/dev/null 2>&1; then
+    run_check "jactionlint" jactionlint --profile correctness --no-color "${workflow_files[@]}"
   else
-    skip_or_fail "actionlint"
+    skip_or_fail "jactionlint"
   fi
 
   if command -v yamllint >/dev/null 2>&1; then

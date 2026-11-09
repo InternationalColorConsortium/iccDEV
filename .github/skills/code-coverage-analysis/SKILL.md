@@ -30,7 +30,7 @@ coverage drift, or local timing comparisons across build configurations.
 7. Audit every workflow with
    `.github/scripts/check-workflow-fixed-output-batching.py`; distinguish unsafe
    repeated fixed-output commands from safe streamed output.
-8. Validate YAML, actionlint, yamllint, zizmor, ShellCheck, Python syntax and
+8. Validate YAML, jactionlint, yamllint, zizmor, ShellCheck, Python syntax and
    checker fixtures, fast-lane preflight, documentation rendering, and focused
    local report generation. State whether hosted CI ran.
 

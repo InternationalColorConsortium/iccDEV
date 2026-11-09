@@ -166,7 +166,7 @@ grep -c 'credential.helper' "$FILE"  # should equal number of run: blocks
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('$FILE')); print('YAML OK')"
-actionlint -no-color "$FILE"
+jactionlint --profile correctness --no-color "$FILE"
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' "$FILE"
 zizmor "$FILE"
 hadolint Dockerfile*
@@ -223,7 +223,7 @@ rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does 
 CodeQL Actions analysis is required for workflow changes. CodeQL Python
 analysis is required for changed Python scripts. Full CodeQL C/C++ remains
 required for related C/C++ or CMake changes. Pair CodeQL with YAML parsing,
-`actionlint`, ShellCheck, `yamllint`, and the workflow permission audit because
+`jactionlint`, ShellCheck, `yamllint`, and the workflow permission audit because
 no single scanner covers the full CI threat model.
 
 ## Reference Workflows

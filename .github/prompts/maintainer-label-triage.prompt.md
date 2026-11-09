@@ -23,9 +23,17 @@ Use this prompt when reviewing or changing the iccDEV label system.
 - Preserve `passed`, `failed`, and `pending` as mutually exclusive CI status
   labels.
 - Preserve `Merge Ready` as a derived status, not a manual approval substitute.
-- Keep `codeql-ready` connected to the full CodeQL workflow.
-- Keep `ci:run-auto` one-shot and restricted to a write-authorized maintainer
-  on an open same-repository PR; it must dispatch only auto-scoped validation.
+- A pushed or rebased same-repository `master`-target PR starts a bounded
+  `ci-pr-action` fast lane; completion refreshes status labels. Verify the
+  current head, `PR Summary`, labels, and merge state before reporting
+  readiness. Use trusted-`master` exact-head dispatch and manual label
+  refresh only when an automatic run is absent. `Rebase Safety` alone is not
+  PR validation.
+- Keep `ci:codeql` and `codeql-ready` connected to the full CodeQL workflow.
+- Keep all `ci:*` control labels maintainer-only and restricted to open
+  same-repository `master`-target PRs. A trusted metadata-only dispatcher
+  must use the exact event head and trusted `master` workflow. `ci:skip`
+  must never publish successful validation.
 - Do not checkout or execute PR-controlled content from `pull_request_target`.
 - Require an explicit `zizmor` rationale when retaining `pull_request_target`
   for metadata-only label automation.
@@ -49,7 +57,7 @@ bash -n .github/scripts/sync-labels.sh
 GH_REPOSITORY=InternationalColorConsortium/iccDEV \
   .github/scripts/sync-labels.sh --dry-run
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' .github/labels.yml .github/labeler.yml
-actionlint -no-color .github/workflows/pr-labeler.yml .github/workflows/sync-labels.yml .github/workflows/label.yml .github/workflows/update-labels.yml
+jactionlint --profile correctness --no-color .github/workflows/pr-labeler.yml .github/workflows/sync-labels.yml .github/workflows/label.yml .github/workflows/update-labels.yml
 zizmor .github/workflows/pr-labeler.yml .github/workflows/sync-labels.yml .github/workflows/label.yml .github/workflows/update-labels.yml
 git diff --check
 ```

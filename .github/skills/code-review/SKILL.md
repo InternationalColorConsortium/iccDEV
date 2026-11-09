@@ -83,7 +83,8 @@ high-confidence, actionable findings over low-value comments.
    suppression, and workflow/helper/trust-boundary changes.
 2. Group related changed lines by root cause.
 3. Verify the highest-risk hypothesis with the smallest deterministic check.
-4. For workflow changes, run the applicable YAML parser, `actionlint`,
+4. For workflow changes, run the applicable YAML parser, pinned `jactionlint`
+   with the `correctness` profile,
    `yamllint`, `zizmor`, CodeQL Actions, and trust-boundary checks.
 5. For parser and input-handling changes, use the nearest regression and
    sanitizer coverage. Compare XML and JSON nested-call failure propagation,
