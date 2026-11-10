@@ -308,6 +308,15 @@ if(ENABLE_SHARED_LIBS AND TARGET "${TARGET_LIB_ICCPROFLIB}")
     C_STANDARD 99
     C_STANDARD_REQUIRED ON
   )
+  # The source must compile as C to guard the public C header. In Clang UBSan
+  # builds, the C++ shared library also needs the vptr runtime when dlopened;
+  # link this standalone helper with clang++ so that runtime is available.
+  if(NOT WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+     AND (ENABLE_SANITIZERS OR ENABLE_UBSAN))
+    set_target_properties(iccCValidationDlopenTest PROPERTIES
+      LINKER_LANGUAGE CXX
+    )
+  endif()
   # Pattern initialization caught the prior probe of an unwritten report byte.
   # Keep the consumer in that mode where Clang provides it.
   if(CMAKE_C_COMPILER_ID MATCHES "Clang")

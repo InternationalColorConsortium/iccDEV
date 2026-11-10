@@ -52,7 +52,7 @@ Copyright:  (c) see Software License
 class ICCPROFLIB_API CIccMpeXml : public IIccExtensionMpe
 {
 public:
-  virtual ~CIccMpeXml(void) {}
+  virtual ~CIccMpeXml(void);
 
   virtual bool ToXml(std::string &xml, std::string blanks="") = 0;
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr) = 0;
