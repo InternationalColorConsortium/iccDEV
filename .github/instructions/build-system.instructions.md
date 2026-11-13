@@ -269,7 +269,9 @@ When adding a tool that should be covered by standard testing:
 1. Add its build output directory to the CTest tool path list.
 2. Add the target to the `check` dependency list when the test needs the tool.
 3. Add or update a CTest suite for the tool.
-4. Update `docs/ctest.md` and any workflow test-count assertions.
+4. Update `docs/ctest.md` and any direct label, fixture, or generated-profile
+   consumers. Discover the platform-specific CTest total; do not add a global
+   count assertion.
 
 ## vcpkg Port Integration
 

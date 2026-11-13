@@ -94,3 +94,32 @@ QA outputs would include those returned profiles as new inputs.
 Run a representative staged image corpus explicitly before reporting a tool
 defect, and retain the summary, TSV files, relevant logs, exact tool paths, and
 the native reproduction command.
+
+## Authored XML and JSON parser symmetry
+
+The blob-first runner above answers a serialization question. It does not prove
+that independently authored XML and JSON documents express the same profile.
+In particular, calculator source is compiled into operations in the ICC blob.
+Writing that blob back flattens macros, locals, named variables, named channels,
+and original numeric and operator spelling. The returned document can preserve
+compiled behavior while no longer preserving the authored representation.
+
+For parser-symmetry coverage, keep XML as the authored reference and translate
+the JSON counterpart by hand. Native writer output may be inspected to confirm
+field names, but it must not be copied or treated as the source of truth. For
+each pair:
+
+1. Parse XML with `iccFromXml` and JSON with `iccFromJson` independently.
+2. Validate both blobs with `iccDumpProfile -v` and compare header, tag, type,
+   channel, and validation inventories.
+3. Execute the same transform inputs and require format-independent expected
+   results. Prefer a discriminating semantic result over blob identity.
+4. Serialize each blob to both XML and JSON only as secondary evidence. Record
+   source-level normalization or omissions separately from parse and execution
+   failures.
+5. Keep generated blobs, returned documents, logs, and coverage data outside
+   the tracked tree.
+
+`iccdev.calculator-regressions` applies this contract to the hand-authored
+`calculator-structure-symmetry.{xml,json}` and issue 2086 Table 102 pairs. It is
+one existing aggregate CTest rather than an additional scheduling unit.

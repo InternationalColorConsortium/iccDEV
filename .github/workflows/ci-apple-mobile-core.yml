@@ -24,7 +24,7 @@ jobs:
     name: Build Apple mobile static cores
     # Release artifacts are cross-compiled for explicit Apple SDK/architecture
     # pairs, so use the less-constrained Intel pool for that caller. Standalone
-    # smoke keeps Apple Silicon because it launches arm64 simulator hosts.
+    # builds use the current macOS pool.
     runs-on: ${{ inputs.release-artifact && 'macos-15-intel' || 'macos-latest' }}
     timeout-minutes: 60
 
@@ -38,18 +38,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # Checkout the trusted base commit into a separate path so we do not
-      # source code from the PR workspace (untrusted) when this workflow is
-      # reached via workflow_call from a pull_request caller.
-      - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          path: base
-          sparse-checkout: .github/scripts
-          fetch-depth: 1
-          persist-credentials: false
-
       # preflight: allow-package-install reason=apple-mobile-extended-core-json-header-dependency
       - name: Install Apple extended-core dependency headers
         env:
@@ -58,8 +46,6 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # shellcheck source=.github/scripts/sanitize-sed.sh
-          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if ! brew list --versions nlohmann-json >/dev/null; then
             brew install nlohmann-json
           fi
@@ -73,7 +59,7 @@ jobs:
           unset GITHUB_TOKEN || true
 
           # shellcheck source=.github/scripts/sanitize-sed.sh
-          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          source "$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
 
           sdk_manifest="${RUNNER_TEMP}/iccdev-apple-sdks.txt"
           xcodebuild -showsdks > "$sdk_manifest"
@@ -202,7 +188,6 @@ jobs:
             done < "$artifact_manifest"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
-      # preflight: allow-pr-script-execution reason=readonly-apple-artifact-validation
       - name: Validate Apple mobile core artifact
         env:
           BASH_ENV: /dev/null
@@ -211,21 +196,6 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           python3 .github/scripts/validate-apple-mobile-core-artifact.py artifacts
-
-      # preflight: allow-pr-script-execution reason=native-apple-host-test-only
-      - name: Exercise Apple simulator hosts
-        if: ${{ !inputs.release-artifact }}
-        env:
-          BASH_ENV: /dev/null
-          ICCDEV_APPLE_DOWNLOAD_RUNTIME: '1'
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          targets=(ios ipad tvos watchos)
-          for target in "${targets[@]}"; do
-            bash .github/scripts/iccdev-apple-simulator-smoke.sh "$target"
-          done
 
       # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
       - name: Exercise Xcode CTest runtime layouts
@@ -237,28 +207,6 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           bash .github/scripts/iccdev-xcode-ctest-smoke.sh
-
-      - name: Summarize native Apple smoke results
-        if: ${{ !inputs.release-artifact }}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          # shellcheck source=.github/scripts/sanitize-sed.sh
-          source "$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
-          {
-            targets=(ios ipad tvos watchos)
-            for target in "${targets[@]}"; do
-              report="out/apple-${target}-simulator-smoke/restored.json"
-              count="$(jq -er '.tests | length' "$report")"
-              sanitize_line "${target}: ${count} core checks; missing-fixture failure control passed."
-              printf '\n'
-            done
-            sanitize_line "Xcode Release and Debug CTest runtime gates passed."
-            printf '\n'
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload Apple mobile core libraries
         if: >-

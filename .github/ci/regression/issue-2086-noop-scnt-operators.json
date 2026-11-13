@@ -1,0 +1,97 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileVersion": "5.00",
+      "ProfileDeviceClass": "spac",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-15T00:00:00",
+      "ProfileFileSignature": "acsp",
+      "RenderingIntent": "Relative",
+      "PCSIlluminant": [
+        0.9505,
+        1.0,
+        1.0891
+      ],
+      "ProfileCreator": "ICC "
+    },
+    "Tags": [
+      {
+        "profileDescriptionTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "issue-2086 noop scnt",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "AToB1Tag": {
+          "data": {
+            "type": "multiProcessElementType",
+            "inputChannels": 3,
+            "outputChannels": 3,
+            "elements": [
+              {
+                "type": "CalculatorElement",
+                "inputChannels": 3,
+                "outputChannels": 3,
+                "mainFunction": "{ noop scnt noop scnt scnt out(0,3) }"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "BToA1Tag": {
+          "data": {
+            "type": "multiProcessElementType",
+            "inputChannels": 3,
+            "outputChannels": 3,
+            "elements": [
+              {
+                "type": "CalculatorElement",
+                "inputChannels": 3,
+                "outputChannels": 3,
+                "mainFunction": "{ in(0,3) out(0,3) }"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "mediaWhitePointTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.9505,
+                1.0,
+                1.0891
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "copyrightTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Copyright International Color Consortium",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -90,8 +90,10 @@ directory on the invoking shell `PATH`.
 The Windows wrapper builds a bounded runtime `PATH` for tool execution instead
 of inheriting an unbounded developer environment.
 
-See `docs/ctest.md` for the complete suite list, expected counts, fixtures, and
-add-test process.
+See `docs/ctest.md` for the curated suite catalog, fixtures, and add-test
+process. Use `ctest --test-dir <build> -N --no-tests=error` as the authoritative
+list for the selected platform and build options; do not hard-code a global
+suite count.
 
 CTest registration and workflow count assertions are maintainer-owned. General
 contributors should not edit `Build/Cmake/Testing/` or `.github/workflows/**`
@@ -166,11 +168,12 @@ set `ICCDEV_TOOLS_DIR` when the build is not under `Build/Tools`.
    `iccDumpProfile -v`, `iccRoundTrip`, or `iccApplyNamedCmm`.
 4. Add regression PoCs under `.github/ci/regression/` only when they should run
    in automated CI.
-5. If the profile affects automated coverage, update the relevant expected
-   counts in `docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and the
-   workflows that assert CTest or generated-profile totals. For WASM profile
-   parity, also update `Build/Cmake/wasm-package/regression.js`; workflow
-   inputs alone do not change the packaged fallback count.
+5. If the profile affects automated coverage, update any scoped fixture or
+   generated-profile count owned by `Build/Cmake/Testing/CMakeLists.txt` and
+   its direct consumers. Do not add a global CTest count: registration varies
+   by platform and build options. For WASM profile parity, also update
+   `Build/Cmake/wasm-package/regression.js`; workflow inputs alone do not
+   change the packaged fallback count.
 
 ## Maintainer CTest Suite Changes
 
@@ -184,7 +187,8 @@ CTest or workflow infrastructure directly.
 3. Use `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
    profiles.
 4. Update `docs/ctest.md` with the test name, source script, labels, and any
-   count changes.
+   scoped fixture-count changes. Discover the suite total instead of recording
+   it as a durable expectation.
 
 ## Validation Output
 

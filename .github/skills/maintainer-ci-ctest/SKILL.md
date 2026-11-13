@@ -28,7 +28,7 @@ Choose the smallest maintainer-owned surface that proves the behavior:
 
 | Change | Primary location | Required docs |
 |--------|------------------|---------------|
-| Add profile input | `Testing/CreateAllProfiles.*` | `docs/ctest.md` if counts change |
+| Add profile input | `Testing/CreateAllProfiles.*` | `docs/ctest.md` if a scoped generated-profile count changes |
 | Add profile validation | `Testing/RunTests.*` | `docs/ctest.md` if CTest coverage changes |
 | Add focused Linux regression | `.github/scripts/*.sh` | `.github/ci/regression/README.md` or `docs/ctest.md` |
 | Register CTest suite | `Build/Cmake/Testing/CMakeLists.txt` | `docs/ctest.md` |
@@ -53,8 +53,6 @@ when practical.
 - Do not add hard-coded CTest suite totals to workflows, docs, or maintainer
   instructions; keep suite lists descriptive and let CTest discovery report the
   current total.
-- Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
-  count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
 - If a change touches legacy packed intent decoding or named-color overprint
   variants, include both `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`
   and `.github/scripts/iccdev-applysearch-cli-args-regression.sh`, plus
@@ -101,16 +99,16 @@ when practical.
 - `ci_scope=auto` is the default. It selects the full matrix for source, build,
   and test changes; documentation-only changes use the constrained fast-lane
   settings. Workflow-only changes keep the core orchestrator limited to setup
-  and finalization while the standalone preflight and risk-analysis workflows
-  provide their required contexts. Container-only changes use those standalone
-  security gates and local container validation.
+  and finalization while standalone preflight and direct risk analysis provide
+  focused security evidence. Container-only changes use those security gates
+  and local container validation.
 - On `synchronize`, `ci-rebase-safety` proves ancestry and `ci-pr-action`
   starts its bounded fast lane on the same-repository PR head. This does not
   fan out the full, sanitizer, JSON, MCP, MATLAB, preflight, or risk-analysis
   gates. Dispatch final applicable lanes explicitly. Ancestry alone cannot
   supply `PR Summary`; completed validation must publish it for the head.
-- `ci-risk-analysis-gate` is manual-dispatch only. It runs the Linux and
-  Windows workflow-security audits for an explicit final security review.
+- `ci-pr-risk-security-analysis.yml` is directly manually dispatchable. It runs
+  the Linux and Windows workflow-security audits for an explicit final review.
   Manual audits validate all workflow Bash prologues, not an empty self-diff.
 - `ci-matlab` is manual-dispatch only. Do not restore its pull-request trigger:
   its Windows, Linux, macOS, and container lanes are reserved for explicit
@@ -169,16 +167,6 @@ cmake -S Build/Cmake -B build -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_WXWID
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
 ctest --test-dir build --output-on-failure --no-tests=error
-```
-
-For tool coverage script changes:
-
-```bash
-ICCDEV_TOOLS_DIR=$PWD/build/Tools \
-ICCDEV_TESTING_DIR=$PWD/Testing \
-ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
-  .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
-ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
 
 For `ci-pr-lint.yml` updates, install `clang-tidy`, `clang-tools`, and
@@ -249,9 +237,8 @@ gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref 
   -f ci_scope=fast-lane -f pr_number=<open-master-target-pr-number> \
   -f expected_head_sha=<40-character-head-sha>
 gh workflow run "ci-matlab" --repo InternationalColorConsortium/iccDEV --ref <branch>
-gh workflow run "ci-risk-analysis-gate" --repo InternationalColorConsortium/iccDEV --ref <branch>
-gh workflow run "ci-risk-analysis" --repo InternationalColorConsortium/iccDEV --ref <branch> \
-  -f analysis_target="Specific git ref" -f git_ref=<full-sha> -f severity_threshold=HIGH -f fail_on_findings=true
+gh workflow run "ci-pr-risk-security-analysis.yml" \
+  --repo InternationalColorConsortium/iccDEV --ref <branch>
 ```
 
 On each push or rebase, the automatic fast lane validates an open
@@ -273,7 +260,7 @@ Report:
 
 - Branch and commit SHA.
 - Maintainer-owned scope touched and why.
-- Expected counts changed or confirmed unchanged.
+- Scoped fixture or generated-profile counts changed or confirmed unchanged.
 - Local commands and outcomes.
 - GitHub run IDs, conclusions, artifacts, and any annotations.
 - For registry QA runs, report `summary.md`, `results.tsv`, and `findings.txt`

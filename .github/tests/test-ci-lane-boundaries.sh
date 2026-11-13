@@ -45,12 +45,10 @@ pr_workflow="$repo_root/.github/workflows/ci-pr-action.yml"
 mcp_workflow="$repo_root/.github/workflows/ci-mcp-server.yml"
 tool_workflow="$repo_root/.github/workflows/ci-iccdev-tool-tests.yml"
 pr_unix_workflow="$repo_root/.github/workflows/ci-pr-unix.yml"
-apple_workflow="$repo_root/.github/workflows/ci-apple-platform-smoke.yml"
 unix_workflow="$repo_root/.github/workflows/_build-test-unix.yml"
 windows_workflow="$repo_root/.github/workflows/_build-test-windows.yml"
 pr_windows_workflow="$repo_root/.github/workflows/ci-pr-win.yml"
 sanitizer_workflow="$repo_root/.github/workflows/ci-sanitizer-regression.yml"
-risk_workflow="$repo_root/.github/workflows/ci-risk-analysis-gate.yml"
 cfl_workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 ctest_file="$repo_root/Build/Cmake/Testing/CMakeLists.txt"
 
@@ -82,15 +80,13 @@ require_head_concurrency() {
 for workflow in "$tool_workflow" "$mcp_workflow" "$pr_windows_workflow"; do
   require_head_concurrency "$workflow" target_sha
 done
-for workflow in "$pr_unix_workflow" "$apple_workflow"; do
-  require_head_concurrency "$workflow" target-sha
-done
+require_head_concurrency "$pr_unix_workflow" target-sha
 # A PR event and trusted-master dispatch for the same PR/head may run together.
 # shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
 grep -Fq 'group: pr-unix-${{ github.event_name }}-' "$pr_unix_workflow"
-# All six ci-pr-action calls to these reusable lanes must pass its resolved PR.
+# All five ci-pr-action calls to these reusable lanes must pass its resolved PR.
 # shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
-test "$(grep -Fc 'pr_number: ${{ needs.detect-src.outputs.pr_number }}' "$pr_workflow")" -eq 6
+test "$(grep -Fc 'pr_number: ${{ needs.detect-src.outputs.pr_number }}' "$pr_workflow")" -eq 5
 
 grep -Fq 'uses: ./.github/workflows/ci-mcp-server.yml' "$pr_workflow"
 grep -Fq 'needs.detect-src.outputs.mcp_changed' "$pr_workflow"
@@ -110,7 +106,8 @@ if grep -Fq 'ci-pr-risk-security-analysis.yml' "$pr_workflow"; then
 fi
 
 grep -Fq 'default: sanitizers' "$tool_workflow"
-grep -Fq 'ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)' "$tool_workflow"
+grep -Fq -- '--label-exclude ci-infrastructure' "$tool_workflow"
+grep -Fq -- '--label-exclude clusterfuzzlite' "$tool_workflow"
 if grep -Fq 'include_infrastructure_tests:' "$tool_workflow"; then
   echo "[FAIL] The tool lane must not expose infrastructure CTests" >&2
   exit 1
@@ -124,12 +121,6 @@ grep -Fq "      - '.github/ci/test-data/**'" "$sanitizer_workflow"
 grep -Fq "      - '.github/scripts/**'" "$sanitizer_workflow"
 grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' "$sanitizer_workflow"
 grep -Fq 'instrumentation: sanitizers' "$sanitizer_workflow"
-grep -Fq 'uses: ./.github/workflows/ci-pr-risk-security-analysis.yml' "$risk_workflow"
-if grep -q '^    paths:$' "$risk_workflow"; then
-  echo "[FAIL] required risk contexts must run for every PR" >&2
-  exit 1
-fi
-
 grep -q '^  schedule:$' "$cfl_workflow"
 grep -Fq 'default: smoke' "$cfl_workflow"
 if grep -q '^  push:$' "$cfl_workflow"; then
@@ -137,6 +128,6 @@ if grep -q '^  push:$' "$cfl_workflow"; then
   exit 1
 fi
 
-test "$(grep -c 'clusterfuzzlite.*ci-infrastructure' "$ctest_file")" -eq 2
+test "$(grep -c 'clusterfuzzlite.*ci-infrastructure' "$ctest_file")" -eq 1
 
 echo "[PASS] CI lane boundaries"

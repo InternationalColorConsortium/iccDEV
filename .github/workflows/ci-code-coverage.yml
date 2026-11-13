@@ -7,7 +7,8 @@
 # Intent: Clang source-based code coverage for iccDEV.
 #
 # Builds iccDEV with clang coverage instrumentation, exercises the legacy
-# profile generation and tool paths, then uploads text, HTML, and lcov reports.
+# profile generation, tool paths, and full CTest inventory, then uploads
+# separately labeled broad and core-library reports.
 #
 ###############################################################
 
@@ -73,6 +74,8 @@ jobs:
             curl \
             jq \
             libclang-rt-22-dev \
+            libbrotli-dev \
+            libfreetype-dev \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
@@ -80,6 +83,28 @@ jobs:
             llvm-22 \
             nlohmann-json3-dev \
             zlib1g-dev
+
+      # preflight: allow-package-install reason=spectral-preview-ctest-dependencies
+      - name: "Install full CTest Python dependencies"
+        env:
+          PIP_NO_CACHE_DIR: "1"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          python_bin="$(command -v python3)"
+          IMAGECODECS_ONLY=imcd "$python_bin" -m pip install \
+            --no-binary=pillow,imagecodecs \
+            -r .github/ci/requirements/docker-spectral-preview.txt \
+            --quiet
+          preview_check='import importlib.util, imagecodecs, numpy, PIL, tifffile; '
+          preview_check+='data = b"iccdev-lzw-check"; '
+          preview_check+='assert imagecodecs.lzw_decode(imagecodecs.lzw_encode(data)) == data; '
+          preview_check+='assert importlib.util.find_spec("imagecodecs._brotli") is None'
+          "$python_bin" -c "$preview_check"
+          printf 'ICCDEV_SPECTRAL_PREVIEW_PYTHON=%s\n' "$python_bin" >> "$GITHUB_ENV"
 
       - name: "Show toolchain versions"
         run: |
@@ -362,7 +387,7 @@ jobs:
             exit 1
           fi
 
-      - name: "Run CTest large-profile coverage gate"
+      - name: "Run focused hybrid CTest coverage gate"
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -433,8 +458,8 @@ jobs:
           fi
 
           {
-            printf 'iccDEV CTest coverage measurement\n'
-            printf '=================================\n\n'
+            printf 'iccDEV focused CTest coverage measurement\n'
+            printf '=========================================\n\n'
             printf 'Registered tests: %s\n' "$ctest_test_count"
             printf 'CTest exit code: %s\n' "$ctest_rc"
             printf 'Nonempty CTest profiles: %s\n' "$ctest_profile_count"
@@ -445,8 +470,9 @@ jobs:
             printf 'Large profile CTest: %s\n' "${large_profile_line:-n/a}"
             printf '\n'
             printf 'Notes:\n'
-            printf '%s\n' '- CTest owns the registered hybrid large-profile run.'
-            printf '%s\n' '- The run is required and contributes LLVM coverage data.'
+            printf '%s\n' '- This focused gate runs the registered hybrid pipeline and its fixture.'
+            printf '%s\n' '- It is not the complete CTest inventory.'
+            printf '%s\n' '- The run is required and contributes to the broad module-matched report.'
           } > "$ctest_report"
 
           {
@@ -763,6 +789,200 @@ jobs:
           printf 'Coverage: regions=%s functions=%s lines=%s branches=%s\n' \
             "$region_pct" "$func_pct" "$line_pct" "$branch_pct"
 
+      - name: "Build and run full CTest core-library coverage"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          full_ctest_dir="${WORKSPACE_DIR}/profraw-full-ctest"
+          core_profraw_dir="${WORKSPACE_DIR}/profraw-full-ctest-core"
+          full_report_dir="${WORKSPACE_DIR}/coverage-report/full-ctest-core"
+          full_ctest_artifacts="${WORKSPACE_DIR}/coverage-report/ctest-full"
+          mkdir -p \
+            "$full_ctest_dir" \
+            "$core_profraw_dir" \
+            "$full_report_dir" \
+            "$full_ctest_artifacts"
+
+          helper_log="${full_ctest_artifacts}/build-test-binaries.log"
+          helper_start_ns="$(date +%s%N)"
+          set +e
+          cmake --build "$build_dir" \
+            --target build-test-binaries \
+            --parallel "$ICCDEV_BUILD_JOBS" \
+            > "$helper_log" 2>&1
+          helper_rc="$?"
+          set -e
+          helper_end_ns="$(date +%s%N)"
+          helper_elapsed_ms="$(( (helper_end_ns - helper_start_ns) / 1000000 ))"
+          printf 'build-test-binaries\t%s\n' "$helper_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
+
+          if [ "$helper_rc" -ne 0 ]; then
+            echo "::group::build-test-binaries tail"
+            tail -80 "$helper_log" | while IFS= read -r line; do
+              sanitize_line "$line"
+              printf '\n'
+            done
+            echo "::endgroup::"
+            echo "::error title=CTest helpers::build-test-binaries exited with code ${helper_rc}"
+            exit "$helper_rc"
+          fi
+
+          full_ctest_json="${full_ctest_artifacts}/ctest-tests.json"
+          full_ctest_log="${full_ctest_artifacts}/ctest-output.txt"
+          full_ctest_junit="${full_ctest_artifacts}/ctest-junit.xml"
+          full_ctest_report="${full_ctest_artifacts}/ctest-measurement.txt"
+          ctest --test-dir "$build_dir" \
+            -LE '^standalone-aggregate$' \
+            --show-only=json-v1 \
+            > "$full_ctest_json"
+          full_ctest_test_count="$(jq -r '.tests | length' "$full_ctest_json")"
+
+          export PATH="${tool_path_dirs}${PATH}"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          export LLVM_PROFILE_FILE="${full_ctest_dir}/full-ctest-%4m.profraw"
+
+          full_ctest_start_ns="$(date +%s%N)"
+          set +e
+          ctest --test-dir "$build_dir" \
+            -j "$ICCDEV_BUILD_JOBS" \
+            -LE '^standalone-aggregate$' \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$full_ctest_junit" \
+            > "$full_ctest_log" 2>&1
+          full_ctest_rc="$?"
+          set -e
+          full_ctest_end_ns="$(date +%s%N)"
+          full_ctest_elapsed_ms="$(( (full_ctest_end_ns - full_ctest_start_ns) / 1000000 ))"
+          printf 'ctest-full\t%s\n' "$full_ctest_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
+          full_ctest_profile_count="$(
+            find "$full_ctest_dir" -maxdepth 1 -type f \
+              -name 'full-ctest-*.profraw' -size +0c -print | wc -l | tr -d ' '
+          )"
+
+          full_ctest_total_line="$(
+            grep -E 'tests failed out of [0-9]+|No tests were found' \
+              "$full_ctest_log" | tail -1 || true
+          )"
+          full_ctest_time_line="$(grep -E '^Total Test time' "$full_ctest_log" | tail -1 || true)"
+          {
+            printf 'iccDEV full CTest coverage measurement\n'
+            printf '=====================================\n\n'
+            printf 'Discovered tests: %s\n' "$full_ctest_test_count"
+            printf 'CTest exit code: %s\n' "$full_ctest_rc"
+            printf 'Nonempty raw profiles: %s\n' "$full_ctest_profile_count"
+            printf 'Elapsed wall time: %s milliseconds\n' "$full_ctest_elapsed_ms"
+            printf 'Excluded label: standalone-aggregate (run by the focused phase)\n'
+            printf 'CTest summary: %s\n' "${full_ctest_total_line:-n/a}"
+            printf 'CTest timing: %s\n' "${full_ctest_time_line:-n/a}"
+          } > "$full_ctest_report"
+
+          if [ "$full_ctest_rc" -ne 0 ]; then
+            echo "::group::Full CTest tail"
+            tail -120 "$full_ctest_log" | while IFS= read -r line; do
+              sanitize_line "$line"
+              printf '\n'
+            done
+            echo "::endgroup::"
+            echo "::error title=Full CTest::Full coverage suite exited with code ${full_ctest_rc}"
+            exit "$full_ctest_rc"
+          fi
+          if [ "$full_ctest_profile_count" -eq 0 ]; then
+            echo "::error title=Full CTest coverage::Full suite produced no nonempty raw profiles"
+            exit 1
+          fi
+
+          core_signatures="${full_ctest_artifacts}/core-library-signatures.txt"
+          awk -F '\t' '
+            NR > 1 && $2 ~ /libIcc(ProfLib|XML|JSON|Connect)2/ {
+              print $1
+            }
+          ' coverage-report/matched-objects.tsv | sort -u > "$core_signatures"
+          core_signature_count="$(wc -l < "$core_signatures" | tr -d ' ')"
+          if [ "$core_signature_count" -ne 4 ]; then
+            core_error="Expected 4 core library signatures"
+            echo "::error title=Core coverage signatures::${core_error}, found ${core_signature_count}"
+            exit 1
+          fi
+
+          while IFS= read -r signature; do
+            signature_profile_count="$(
+              find "$full_ctest_dir" -maxdepth 1 -type f \
+                \( -name "*-${signature}.profraw" \
+                   -o -name "*-${signature}_[0-9]*.profraw" \) \
+                -size +0c -print | wc -l | tr -d ' '
+            )"
+            if [ "$signature_profile_count" -eq 0 ]; then
+              echo "::error title=Core CTest coverage::No profile for signature ${signature}"
+              exit 1
+            fi
+            find "$full_ctest_dir" -maxdepth 1 -type f \
+              \( -name "*-${signature}.profraw" \
+                 -o -name "*-${signature}_[0-9]*.profraw" \) \
+              -exec cp '{}' "$core_profraw_dir/" \;
+          done < "$core_signatures"
+          full_ctest_core_profile_count="$(
+            find "$core_profraw_dir" -maxdepth 1 -type f \
+              -name '*.profraw' -size +0c -print | wc -l | tr -d ' '
+          )"
+          if [ "$full_ctest_core_profile_count" -eq 0 ]; then
+            echo "::error title=Core CTest coverage::No core-library profiles were selected"
+            exit 1
+          fi
+
+          full_report_start_ns="$(date +%s%N)"
+          LLVM_COV=llvm-cov-22 \
+          LLVM_PROFDATA=llvm-profdata-22 \
+            Build/Cmake/Testing/iccdev-matched-coverage-report.sh \
+              "$build_dir" "$core_profraw_dir" "$full_report_dir"
+          full_report_end_ns="$(date +%s%N)"
+          full_report_elapsed_ms="$(( (full_report_end_ns - full_report_start_ns) / 1000000 ))"
+          printf 'matched-coverage-full-ctest-core\t%s\n' "$full_report_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
+
+          while IFS='=' read -r key value; do
+            case "$key" in
+              mismatch_count|html_mismatch_count|matched_object_count|\
+              profile_signature_count|html_count|lcov_records|profdata_kb|\
+              region_pct|func_pct|line_pct|branch_pct)
+                printf 'full_ctest_core_%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+                printf -v "full_ctest_core_${key}" '%s' "$value"
+                ;;
+              *)
+                echo "::error title=Full CTest coverage metadata::Unexpected key ${key}"
+                exit 1
+                ;;
+            esac
+          done < "$full_report_dir/coverage-env.txt"
+          if [ "$full_ctest_core_profile_signature_count" -ne 4 ] ||
+             [ "$full_ctest_core_matched_object_count" -ne 4 ]; then
+            core_report_error="Expected 4 profile signatures and matched objects"
+            echo "::error title=Core CTest report::${core_report_error}"
+            exit 1
+          fi
+          {
+            printf 'full_ctest_exit_code=%s\n' "$full_ctest_rc"
+            printf 'full_ctest_test_count=%s\n' "$full_ctest_test_count"
+            printf 'full_ctest_profile_count=%s\n' "$full_ctest_profile_count"
+            printf 'full_ctest_core_profile_count=%s\n' "$full_ctest_core_profile_count"
+            printf 'full_ctest_elapsed_ms=%s\n' "$full_ctest_elapsed_ms"
+            printf 'full_ctest_helper_elapsed_ms=%s\n' "$helper_elapsed_ms"
+            printf 'full_ctest_report_elapsed_ms=%s\n' "$full_report_elapsed_ms"
+          } >> "$GITHUB_ENV"
+
+          full_core_line_pct="$(
+            sed -n 's/^line_pct=//p' "$full_report_dir/coverage-env.txt"
+          )"
+          full_core_notice="${full_ctest_test_count} tests"
+          full_core_notice+=", ${full_ctest_core_profile_count} core profiles"
+          full_core_notice+=", ${full_core_line_pct} lines"
+          echo "::notice title=Full CTest core coverage::${full_core_notice}"
+
       - name: "Write workflow summary"
         if: always()
         run: |
@@ -783,7 +1003,7 @@ jobs:
 
           summary_line "## Code Coverage Report"
           summary_line ""
-          summary_line "### Coverage"
+          summary_line "### Broad tool and profile coverage"
           summary_line "| Metric | Coverage |"
           summary_line "|--------|----------|"
           summary_line "| Regions | ${region_pct:-n/a} |"
@@ -791,8 +1011,20 @@ jobs:
           summary_line "| Lines | ${line_pct:-n/a} |"
           summary_line "| Branches | ${branch_pct:-n/a} |"
           summary_line ""
-          summary_line "Module-matched aggregate; use this run as the baseline for future comparisons."
+          summary_line "Module-matched aggregate from the focused hybrid CTest and broad tool/profile exercises."
           summary_line "Mismatched function records: ${mismatch_count:-n/a}"
+          summary_line ""
+          summary_line "### Full CTest core-library coverage"
+          summary_line "| Metric | Coverage |"
+          summary_line "|--------|----------|"
+          summary_line "| Regions | ${full_ctest_core_region_pct:-n/a} |"
+          summary_line "| Functions | ${full_ctest_core_func_pct:-n/a} |"
+          summary_line "| Lines | ${full_ctest_core_line_pct:-n/a} |"
+          summary_line "| Branches | ${full_ctest_core_branch_pct:-n/a} |"
+          summary_line ""
+          full_core_scope="Four build-tree core libraries only; excludes tool, helper-test,"
+          full_core_scope+=" rebuilt-package, and platform-only objects."
+          summary_line "$full_core_scope"
           summary_line ""
           summary_line "### Test Execution"
           summary_line "| Step | Result | Details |"
@@ -800,12 +1032,19 @@ jobs:
           summary_line "| ICC profiles created | ${profile_count:-n/a} | ci-inside-stub |"
           summary_line \
             "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_ms:-n/a} ms |"
-          summary_line \
-            "| CTest | exit ${ctest_exit_code:-n/a} | ${ctest_test_count:-0} tests, ${ctest_elapsed_ms:-n/a} ms |"
+          focused_ctest_row="| Focused hybrid CTest | exit ${ctest_exit_code:-n/a} |"
+          focused_ctest_row+=" ${ctest_test_count:-0} tests, ${ctest_elapsed_ms:-n/a} ms |"
+          summary_line "$focused_ctest_row"
           summary_line \
             "| CTest raw profiles | ${ctest_profile_count:-0} | nonempty ctest-*.profraw files |"
           summary_line \
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
+          full_ctest_row="| Full CTest | exit ${full_ctest_exit_code:-n/a} |"
+          full_ctest_row+=" ${full_ctest_test_count:-0} tests, ${full_ctest_elapsed_ms:-n/a} ms |"
+          summary_line "$full_ctest_row"
+          full_profile_row="| Full CTest raw profiles | ${full_ctest_profile_count:-0} |"
+          full_profile_row+=" ${full_ctest_core_profile_count:-0} selected for core report |"
+          summary_line "$full_profile_row"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
           summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
           summary_line "| ICC.2 XML specification QA | ${xml_spec_qa:-not run} | spectral, bi-spectral, MCS |"
@@ -820,7 +1059,9 @@ jobs:
           summary_line "| Compiler | clang-22 source-based coverage |"
           summary_line "| Configure | ${configure_ms:-n/a} ms |"
           summary_line "| Compile | ${compile_ms:-n/a} ms |"
+          summary_line "| CTest helper build | ${full_ctest_helper_elapsed_ms:-n/a} ms |"
           summary_line "| Matched report | ${merge_elapsed_ms:-n/a} ms |"
+          summary_line "| Full CTest core report | ${full_ctest_report_elapsed_ms:-n/a} ms |"
           summary_line "| Tools built | ${tool_count:-n/a} |"
           summary_line "| Profraw files | ${profraw_count:-n/a} |"
           summary_line "| Profile signatures | ${profile_signature_count:-n/a} |"
@@ -876,9 +1117,9 @@ jobs:
             printf 'Commit: %s\n' "$(git rev-parse HEAD)"
             printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
             printf 'Open developer-report/index.html for the presentation view.\n'
-            printf 'Coverage HTML is under html/, lcov data is in lcov.info, '
-            printf 'and supporting data is in ctest/, code-stats/, matched/, '
-            printf 'profdata/, and timing/.\n'
+            printf 'Broad coverage HTML is under html/ and the full CTest core-library '
+            printf 'report is under full-ctest-core/. Supporting data is in ctest/, '
+            printf 'ctest-full/, code-stats/, matched/, profdata/, and timing/.\n'
           } > "${report_dir}/README.txt"
 
           html="${report_dir}/index.html"
@@ -893,6 +1134,7 @@ jobs:
             printf '%s\n' 'padding:.1rem .25rem}</style>'
             printf '%s\n' '</head><body>'
             printf '<h1>iccDEV Coverage Developer Report</h1>\n'
+            printf '<h2>Broad tool and profile coverage</h2>\n'
             printf '<table><tr><th>Component</th><th>Value</th></tr>\n'
             printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
             printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
@@ -905,12 +1147,33 @@ jobs:
               "$mismatch_html"
             printf '</table>\n'
 
+            printf '<h2>Full CTest core-library coverage</h2>\n'
+            printf '<table><tr><th>Metric</th><th>Coverage</th></tr>\n'
+            printf '<tr><td>Regions</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_region_pct:-n/a}")"
+            printf '<tr><td>Functions</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_func_pct:-n/a}")"
+            printf '<tr><td>Lines</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_line_pct:-n/a}")"
+            printf '<tr><td>Branches</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_branch_pct:-n/a}")"
+            printf '</table>\n'
+
             if [ -f coverage-report/coverage-summary.txt ]; then
               printf '<h2>Clean Per-Signature Coverage</h2><pre>\n'
               while IFS= read -r line; do
                 sanitize_print "$line"
                 printf '\n'
               done < coverage-report/coverage-summary.txt
+              printf '</pre>\n'
+            fi
+
+            if [ -f coverage-report/full-ctest-core/coverage-summary.txt ]; then
+              printf '<h2>Full CTest Core-Library Per-Signature Coverage</h2><pre>\n'
+              while IFS= read -r line; do
+                sanitize_print "$line"
+                printf '\n'
+              done < coverage-report/full-ctest-core/coverage-summary.txt
               printf '</pre>\n'
             fi
 
@@ -933,6 +1196,20 @@ jobs:
               done
             else
               printf '<li>Coverage HTML was not generated.</li>\n'
+            fi
+            printf '</ul>\n'
+
+            printf '<h2>Full CTest Core-Library Coverage HTML</h2><ul>\n'
+            if [ -d coverage-report/full-ctest-core/html ]; then
+              find coverage-report/full-ctest-core/html -name index.html -type f \
+                | sort | while IFS= read -r file; do
+                rel="${file#coverage-report/}"
+                printf '<li><a href="../%s">%s</a></li>\n' \
+                  "$(escape_html "$rel")" \
+                  "$(escape_html "$rel")"
+              done
+            else
+              printf '<li>Full CTest core-library HTML was not generated.</li>\n'
             fi
             printf '</ul>\n'
 

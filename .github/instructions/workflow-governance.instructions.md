@@ -252,12 +252,11 @@ write-back automation to modify assertions on Dependabot branches.
 pinning, dangerous triggers, credential hygiene, shell hardening, matrix
 expression injection, output sanitization, permissions, Dockerfile security, and
 supply-chain risk.
-It is the required PR security canary for workflow and container risk, and runs
-with read-only permissions through the standalone
-`ci-risk-analysis-gate.yml` caller. It also supports manual `workflow_dispatch`
-runs and reusable `workflow_call` invocation from other CI workflows. Prefer
-calling it over copying scanner logic, and avoid adding a second direct PR
-trigger unless the caller gate is removed to prevent duplicate checks.
+It is the read-only hosted scanner for workflow and container risk. Dispatch it
+directly with `workflow_dispatch` or reuse it with `workflow_call`; do not add a
+wrapper that fixes inputs the direct dispatch already exposes. Its manual
+defaults run the Linux and Windows audits at HIGH severity and fail on blocking
+findings.
 
 `ci-preflight-safety.yml` runs the local pre-flight script on workflow and hook
 changes. When any workflow changes, workflow scanners run against the full

@@ -1,12 +1,13 @@
 ---
 name: xml-json-roundtrip-qa
-description: Measure ICC blob to XML and JSON round-trip fidelity, diagnostics, and abnormal process exits.
+description: Measure ICC blob round-trip fidelity or compare independently authored XML and JSON parser behavior.
 ---
 
 # ICC XML and JSON Round-Trip QA
 
 Use this skill when investigating whether ICC serialization through XML or JSON
-preserves bytes, validation diagnostics, and usable returned blobs.
+preserves bytes, validation diagnostics, and usable returned blobs, or whether
+authored XML and JSON documents express equivalent behavior.
 
 1. Require Python 3.9+ and build `iccToXml`, `iccFromXml`, `iccToJson`, `iccFromJson`, and
    `iccDumpProfile` in a native external build directory.
@@ -41,3 +42,19 @@ invoke the Python implementation directly without Bash or GNU timeout.
 
 Do not commit generated XML, JSON,
 returned ICC blobs, logs, or external image corpora.
+
+## Authored document mode
+
+Do not generate a tracked JSON counterpart through `iccFromXml` and
+`iccToJson`. Treat XML as the authored reference and translate JSON manually;
+use native writers only to check schema spelling. Parse both documents
+independently, validate their blobs, compare tag/type/channel inventories, and
+run the same discriminating transform inputs. Binary identity is useful
+secondary evidence, not the acceptance oracle.
+
+Calculator blobs contain compiled operations, not the original macro,
+variable, local, name, whitespace, or numeric spelling. When writing returned
+XML or JSON, report that source-level normalization separately from semantic
+execution. Keep all returned documents and profiling evidence external. Add
+coverage to an existing focused aggregate CTest when it has the same setup and
+behavioral oracle; do not create a redundant scheduling unit.

@@ -46,13 +46,13 @@ gates in the screening record when their contracts apply.
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Reusable/manual core or ASAN/UBSAN regression coverage. |
 | Sanitizer regression gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for initial PR validation and explicit final dispatches. |
-| Risk-analysis gate | `.github/workflows/ci-risk-analysis-gate.yml` | Standalone manual caller for the reusable Linux and Windows workflow-security audits. |
+| Risk analysis | `.github/workflows/ci-pr-risk-security-analysis.yml` | Direct manual and reusable Linux and Windows workflow-security audits. |
 | Rebase safety gate | `.github/workflows/ci-rebase-safety.yml` | Lightweight ancestry validation for same-repository PR synchronize events. |
 | PR CI label dispatcher | `.github/workflows/ci-maintainer-pr-dispatch.yml` | Maintainer-label requests dispatched from the trusted `master` workflow with exact PR head input. |
 | PR status labeler | `.github/workflows/update-labels.yml` | API-only current-head validation on PR events and trusted workflow completions. |
 | MATLAB native gate | `.github/workflows/ci-matlab.yml` | Manual Windows MSVC, Linux x86_64, and Apple Silicon macOS MEX QA; separate Docker interoperability. |
 | MATLAB release bundles | `.github/workflows/ci-latest-release.yml` | Linux x86_64, macOS arm64, and Windows x64 MEX builds with staged MATLAB QA and payload verification. |
-| Apple platform gates | `.github/workflows/ci-apple-platform-smoke.yml`, `.github/workflows/ci-apple-mobile-core.yml` | iOS/watchOS simulator hosts and Xcode Release/Debug CTest runtime layouts; [local commands](build.md). |
+| Apple archive and runtime gates | `.github/workflows/ci-apple-mobile-core.yml`, `.github/workflows/ci-pr-action.yml` | Mobile static-core artifacts, central PR Xcode Release/Debug CTest runtime layouts, and [local simulator commands](build.md). |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Coverage process guide | `docs/code-coverage.md` | Deterministic profraw merging, module matching, and configuration timing. |
@@ -151,7 +151,7 @@ gh workflow run ci-sanitizer-regression.yml --ref <head-branch>
 gh workflow run ci-json-roundtrip.yml --ref <head-branch>
 gh workflow run ci-mcp-server.yml --ref <head-branch>
 gh workflow run ci-matlab.yml --ref <head-branch>
-gh workflow run ci-risk-analysis-gate.yml --ref <head-branch>
+gh workflow run ci-pr-risk-security-analysis.yml --ref <head-branch>
 ```
 
 `Rebase Safety` proves ancestry only; it does not satisfy the protected
@@ -187,24 +187,22 @@ Prefer deterministic invariants over broad diffs. For generated ICC profiles,
 normalize only documented volatile fields when comparing whole files; otherwise
 assert specific tag sizes, offsets, record lengths, or validation messages.
 
-The Apple gates extend #2445's static-core SDK builds with native runtime
-coverage. The core workflow builds both dependency-free `apple-*-core` presets
-and extended `apple-*-extended-core` presets where each SDK is installed. Both
-workflows use `iccdev-apple-simulator-smoke.sh` and
-`iccdev-xcode-ctest-smoke.sh`: simulator success requires a fresh report and
-console sentinel, a missing-fixture control must fail, the report must include
-the built extended-library checks, the public invalid-profile substitution
-control, and non-failing mobile gap notes; Xcode CTest must produce fresh CLI
-output in both configurations. Normal PR CI calls the platform workflow with
-the `xcode` scope; it does not run the long simulator gate. The manual platform
-workflow accepts a focused `core`, `xcode`, `examples`, or `all` scope; the
-examples scope runs the three manual iOS apps with sanitizers on one disposable
-simulator. A manual core workflow
-dispatch additionally uploads the built static archives, generated version
-headers, and build manifest; reusable calls keep those products in the job
-workspace. The release workflow builds and validates those archives without
-rerunning simulator or Xcode smoke. Neither Apple workflow runs automatically
-on a push. A nonzero helper exit fails either gate.
+The Apple mobile-core gate extends #2445's static-core SDK builds. It builds
+both dependency-free `apple-*-core` presets and extended
+`apple-*-extended-core` presets where each SDK is installed. A standalone
+manual dispatch builds and validates the static archives, generated version
+headers, and manifest before uploading them, then runs the bounded Xcode gate.
+The release workflow reuses the archive build and validation without rerunning
+Xcode. Normal PR CI separately requires fresh Release and Debug CLI output from
+`iccdev-xcode-ctest-smoke.sh` in the central PR workflow, without constructing
+or uploading the mobile archive.
+
+Hosted workflows do not run `iccdev-apple-simulator-smoke.sh`. Its fresh-report,
+console-sentinel, missing-fixture, extended-library, invalid-profile, and mobile
+gap checks remain an explicit local gate documented in `docs/build.md`. The
+combined manual iOS example sanitizer helper is local-only as well. The Apple
+workflow does not run automatically on a push, and a nonzero helper exit fails
+the selected gate.
 
 ## Workflow Governance Requirements
 
@@ -245,11 +243,11 @@ Every edited workflow `run:` block must keep these properties:
   rerun, record cache size and hit status, and remove a cache that adds service
   churn without a material elapsed-time reduction.
 
-For reusable governance coverage, call
-`.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
-scanner logic in a new CI workflow. The risk-analysis workflow is the PR
-security canary for workflow and container changes, runs on every pull request
-with read-only permissions, and fails blocking findings when PR-triggered.
+For hosted governance coverage, dispatch or reuse
+`.github/workflows/ci-pr-risk-security-analysis.yml` instead of wrapping or
+copying it in another workflow. Its direct manual dispatch defaults to the
+selected branch's exact event SHA, HIGH severity, blocking findings, and both
+Linux and Windows audits. Informational scans can override those inputs.
 
 Maintainer-owned workflow, release, packaging, Docker, MCP, and security
 automation changes should use a conservative review loop. Run the applicable
@@ -321,9 +319,10 @@ Branch protection should require stable aggregate contexts, not conditional
 lane job names. `PR Summary` must aggregate only the deterministic core
 orchestration prerequisites and selected full, fast-lane, auto, governance,
 docs, and path-gated core jobs. Do not
-require removed lane names or initialization jobs as branch contexts. Require
-the standalone Pre-flight checks, risk-analysis contexts, and WASM parity
-separately on `master`. See `docs/label-system.md` for the current context list.
+require removed lane names or initialization jobs as branch contexts. Record
+standalone preflight, manual risk-analysis, and WASM evidence separately when
+applicable; do not make a manual risk-analysis job name a protected branch
+context. See `docs/label-system.md` for the current required context list.
 
 When `image_definition_changed` is true, `ci-pr-action` selects
 workflow-security gates only. It does not run a Docker Clang verification job,
@@ -399,8 +398,9 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-regression \
 
 When adding a gate, update the smallest useful index:
 
-- `docs/ctest.md` for CTest registrations, expected suite counts, fixtures, or
-  generated-profile count changes.
+- `docs/ctest.md` for CTest registrations, fixtures, labels, or scoped
+  generated-profile count changes. CTest discovery is the authoritative suite
+  inventory; do not add a global expected count.
 - `docs/ctest.md` or the relevant tool README when adding cases inside an
   existing CTest-backed script without changing the CTest suite count.
 - `.github/ci/regression/README.md` for PoC files or script-based gates.
@@ -461,10 +461,6 @@ For workflow edits, also inspect the changed `run:` blocks for the governance
 rules above.
 Run `.github/scripts/check-workflow-fixed-output-batching.py` for any workflow
 that enumerates inputs for coverage, report, archive, or checksum generation.
-For updates to `.github/scripts/iccdev-tool-coverage-baseline.sh`, run both the
-direct script invocation and `ctest -R '^iccdev\.tool-coverage$'` so CI wrapper
-behavior is covered.
-
 For CI packaging edits, run the nearest local install/uninstall repro and grep
 the captured logs for missing-file diagnostics. If the change touches CMake or
 C++ code, run `.github/scripts/run-codeql-local.sh --custom-only`; CodeQL is not

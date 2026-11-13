@@ -211,48 +211,57 @@ def test_latest_release_zip_requires_nlohmann_license(
         assert f"{invalid_archive} omits a nonempty nlohmann-json LICENSE.MIT" in result.stdout
 
 
-def test_apple_runtime_smoke_routes_to_pr_without_simulators() -> None:
+def test_apple_xcode_runtime_routes_to_pr_without_simulators() -> None:
     release = yaml.safe_load(
         (ROOT / ".github/workflows/ci-latest-release.yml").read_text(encoding="utf-8")
     )
     mobile = yaml.safe_load(
         (ROOT / ".github/workflows/ci-apple-mobile-core.yml").read_text(encoding="utf-8")
     )
-    platform = yaml.safe_load(
-        (ROOT / ".github/workflows/ci-apple-platform-smoke.yml").read_text(encoding="utf-8")
-    )
     pr = yaml.safe_load(
         (ROOT / ".github/workflows/ci-pr-action.yml").read_text(encoding="utf-8")
     )
 
     assert release["jobs"]["apple-mobile-core"]["with"]["release-artifact"] is True
+    mobile_inputs = mobile["on"]["workflow_call"]["inputs"]
+    assert set(mobile_inputs) == {"release-artifact"}
     mobile_steps = {
         step["name"]: step
         for step in mobile["jobs"]["build"]["steps"]
         if "name" in step
     }
-    for name in (
-        "Exercise Apple simulator hosts",
-        "Exercise Xcode CTest runtime layouts",
-        "Summarize native Apple smoke results",
-    ):
-        assert mobile_steps[name]["if"] == "${{ !inputs.release-artifact }}"
+    assert "Upload Apple mobile core libraries" in mobile_steps
+    assert mobile_steps["Exercise Xcode CTest runtime layouts"]["if"] == (
+        "${{ !inputs.release-artifact }}"
+    )
+    assert "Exercise Apple simulator hosts" not in mobile_steps
+    assert all(
+        "iccdev-apple-simulator-smoke.sh" not in step.get("run", "")
+        for step in mobile["jobs"]["build"]["steps"]
+    )
 
     pr_job = pr["jobs"]["apple-xcode-ctest"]
-    assert pr_job["uses"] == "./.github/workflows/ci-apple-platform-smoke.yml"
-    assert pr_job["with"]["scope"] == "xcode"
-    assert pr_job["with"]["target-sha"] == "${{ needs.detect-src.outputs.target_sha }}"
-    assert pr_job["with"]["base-sha"] == "${{ needs.detect-src.outputs.base_sha }}"
+    assert pr_job["runs-on"] == "macos-latest"
+    assert pr_job["timeout-minutes"] == 15
+    pr_steps = {step["name"]: step for step in pr_job["steps"]}
+    checkout = pr_steps["Checkout test sources"]
+    assert checkout["with"]["ref"] == "${{ needs.detect-src.outputs.target_sha }}"
+    assert checkout["with"]["persist-credentials"] is False
+    xcode = pr_steps["Exercise Xcode CTest runtime layouts"]
+    assert "iccdev-xcode-ctest-smoke.sh" in xcode["run"]
+    assert all(
+        not step.get("uses", "").startswith("actions/upload-artifact@")
+        for step in pr_job["steps"]
+    )
     assert "apple_xcode_changed" in pr["jobs"]["detect-src"]["outputs"]
     assert "apple_xcode_changed" in pr_job["if"]
     detector = next(
         step for step in pr["jobs"]["detect-src"]["steps"]
         if step.get("name") == "Check for source changes"
     )["run"]
-    route = re.search(r"if has_changed_file '([^']*ci-apple-platform-smoke[^']*)'; then", detector)
+    route = re.search(r"if has_changed_file '([^']*ci-apple-mobile-core[^']*)'; then", detector)
     assert route is not None
     for path in (
-        ".github/workflows/ci-apple-platform-smoke.yml",
         ".github/workflows/ci-apple-mobile-core.yml",
         ".github/workflows/ci-pr-action.yml",
         ".github/scripts/iccdev-xcode-ctest-smoke.sh",
@@ -261,20 +270,4 @@ def test_apple_runtime_smoke_routes_to_pr_without_simulators() -> None:
     for path in (".github/scripts/iccdev-apple-simulator-smoke.sh", "docs/build.md"):
         assert not re.search(route.group(1), path)
     assert "apple-xcode-ctest" in pr["jobs"]["finalize"]["needs"]
-
-    assert {"scope", "target-sha", "base-sha"} <= set(platform["on"]["workflow_call"]["inputs"])
-    platform_steps = {
-        step["name"]: step
-        for step in platform["jobs"]["smoke"]["steps"]
-        if "name" in step
-    }
-    simulator = platform_steps["Exercise Apple simulator hosts"]
-    xcode = platform_steps["Exercise Xcode CTest runtime layouts"]
-    examples = platform_steps["Exercise manual iOS examples with sanitizers"]
-    examples_summary = platform_steps["Summarize iOS example results"]
-    assert "xcode" not in simulator["if"]
-    assert "xcode" not in examples["if"]
-    assert "xcode" not in examples_summary["if"]
-    assert "iccdev-apple-simulator-smoke.sh" not in xcode["run"]
-    assert "iccdev-xcode-ctest-smoke.sh" in xcode["run"]
-    assert "'xcode'" in xcode["if"]
+    assert not (ROOT / ".github/workflows/ci-apple-platform-smoke.yml").exists()

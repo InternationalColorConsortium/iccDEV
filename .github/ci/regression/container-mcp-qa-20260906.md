@@ -163,11 +163,12 @@ objects are in the local JSON evidence, not duplicated as test constants.
 Inspected dispatch semantics before publication: `ci-docker.yml` and
 `ci-mcp-server.yml` accept no dispatch inputs; `ci-preflight-safety.yml` is
 directly dispatchable; `ci-pr-action.yml` supports `ci_scope=governance` without
-an open PR and reuses risk analysis at the exact target SHA. Its `fast-lane`
-mode needs an open same-repository PR and is not selected. `ci-docker-pr.yml`
-is reusable only. Do not create a PR, request review, or dispatch duplicate
-risk analysis. Check existing runs after normal SSH push, then dispatch each
-selected workflow once with `--ref ci-qa-pr-docker-testing`. The caller handoff
+an open PR, while `ci-pr-risk-security-analysis.yml` owns the separate direct
+risk audit. Its `fast-lane` mode needs an open same-repository PR and is not
+selected. `ci-docker-pr.yml` is reusable only. Do not create a PR, request
+review, or dispatch duplicate risk analysis. Check existing runs after normal
+SSH push, then dispatch each selected workflow once with
+`--ref ci-qa-pr-docker-testing`. The caller handoff
 records actual commit/push/run IDs and statuses; this pre-push report does not
 claim future hosted success.
 

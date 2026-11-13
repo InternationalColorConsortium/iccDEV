@@ -150,7 +150,7 @@ See `ports/iccdev/portfile.cmake` for the full build configuration.
 CC=clang-22 CXX=clang++-22 cmake -S Build/Cmake -B out/coverage \
   -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \
   -DENABLE_COVERAGE=ON
-cmake --build out/coverage --parallel 4
+cmake --build out/coverage --parallel
 mkdir -p out/coverage-profraw
 LLVM_PROFILE_FILE="$PWD/out/coverage-profraw/ctest-%4m.profraw" \
   ctest --test-dir out/coverage -R '^iccdev\.hybrid-pipeline$' \

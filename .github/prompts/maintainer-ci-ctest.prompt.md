@@ -74,8 +74,8 @@ Choose the smallest gate that proves the behavior:
   unvalidated source pushes. Manual security audits check all Bash prologues.
 - MATLAB compatibility: `ci-matlab` is manual-dispatch only because its
   multi-platform MEX and container lanes consume scarce runner capacity.
-- Risk analysis: `ci-risk-analysis-gate` is manual-dispatch only; use it for
-  the explicit final Linux and Windows workflow-security audit.
+- Risk analysis: dispatch `ci-pr-risk-security-analysis.yml` directly for the
+  explicit final Linux and Windows workflow-security audit.
 - Cache policy: use only exact-key, checksum-addressed immutable download
   archives. PR jobs restore only; trusted events may save after verification.
   Keep compiler output, CTest state, artifacts, releases, and publish jobs
@@ -153,16 +153,6 @@ ctest --test-dir build -N --no-tests=error
 ctest --test-dir build --output-on-failure --no-tests=error
 ```
 
-For `.github/scripts/iccdev-tool-coverage-baseline.sh` updates:
-
-```bash
-ICCDEV_TOOLS_DIR=$PWD/build/Tools \
-ICCDEV_TESTING_DIR=$PWD/Testing \
-ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
-  .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
-ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
-```
-
 For `Dockerfile*` updates:
 
 ```bash
@@ -236,7 +226,7 @@ Report:
 
 - Maintainer-owned area changed:
 - Files changed:
-- Expected counts:
+- Scoped fixture or generated-profile counts:
 - Local validation:
 - GitHub runs:
 - Artifacts:

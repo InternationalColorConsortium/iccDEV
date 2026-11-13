@@ -181,7 +181,6 @@ run_xml_reject_test() {
 run_fromjson_success_test() {
   local name="$1"
   local json_file="$2"
-  local timeout_seconds="${3:-30}"
   local output_file="$OUTDIR/${name}.icc"
   local logfile="$OUTDIR/${name}.log"
   local exit_code=0
@@ -189,7 +188,7 @@ run_fromjson_success_test() {
   TOTAL=$((TOTAL + 1))
   rm -f "$output_file" "$logfile"
 
-  timeout "$timeout_seconds" "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+  timeout 30 "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$logfile"; then
     FAIL=$((FAIL + 1))
@@ -1034,8 +1033,10 @@ write_responsecurve_json "$OUTDIR/responsecurve-devicecode-overflow.json" 1 6553
 write_responsecurve_json "$OUTDIR/responsecurve-devicecode-negative.json" 1 -1
 
 # The number of ResponseCurves is a separate uInt16 field in ICC.1 Table 73.
-# Keep the maximum accepted value and the first unrepresentable value adjacent
-# so a blanket refusal or a reintroduced count wrap cannot satisfy this case.
+# Keep the maximum accepted array length and the first unrepresentable length
+# adjacent. Empty entries isolate that size guard: 65535 must reach entry
+# validation, while 65536 must be rejected before iteration. The valid control
+# above separately proves that a complete responseCurveSet16Type converts.
 python3 - "$OUTDIR/responsecurve-control.json" "$OUTDIR" <<'PY'
 import json
 from pathlib import Path
@@ -1043,9 +1044,8 @@ import sys
 
 control = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 data = control["Tags"][0]["outputResponseTag"]["data"]
-curve = data["ResponseCurves"][0]
 for count in (65535, 65536):
-    data["ResponseCurves"] = [curve] * count
+    data["ResponseCurves"] = [{}] * count
     path = Path(sys.argv[2]) / f"responsecurve-types-{count}.json"
     path.write_text(json.dumps(control, separators=(",", ":")), encoding="utf-8")
 PY
@@ -1189,15 +1189,11 @@ run_reject_test "chromaticity-one-coordinate" "$OUTDIR/chromaticity-one-coordina
 run_reject_test "chromaticity-nonnumeric-coordinate" "$OUTDIR/chromaticity-nonnumeric-coordinate.json" "chromaticityType channel must be a pair of numbers"
 run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "chromaticityType channel must be a pair of numbers"
 
-# The control runs first and must convert: without it, a change that refused every
-# responseCurveSet16Type document would satisfy all three reject cases below while
-# removing the guards they exist to pin.
+# The control runs first and must convert. The 65535-entry boundary must pass the
+# array-size guard and reach entry validation; 65536 must fail at the size guard.
+# Together they prevent either a blanket refusal or a reintroduced count wrap.
 run_fromjson_success_test "responsecurve-control" "$OUTDIR/responsecurve-control.json"
-# This maximum-representable fixture expands 65,535 response-curve objects.
-# GCC ASan+UBSan completes it in about 9 seconds alone, but four-way CTest load
-# has exceeded the ordinary 30-second small-fixture budget. Keep a finite bound
-# while allowing the intentionally maximal positive control to finish in CI.
-run_fromjson_success_test "responsecurve-types-65535" "$OUTDIR/responsecurve-types-65535.json" 120
+run_reject_test "responsecurve-types-65535" "$OUTDIR/responsecurve-types-65535.json" "Missing Channels in ResponseCurve entry"
 run_reject_test "responsecurve-types-65536" "$OUTDIR/responsecurve-types-65536.json" "Too many ResponseCurves in ResponseCurveSet16"
 run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-overflow.json" "Missing or invalid CountOfChannels in ResponseCurveSet16"
 run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"

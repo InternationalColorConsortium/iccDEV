@@ -216,17 +216,17 @@ reports this as a non-failing gap while exercising the library-backed
 capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
-builds every matching minimal and extended mobile-core preset, and runs the
-simulator and Xcode CTest smoke gates below on standalone manual dispatches.
+builds every matching minimal and extended mobile-core preset, and validates
+the resulting archive and bounded Xcode CTest runtime layouts on standalone
+manual dispatches.
 Manual runs upload the static libraries, generated version headers, and build manifest as
 `iccdev-apple-mobile-core`. The workflow also remains callable by trusted
 workflow orchestration without uploading PR-controlled artifacts. Normal PR CI
-calls `Apple platform smoke` for the bounded Xcode CTest runtime-layout gate;
-it does not run the long simulator gate. Dispatch
-`.github/workflows/ci-apple-mobile-core.yml` or
-`.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
-simulator gate before review. The platform workflow also offers a focused
-`xcode` scope for a standalone runtime-layout check.
+runs the bounded Xcode CTest runtime-layout gate directly in the central PR
+workflow. Hosted workflows do not run the long simulator matrix; use the
+explicit local simulator commands below when that evidence is needed. Dispatch
+`.github/workflows/ci-apple-mobile-core.yml` for a standalone archive build and
+Xcode runtime-layout check.
 
 The manual `ci-latest-release` workflow builds the Apple mobile-core artifact
 without rerunning simulator or Xcode smoke tests. For an approved release, it
@@ -398,9 +398,8 @@ on one disposable iOS simulator:
 .github/scripts/iccdev-ios-example-smoke.sh sanitizers
 ```
 
-The manually dispatched `Apple platform smoke` workflow exposes `core`,
-`examples`, and `all` scopes so example-only QA does not repeat the tvOS,
-watchOS, and Xcode CTest gates.
+The combined example helper is an explicit local gate. Hosted workflows do not
+run it automatically or repeat the tvOS and watchOS simulator matrix.
 
 Each helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
 each app-specific CMake bundle variable, uses Release by default, and launches

@@ -13,12 +13,14 @@ Use `docs/code-coverage.md` and
 3. Treat any split command that repeatedly writes one fixed report as a defect.
    Audit all workflows and distinguish safe streamed output.
 4. Require zero mismatched function records and a matched owner for every
-   profraw signature.
-5. Separate required gates from expected capability exits and preserve partial
+   profraw signature admitted to a report.
+5. Keep the broad tool/profile and full-CTest core-library denominators
+   separate. Record discovery evidence for any claim about the complete suite.
+6. Separate required gates from expected capability exits and preserve partial
    failure artifacts.
-6. Compare build configurations only with a fixed job count, interleaved
+7. Compare build configurations only with a fixed job count, interleaved
    repetitions, environment metadata, and full distribution statistics.
-7. Do not claim hosted-CI or performance-regression proof from local coverage
+8. Do not claim hosted-CI or performance-regression proof from local coverage
    measurements.
 
 When changes are authorized, update workflow policy, preflight canaries,

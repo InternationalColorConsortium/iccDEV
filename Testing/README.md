@@ -82,7 +82,10 @@ The final section performs an optional JSON round trip and invokes
 `iccProfileVisualize`. Missing JSON tools are a skip unless
 `ICCDEV_REQUIRE_JSON_ROUNDTRIP=1` in the shell lane. A failed command produces
 a failing script status: the shell stops at the failed command, while the batch
-lane records failures and completes the remaining independent cases.
+lane records failures and completes the remaining independent cases. The shell
+lane copies the visualization input into a temporary directory and removes its
+generated TIFF/PDF artifacts before returning, so CTest does not dirty the
+source `Testing/` tree.
 
 ### `RunJsonTests.sh`
 
