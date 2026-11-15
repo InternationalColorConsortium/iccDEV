@@ -868,7 +868,21 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
 
   // External file
   if (j.contains("file") && j["file"].is_string()) {
+    if (!g_IccJsonAllowFileImports) {
+      parseStr += "TintArrayElement file imports are disabled\n";
+      delete pTag;
+      return false;
+    }
     std::string filename = j["file"].get<std::string>();
+    // Same rule as the CLUT and calculator import loaders: even when imports
+    // are allowed, only a bare name in the working directory is read.
+    if (filename.find('/')  != std::string::npos ||
+        filename.find('\\') != std::string::npos ||
+        filename.find("..") != std::string::npos) {
+      parseStr += "Unsafe TintArray file path '" + icSanitizeConsoleText(filename) + "'\n";
+      delete pTag;
+      return false;
+    }
     std::string format   = "text";
     jGetString(j, "format", format);
 

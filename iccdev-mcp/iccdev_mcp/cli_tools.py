@@ -31,6 +31,16 @@ _MAX_OUTPUT = 10 * 1024 * 1024
 _DEFAULT_TIMEOUT = 60
 _CONFIGS = ("Release", "Debug", "RelWithDebInfo", "MinSizeRel")
 _LIB_DIRS = ("IccProfLib", "IccXML", "IccJSON", "IccConnect")
+_RAW_CLI_OPT_IN = "ICCDEV_MCP_ALLOW_RAW_CLI_ARGS"
+
+
+def _require_trusted_raw_cli_args() -> None:
+    """Reject unrestricted native argv unless the service owner opts in."""
+    if os.environ.get(_RAW_CLI_OPT_IN) != "1":
+        raise ValueError(
+            "Raw CLI arguments are disabled; use the structured tool or set "
+            f"{_RAW_CLI_OPT_IN}=1 for trusted callers"
+        )
 
 # All known CLI tool binary names
 TOOL_BINARIES = {
@@ -265,7 +275,9 @@ def run_from_xml(
         fd, output_path = tempfile.mkstemp(suffix=".icc")
         os.close(fd)
         try:
-            result = _run_tool("iccFromXml", [input_path, output_path])
+            result = _run_tool(
+                "iccFromXml", [input_path, output_path, "-no-file-includes"]
+            )
             if result["returncode"] == 0 and Path(output_path).exists():
                 import base64
                 result["icc_base64"] = base64.b64encode(
@@ -275,7 +287,9 @@ def run_from_xml(
         finally:
             Path(output_path).unlink(missing_ok=True)
     else:
-        return _run_tool("iccFromXml", [input_path, output_path])
+        return _run_tool(
+            "iccFromXml", [input_path, output_path, "-no-file-includes"]
+        )
 
 
 def run_to_json(input_path: str, output_path: Optional[str] = None) -> dict:
@@ -304,7 +318,9 @@ def run_from_json(
         fd, output_path = tempfile.mkstemp(suffix=".icc")
         os.close(fd)
         try:
-            result = _run_tool("iccFromJson", [input_path, output_path])
+            result = _run_tool(
+                "iccFromJson", [input_path, output_path, "-no-file-imports"]
+            )
             if result["returncode"] == 0 and Path(output_path).exists():
                 import base64
                 result["icc_base64"] = base64.b64encode(
@@ -314,7 +330,9 @@ def run_from_json(
         finally:
             Path(output_path).unlink(missing_ok=True)
     else:
-        return _run_tool("iccFromJson", [input_path, output_path])
+        return _run_tool(
+            "iccFromJson", [input_path, output_path, "-no-file-imports"]
+        )
 
 
 def run_tiff_dump(
@@ -404,11 +422,13 @@ def run_apply_profiles(
 
 def run_apply_profiles_args(config_args: list[str]) -> dict:
     """Run iccApplyProfiles with caller-supplied CLI arguments."""
+    _require_trusted_raw_cli_args()
     return _run_tool("iccApplyProfiles", config_args)
 
 
 def run_apply_named_cmm(config_args: list[str]) -> dict:
     """Run iccApplyNamedCmm with the given arguments."""
+    _require_trusted_raw_cli_args()
     return _run_tool("iccApplyNamedCmm", config_args)
 
 
@@ -508,6 +528,7 @@ def run_spec_sep_to_tiff(
 
 def run_apply_search(config_args: list[str]) -> dict:
     """Run iccApplySearch with the given arguments."""
+    _require_trusted_raw_cli_args()
     return _run_tool("iccApplySearch", config_args)
 
 

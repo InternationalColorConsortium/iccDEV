@@ -321,11 +321,33 @@ For example, combine the tracked spectral channels using:
 }
 ```
 
-`apply_profiles` already accepts `config_args: ["-cfg", "config.json"]`;
+`apply_profiles` accepts structured inputs by default. Its raw
+`config_args: ["-cfg", "config.json"]` mode, and the raw `apply_named_cmm`
+and `apply_search` routes, require the service owner to set
+`ICCDEV_MCP_ALLOW_RAW_CLI_ARGS=1`. Native arguments and configuration files
+can name arbitrary input and output paths, so enable this only for trusted
+clients with an appropriately restricted service account. In trusted mode,
 use the native `imageFiles.dstTileWidth`, `dstTileHeight`, and `dstBigTiff`
 configuration fields for tiled/BigTIFF destinations. Python's Cython and
 MATLAB's MEX APIs operate on profile/CMM sample arrays, not TIFF containers;
 these TIFF storage options do not change their in-process ABI.
+
+XML and JSON conversion through MCP or REST does not follow file includes or
+imports inside the submitted document. Direct `iccFromXml` accepts local
+sidecar files unless `-no-file-includes` is passed. Direct `iccFromJson`
+requires `-allow-file-imports` to read local sidecars; applications can pass
+`-no-file-imports` explicitly to enforce the default policy.
+The public Python `icc_from_xml` and `icc_from_json` helpers also disable
+sidecar reads unless their trusted opt-in keyword is set; MATLAB
+`iccdev.from_json` uses the same default.
+Install matching native tools when upgrading the Python services; older
+`iccFromXml` and `iccFromJson` binaries reject these policy flags.
+
+REST uploads have a 20 MiB per-file limit, a 100 MiB aggregate store limit,
+a 256-file store limit, and a 24-hour retention period. Expired uploads are
+removed on the next upload. The store is a private `iccdev-mcp-uploads`
+directory under system temp on Unix and the service account's Local AppData
+on Windows; clients should use returned paths promptly.
 
 ### CLI-Only Tools (Not MCP-Exposed)
 
@@ -348,7 +370,8 @@ returns the stable MCP inventory and separately lists REST-only utility
 routes (`/api/tools`, `/api/files`, and `/api/upload`). Core CLI-backed forms
 expose documented options for `iccDumpProfile` validation/verbosity/tag
 selection, `iccPawgReport` profile assessment, `iccRoundTrip` intent/MPE
-selection, and `iccApplyProfiles` structured or raw `-cfg` argument mode.
+selection, and `iccApplyProfiles` structured or trusted raw `-cfg` argument
+mode.
 
 ## Environment Variables
 
@@ -359,6 +382,7 @@ selection, and `iccApplyProfiles` structured or raw `-cfg` argument mode.
 | `ICCDEV_VALIDATION_LIBRARY` | Explicit shared IccProfLib path; overrides `ICCDEV_BUILD_DIR` |
 | `ICCDEV_TESTING_DIR` | Path to iccDEV Testing/ profiles directory |
 | `ICCDEV_PROFILE_DIRS` | Additional profile search directories (colon-separated) |
+| `ICCDEV_MCP_ALLOW_RAW_CLI_ARGS` | Set to `1` only for trusted clients to enable unrestricted native apply arguments |
 
 
 ## Development

@@ -191,7 +191,8 @@ profile_bytes = iccdev.from_json(json_text);
 text as UTF-8 JSON content and returns a `uint8` column vector. Both functions
 run the native tools through a Java process without a shell, preserve the
 native parser diagnostics, and do not produce an ICC result after a parse
-failure.
+failure. File imports are disabled by default; pass
+`'AllowFileImports', true` only for trusted local JSON with sidecars.
 
 `test_json_bindings` exercises checked-in ICC.1/v4 and ICC.2/v5 profiles. It
 checks the specification-defined profile size, `acsp` signature, BCD version,

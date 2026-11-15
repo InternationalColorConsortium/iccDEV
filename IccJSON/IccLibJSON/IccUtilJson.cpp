@@ -51,9 +51,13 @@
 #include <type_traits>
 
 // Library-wide flag: off by default (library/service/WASM contexts).
-// The iccFromJson CLI tool sets this to true after argument parsing so
-// file-based `"imports"` and `"file"` directives work in that context.
+// The iccFromJson CLI sets this to true only for -allow-file-imports.
 bool g_IccJsonAllowFileImports = false;
+
+void IccJsonSetAllowFileImports(bool allow)
+{
+  g_IccJsonAllowFileImports = allow;
+}
 
 // Safely narrow size_t to icUInt32Number; returns 0 on truncation
 static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
