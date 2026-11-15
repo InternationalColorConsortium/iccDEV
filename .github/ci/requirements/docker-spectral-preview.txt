@@ -2,6 +2,6 @@
 # Build Pillow from source against the patched system Brotli library.
 # Build imagecodecs with IMAGECODECS_ONLY=imcd for LZW without Brotli.
 numpy==2.5.4
-tifffile==2026.11.8
+tifffile==2026.11.12
 pillow==13.0.0
-imagecodecs==2026.10.10
+imagecodecs==2026.11.11
