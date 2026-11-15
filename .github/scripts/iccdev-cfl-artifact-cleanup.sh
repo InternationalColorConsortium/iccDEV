@@ -55,21 +55,28 @@ plan_artifacts()
   local artifact_file="$1"
   local artifact_id artifact_name artifact_size archive_path created_at row target
   local keep_artifact_id
+  local row_count row_index
   local -a rows
 
   for target in "${targets[@]}"; do
     artifact_name="cifuzz-corpus-$target"
-    mapfile -t rows < <(
+    rows=()
+    row_count=0
+    while IFS= read -r row; do
+      rows[row_count]="$row"
+      row_count=$((row_count + 1))
+    done < <(
       awk -F '\t' -v name="$artifact_name" '$1 == name' "$artifact_file" |
         sort -t $'\t' -k3,3r -k2,2nr
     )
-    if [ "${#rows[@]}" -eq 0 ]; then
+    if [ "$row_count" -eq 0 ]; then
       echo "[FAIL] Missing current-run corpus artifact: $artifact_name" >&2
       return 1
     fi
 
     keep_artifact_id=""
-    for row in "${rows[@]}"; do
+    for ((row_index = 0; row_index < row_count; row_index++)); do
+      row="${rows[$row_index]}"
       IFS=$'\t' read -r _ artifact_id created_at artifact_size archive_path <<< "$row"
       case "$artifact_size" in
         ''|*[!0-9]*)
@@ -86,7 +93,8 @@ plan_artifacts()
       return 1
     fi
 
-    for row in "${rows[@]}"; do
+    for ((row_index = 0; row_index < row_count; row_index++)); do
+      row="${rows[$row_index]}"
       IFS=$'\t' read -r _ artifact_id created_at artifact_size archive_path <<< "$row"
       if [ "$artifact_id" = "$keep_artifact_id" ]; then
         printf 'KEEP\t%s\t%s\t%s\n' \

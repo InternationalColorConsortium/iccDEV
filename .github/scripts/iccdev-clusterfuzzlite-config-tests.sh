@@ -26,6 +26,25 @@ patch_mode_file="$repo_root/.clusterfuzzlite/known-bug-patch-mode"
 target_group_file="$repo_root/.clusterfuzzlite/target-group"
 patch_dir="$repo_root/.github/ci/fuzz-patches/cfl"
 patch_readme="$patch_dir/README.md"
+
+decode_base64_file() {
+  if base64 --decode /dev/null >/dev/null 2>&1; then
+    base64 --decode "$1"
+  else
+    base64 -D -i "$1"
+  fi
+}
+
+sha256_stream() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | cut -d' ' -f1
+  else
+    echo "Neither sha256sum nor shasum is available" >&2
+    return 1
+  fi
+}
 patch_test="$repo_root/.github/scripts/iccdev-fuzz-patch-check-tests.sh"
 target_test="$repo_root/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
 artifact_cleanup="$repo_root/.github/scripts/iccdev-cfl-artifact-cleanup.sh"
@@ -252,7 +271,7 @@ grep -Fq 'remote.origin.promisor true' "$msan_builder"
 grep -Fq 'remote.origin.partialCloneFilter blob:none' "$msan_builder"
 test "$(grep -c 'configure_partial_clone "\$.*source_dir"' "$msan_builder")" -eq 2
 test "$(grep -c -- '--filter=blob:none' "$msan_builder")" -eq 2
-issue_2687_sha="$(base64 --decode "$issue_2687_fixture" | sha256sum | cut -d' ' -f1)"
+issue_2687_sha="$(decode_base64_file "$issue_2687_fixture" | sha256_stream)"
 test "$issue_2687_sha" = \
   'bb9c4ad53f9269920947bac185a634da2971a94b17da6cff117dd7ad45bcfe85'
 # shellcheck disable=SC2016 # The adapter must retain this literal template.
