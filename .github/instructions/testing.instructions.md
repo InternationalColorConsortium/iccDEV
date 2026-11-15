@@ -14,8 +14,32 @@ applyTo: "Testing/**"
 | `Testing/RunTests.bat` | Windows equivalent | tools on PATH |
 
 `CreateAllProfiles.sh` and `RunTests.sh` auto-source `Testing/path.sh` when it
-is present, which sets `PATH` and the platform library path to the build output
-directory.
+is present. Source checkouts do not generate that file during an ordinary
+CMake build; release staging may provide it. For an out-of-tree developer
+build, set `PATH` explicitly and verify the selected executable before changing
+into `Testing`.
+
+For Linux sanitizer builds, run the applicable build first, then use an
+absolute build directory. This TSan example remains valid in every nested
+Testing directory:
+
+```bash
+ICCDEV_TSAN_BUILD="$(realpath out/linux-clang-tsan)"
+test -x "$ICCDEV_TSAN_BUILD/Tools/IccApplyProfiles/iccApplyProfiles"
+ICCDEV_TSAN_TOOL_PATH="$(find "$ICCDEV_TSAN_BUILD/Tools" -mindepth 1 -maxdepth 1 -type d -print | paste -sd: -)"
+test -n "$ICCDEV_TSAN_TOOL_PATH"
+export PATH="$ICCDEV_TSAN_TOOL_PATH:$PATH"
+cd Testing
+test "$(readlink -f "$(command -v iccApplyProfiles)")" = "$ICCDEV_TSAN_BUILD/Tools/IccApplyProfiles/iccApplyProfiles"
+```
+
+Use `out/linux-clang-asan` plus `iccDumpProfile`, or
+`out/linux-clang-msan` plus `iccFromXml`, for the corresponding lane. Do not
+construct a tool path from the current Testing directory or an unmatched
+`Tools/*` glob: those forms can silently select no executable or a different
+checkout. Run every test command separately, retain its exit status and full
+log, and scan that log for the sanitizer signature; some legacy wrappers can
+return 0 after a child diagnostic.
 
 ## CTest Gate
 

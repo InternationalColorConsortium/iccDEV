@@ -271,8 +271,14 @@
       "name": "linux-clang-asan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with AddressSanitizer",
+      "description": "Standalone AddressSanitizer Debug build. Do not combine with TSan, MSan, LSan, or Valgrind.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_ASAN": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
@@ -725,6 +731,10 @@
       "name": "macos-xcode-telemetry",
       "configurePreset": "macos-xcode-telemetry",
       "configuration": "Release"
+    },
+    {
+      "name": "linux-clang-asan",
+      "configurePreset": "linux-clang-asan"
     },
     {
       "name": "linux-clang-tsan",
