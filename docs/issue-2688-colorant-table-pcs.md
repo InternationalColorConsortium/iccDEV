@@ -23,7 +23,7 @@ git checkout 805b316c1bf250232fbfea19f17a35aa7f0de43c
 git branch&&echo ---&&git log --oneline -1
 ../.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/msan-runtime" --jobs 32
 export ICCDEV_MSAN_LIBCXX_DIR="$PWD/msan-runtime"
-cmake --preset linux-clang-msan -S Cmake -B .
+(cd Cmake && cmake --preset linux-clang-msan -B ..)
 cmake --build . -j32 --target iccFromXml iccDumpProfile
 ./Tools/IccFromXml/iccFromXml issue-2688.xml issue-2688.icc -noid
 export MSAN_OPTIONS='halt_on_error=1:exit_code=86:origin_history_size=7'

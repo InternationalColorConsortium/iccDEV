@@ -17,9 +17,9 @@ directory. These are independent copy/paste one-liners from the repository
 root:
 
 ```bash
-(cd Build/Cmake && cmake --preset linux-clang-asan && cmake --build --preset linux-clang-asan --parallel "$(nproc)")
-(cd Build/Cmake && cmake --preset linux-clang-tsan && cmake --build --preset linux-clang-tsan --parallel "$(nproc)")
-.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan && cmake --build --preset linux-clang-msan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
 ```
 
 The direct CMake equivalents are:

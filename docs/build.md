@@ -161,7 +161,7 @@ can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
 is used with an executable that was linked without an `LC_UUID` load command.
 
 ```bash
-cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc)
 cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
 cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
 
@@ -612,11 +612,12 @@ presets turn on tests, tools, zlib-backed compressed tag support
 (`ICC_USE_ZLIB=ON`), and QA evidence hooks for the common local toolchains:
 
 ```bash
-cmake --preset linux-clang-qa-flags -S Build/Cmake -B out/linux-clang-qa-flags
+(cd Build/Cmake && cmake --preset linux-clang-qa-flags -B ../../out/linux-clang-qa-flags)
 cmake --build out/linux-clang-qa-flags --parallel "$(nproc)"
 ctest --test-dir out/linux-clang-qa-flags -R "^iccdev\.qa-target-flags$" --output-on-failure --no-tests=error
 
-cmake --preset linux-clang-qa-sanitizers -S Build/Cmake -B out/linux-clang-qa-sanitizers
+(cd Build/Cmake && cmake --preset linux-clang-qa-sanitizers)
+cmake --build out/linux-clang-qa-sanitizers --parallel "$(nproc)"
 ```
 
 QA builds also enable `ICCDEV_ENABLE_STRICT_WARNINGS` by default so CMake, not
@@ -1023,17 +1024,19 @@ for environment compiler selection. `CMakePresets.json` is stored in
 not relocate preset discovery and fails before configuration.
 
 The following preset builds are independent copy/paste one-liners. Run them
-from the repository root:
+from the repository root. They configure by preset and build the explicit
+binary directory, which is valid even when consuming an older tree without a
+same-named build preset:
 
 ```bash
 # ASan only
-(cd Build/Cmake && cmake --preset linux-clang-asan && cmake --build --preset linux-clang-asan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
 
 # TSan only
-(cd Build/Cmake && cmake --preset linux-clang-tsan && cmake --build --preset linux-clang-tsan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
 
 # MSan with pinned instrumented libc++, libc++abi, and libxml2
-.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan && cmake --build --preset linux-clang-msan --parallel "$(nproc)")
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
 ```
 
 Verify the expected runtime before using the resulting logs as sanitizer
@@ -1092,11 +1095,13 @@ Other preset equivalents are available for the same modes. Run every preset
 from `Build/Cmake`, where `CMakePresets.json` resides:
 
 ```bash
-(cd Build/Cmake && cmake --preset linux-clang-valgrind && cmake --build --preset linux-clang-valgrind --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-sanitizers) && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-ubsan-int-float) && cmake --build out/linux-clang-ubsan-int-float --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-valgrind) && cmake --build out/linux-clang-valgrind --parallel "$(nproc)"
 (cd Build/Cmake && cmake --preset linux-clang-coverage)
 (cd Build/Cmake && cmake --preset linux-clang-profiling)
-(cd Build/Cmake && cmake --preset macos-clang-sanitizers)
-(cd Build/Cmake && cmake --preset macos-clang-guard-malloc)
+(cd Build/Cmake && cmake --preset macos-clang-sanitizers) && cmake --build out/macos-clang-sanitizers --parallel "$(sysctl -n hw.ncpu)"
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc) && cmake --build out/macos-clang-guard-malloc --parallel "$(sysctl -n hw.ncpu)"
 ```
 
 Bootstrap `out/msan-runtime` with `iccdev-build-msan-libcxx.sh` before using
@@ -1113,6 +1118,15 @@ libc++ tier explicitly, pass
 non-libc++ toolchains reject non-`none` values at configure time. Use only
 `_LIBCPP_HARDENING_MODE`; current Xcode libc++ has removed
 `_LIBCPP_ENABLE_ASSERTIONS`.
+
+The full macOS `check` target includes the spectral TIFF preview regression.
+Bootstrap its pinned Python environment once, then name that interpreter when
+running the sanitizer suite:
+
+```bash
+python3 -m venv out/spectral-preview-venv && out/spectral-preview-venv/bin/python -m pip install --upgrade pip --quiet && IMAGECODECS_ONLY=imcd out/spectral-preview-venv/bin/python -m pip install --no-binary=pillow,imagecodecs --no-cache-dir -r .github/ci/requirements/docker-spectral-preview.txt
+ICCDEV_SPECTRAL_PREVIEW_PYTHON="$PWD/out/spectral-preview-venv/bin/python" ASAN_OPTIONS='halt_on_error=1:abort_on_error=1:detect_leaks=0' UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' cmake --build out/macos-clang-sanitizers --target check --parallel "$(sysctl -n hw.ncpu)"
+```
 
 ## Maintainer Dockerfiles
 

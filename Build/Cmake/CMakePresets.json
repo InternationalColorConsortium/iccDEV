@@ -262,8 +262,14 @@
       "name": "linux-gcc-asan",
       "inherits": "linux-gcc",
       "displayName": "Linux GCC with AddressSanitizer",
+      "description": "Standalone AddressSanitizer Debug build with GCC.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_ASAN": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
@@ -286,8 +292,14 @@
       "name": "linux-clang-sanitizers",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with ASan, UBSan, IntSan, and float sanitizers",
+      "description": "Combined sanitizer Debug build. Keep TSan, MSan, LSan, Valgrind, coverage, and profiling in separate trees.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_SANITIZERS": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
@@ -300,10 +312,16 @@
       "name": "linux-clang-ubsan-int-float",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with UBSan, IntSan, and float sanitizers",
+      "description": "Undefined, integer, and float sanitizer Debug build without ASan.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_UBSAN": "ON",
         "ENABLE_INTEGER_SANITIZER": "ON",
         "ENABLE_FLOAT_SANITIZER": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
@@ -379,8 +397,14 @@
       "name": "linux-clang-ubsan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with UBSanitizer",
+      "description": "Standalone UndefinedBehaviorSanitizer Debug build without ASan or IntegerSanitizer.",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "cacheVariables": {
         "ENABLE_UBSAN": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
@@ -429,6 +453,7 @@
       "name": "macos-clang",
       "inherits": "default-base",
       "displayName": "macOS Clang",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -448,6 +473,9 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_TOOLS": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "ENABLE_MACOS_GUARD_MALLOC": "ON"
       }
     },
@@ -472,6 +500,9 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_TOOLS": "ON",
+        "ENABLE_TESTS": "ON",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_LTO": "OFF",
         "ENABLE_SANITIZERS": "ON",
         "ICCDEV_LIBCPP_HARDENING_MODE": "extensive"
       }
@@ -733,8 +764,28 @@
       "configuration": "Release"
     },
     {
+      "name": "linux-gcc-asan",
+      "configurePreset": "linux-gcc-asan"
+    },
+    {
       "name": "linux-clang-asan",
       "configurePreset": "linux-clang-asan"
+    },
+    {
+      "name": "linux-clang-sanitizers",
+      "configurePreset": "linux-clang-sanitizers"
+    },
+    {
+      "name": "linux-clang-qa-sanitizers",
+      "configurePreset": "linux-clang-qa-sanitizers"
+    },
+    {
+      "name": "linux-clang-ubsan-int-float",
+      "configurePreset": "linux-clang-ubsan-int-float"
+    },
+    {
+      "name": "linux-clang-ubsan",
+      "configurePreset": "linux-clang-ubsan"
     },
     {
       "name": "linux-clang-tsan",

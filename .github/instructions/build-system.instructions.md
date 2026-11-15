@@ -108,13 +108,13 @@ preset file.
 
 ```bash
 # ASan preset: configure and build
-(cd Build/Cmake && cmake --preset linux-clang-asan && cmake --build --preset linux-clang-asan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
 
 # TSan preset: configure and build
-(cd Build/Cmake && cmake --preset linux-clang-tsan && cmake --build --preset linux-clang-tsan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
 
 # MSan preset: bootstrap the pinned instrumented runtime, configure, and build
-.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan && cmake --build --preset linux-clang-msan --parallel "$(nproc)")
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
 ```
 
 The matching direct CMake one-liners are:
@@ -180,7 +180,7 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 Example:
 
 ```bash
-(cd Build/Cmake && cmake --preset linux-clang-asan && cmake --build --preset linux-clang-asan --parallel "$(nproc)")
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
 ```
 
 The `macos-clang-sanitizers` preset sets
@@ -208,7 +208,7 @@ that decision only with the interleaved
 On macOS, use GuardMalloc separately from sanitizer builds:
 
 ```bash
-cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc)
 cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
 cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
 DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib MallocScribble=1 MallocPreScribble=1 MallocGuardEdges=1 MallocStackLogging=1 out/macos-clang-guard-malloc/Tools/IccToXml/iccToXml input.icc output.xml
