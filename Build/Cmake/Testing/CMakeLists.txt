@@ -572,6 +572,57 @@ function(iccdev_add_iccconnect_config_parser_test)
   endif()
 endfunction()
 
+# #3066: CIccProfile::calc{Norm,Lum}IlluminantXYZ() left their output unwritten when
+# the viewing conditions had no illuminant data, and CIccCfgColorData::fromLegacy()
+# read past a short first line and an unwritten sscanf() buffer (MemorySanitizer).
+function(iccdev_add_illuminant_fallback_legacy_header_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccIlluminantFallbackLegacyHeaderTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/illuminant-fallback-legacy-header.cpp"
+  )
+  target_compile_features(iccIlluminantFallbackLegacyHeaderTest PRIVATE cxx_std_17)
+  target_link_libraries(iccIlluminantFallbackLegacyHeaderTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+
+  add_dependencies(check iccIlluminantFallbackLegacyHeaderTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.illuminant-fallback-legacy-header
+      COMMAND "$<TARGET_FILE:iccIlluminantFallbackLegacyHeaderTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.illuminant-fallback-legacy-header
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccIlluminantFallbackLegacyHeaderTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.illuminant-fallback-legacy-header PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;iccconnect;pcc;msan;issue-3066;regression"
+  )
+  if(WIN32)
+    set(_illum_legacy_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccIlluminantFallbackLegacyHeaderTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _illum_legacy_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.illuminant-fallback-legacy-header PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_illum_legacy_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_createsearch_embedded_profile_test)
   if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()
@@ -13866,6 +13917,7 @@ if(WIN32)
   iccdev_add_iccconnect_htos_selector_test()
   iccdev_add_clut_avx512_sixteen_output_test()
   iccdev_add_iccconnect_config_parser_test()
+  iccdev_add_illuminant_fallback_legacy_header_test()
   iccdev_add_createsearch_embedded_profile_test()
   iccdev_add_cmm_htos_selection_test()
   iccdev_add_mru_apply_ownership_test()
@@ -14478,6 +14530,7 @@ iccdev_add_iccconnect_htos_selector_test()
 iccdev_add_taint_trace_memory_state_probe()
 iccdev_add_clut_avx512_sixteen_output_test()
 iccdev_add_iccconnect_config_parser_test()
+iccdev_add_illuminant_fallback_legacy_header_test()
 iccdev_add_createsearch_embedded_profile_test()
 iccdev_add_cmm_htos_selection_test()
 iccdev_add_mru_apply_ownership_test()

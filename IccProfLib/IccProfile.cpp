@@ -4189,7 +4189,7 @@ bool CIccProfile::getMediaWhiteXYZ(icFloatNumber *pXYZ)
 
 /**
  ****************************************************************************
- * Name: CIccProfile::calcNormIlluminantXYZ
+ * Name: CIccProfile::calcLumIlluminantXYZ
  * 
  * Purpose: Get the  XYZ Luminance coordinates (in cd/m^2 units) for the
  * illuminant and observer associated with profile connection.
@@ -4206,8 +4206,46 @@ bool CIccProfile::calcLumIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnectio
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
-    if (!illuminant)
+    if (!illuminant) {
+      // FALLBACK FOR AN OFF-SPEC INPUT (#3066). The viewing conditions name a
+      // custom illuminant but carry no spectral power distribution, which
+      // ICC.2:2023 does not provide for: "The illuminant is specified both by
+      // its illuminant type as well as its power distribution function"
+      // (spectralViewingConditionsType). No clause says what to compute here,
+      // so this is a robustness choice, not a spec requirement. The function
+      // used to return without writing pXYZ, and
+      // CIccCombinedConnectionConditions cached uninitialised values
+      // (MemorySanitizer).
+      //
+      // It reports what getLumIlluminantXYZ() reports for the same conditions:
+      // the tag's un-normalised illuminantXYZ. That route was chosen over the
+      // header PCS illuminant scaled by icDefaultLuminance because:
+      //  - ICC.2 A.1.10 takes luminance from "the CIE Y value of the illuminant
+      //    field of the spectralViewingConditions tag", and the 160 cd/m^2
+      //    default only "when such tags are not available". Here the tag is
+      //    present.
+      //  - The cached value then agrees with the uncached getter. When the
+      //    applied conditions are the profile's own, it also agrees with the
+      //    reflectance branch of CIccCombinedConnectionConditions, which reads
+      //    this field directly.
+      //  - A zero illuminant stays zero instead of being replaced by D50, the
+      //    contract #958 set (.github/ci/regression/pcc-zero-illuminant.cpp).
+      // The return value stays false: nothing was computed from spectral data.
+      //
+      // Known limits, left for the #3066 follow-up issue:
+      //  - Like the spectral computation below, this reads the profile's own
+      //    viewing conditions (getPccViewingConditions()) and ignores
+      //    pObservingPCC. When a different PCC is applied, its conditions do
+      //    not reach this fallback, though A.1.10 lets them override the
+      //    luminance.
+      //  - The no-observer case below still falls back to the header
+      //    illuminant times icDefaultLuminance, which is not the rule above.
+      //    It is a different off-spec input that already writes a defined
+      //    value. It is not part of this report, and changing it would change
+      //    the output for profiles that convert today, so it is left as it was.
+      getLumIlluminantXYZ(pXYZ);
       return false;
+    }
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
@@ -4240,7 +4278,7 @@ bool CIccProfile::calcLumIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnectio
 
 /**
 ****************************************************************************
-* Name: CIccProfile::calcLumIlluminantXYZ
+* Name: CIccProfile::calcNormIlluminantXYZ
 *
 * Purpose: Get the Normalized XYZ coordinates for the illuminant and observer
 *  associated with profile connection.
@@ -4254,8 +4292,31 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
-    if (!illuminant)
+    if (!illuminant) {
+      // FALLBACK FOR AN OFF-SPEC INPUT (#3066); see calcLumIlluminantXYZ() for
+      // the spec text and the full reasoning. A custom illuminant without a
+      // spectral power distribution is not provided for by ICC.2:2023, so this
+      // only makes the output defined: it used to be left unwritten and cached
+      // uninitialised.
+      //
+      // It reports what getNormIlluminantXYZ() reports for the same conditions:
+      // the tag's illuminantXYZ normalised to Y = 1, or zeros when its Y is
+      // zero. ICC.2 7.2.18 also makes the header PCS illuminant a carrier of
+      // this colorimetry ("as computed using the illuminant and observer
+      // values specified in the spectralViewingConditions tag"), and in a
+      // consistent profile the two agree. The tag's value is used so that the
+      // cached and uncached values agree when they don't (and the reflectance
+      // and non-reflectance paths too, when the applied conditions are the
+      // profile's own), and so that a zero illuminant is not replaced by D50
+      // (#958).
+      //
+      // The same known limits apply (see calcLumIlluminantXYZ()). The
+      // pObservingPCC argument is ignored. The no-observer case below still
+      // returns the header illuminant, D50 included when the tag's illuminant
+      // is zero. That is left as it was, outside this report.
+      getNormIlluminantXYZ(pXYZ);
       return false;
+    }
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
