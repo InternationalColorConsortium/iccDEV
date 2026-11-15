@@ -53,7 +53,6 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
-#include <fstream>
 #include <cmath>
 #include <new>
 
@@ -868,27 +867,12 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
 
   // External file
   if (j.contains("file") && j["file"].is_string()) {
-    if (!g_IccJsonAllowFileImports) {
-      parseStr += "TintArrayElement file imports are disabled\n";
-      delete pTag;
-      return false;
-    }
     std::string filename = j["file"].get<std::string>();
-    // Same rule as the CLUT and calculator import loaders: even when imports
-    // are allowed, only a bare name in the working directory is read.
-    if (filename.find('/')  != std::string::npos ||
-        filename.find('\\') != std::string::npos ||
-        filename.find("..") != std::string::npos) {
-      parseStr += "Unsafe TintArray file path '" + icSanitizeConsoleText(filename) + "'\n";
-      delete pTag;
-      return false;
-    }
     std::string format   = "text";
     jGetString(j, "format", format);
 
-    CIccIO *pIO = IccJsonOpenFileIO(filename.c_str(), "rb");
+    CIccIO *pIO = IccJsonOpenImportFile(filename, "TintArrayElement", parseStr);
     if (!pIO) {
-      parseStr += "Cannot open TintArray file: " + filename + "\n";
       delete pTag;
       return false;
     }
@@ -2104,36 +2088,41 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         parseStr += "Missing file in import entry\n";
         return false;
       }
-      // File-based imports are useful for the iccFromJson CLI but
-      // dangerous when IccLibJSON is embedded in a library/service/WASM
-      // context where the JSON input is attacker-controlled. Gate them
-      // behind an opt-in (see IccJsonConfig.h), and reject anything
-      // that looks like a path escape even when allowed.
-      if (!g_IccJsonAllowFileImports) {
-        parseStr += "File imports disabled; ignored '" + file + "'\n";
-        continue;
-      }
-      if (file.find('/')  != std::string::npos ||
-          file.find('\\') != std::string::npos ||
-          file.find("..") != std::string::npos) {
-        parseStr += "Unsafe import path '" + file + "'\n";
-        return false;
-      }
       std::string look = "*" + file + "*";
       if (strstr(importPath.c_str(), look.c_str()))
         continue;  // Already imported -- skip
 
-      std::ifstream ifs(file);
-      if (!ifs.is_open()) {
-        parseStr += "Unable to open import file '" + file + "'\n";
+      // The shared opener applies the import gate and path rule.  A refused
+      // import used to be skipped with a note, so conversion carried on
+      // without it while a CLUT or tint file failed; the XML reader refuses
+      // it too (#3073).
+      CIccIO *pIO = IccJsonOpenImportFile(file, "Calculator", parseStr);
+      if (!pIO)
+        return false;
+      // Read to the end in chunks rather than trusting GetLength(), which is
+      // 0 for a stream a host's IccJsonSetOpenFileIO() hook may return.
+      std::string text;
+      char chunk[65536];
+      size_t nRead;
+      bool bTooLarge = false;
+      while ((nRead = pIO->Read8(chunk, sizeof(chunk))) > 0) {
+        if (text.size() + nRead > IccJsonMaxImportBytes()) {
+          bTooLarge = true;
+          break;
+        }
+        text.append(chunk, nRead);
+      }
+      delete pIO;
+      if (bTooLarge) {
+        parseStr += "Calculator import file '" + icSanitizeConsoleText(file) + "' is too large\n";
         return false;
       }
       IccJson jImport;
       try {
-        ifs >> jImport;
+        jImport = IccJson::parse(text);
       }
       catch (...) {
-        parseStr += "Invalid JSON in import file '" + file + "'\n";
+        parseStr += "Invalid JSON in import file '" + icSanitizeConsoleText(file) + "'\n";
         return false;
       }
 

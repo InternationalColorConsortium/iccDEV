@@ -3814,6 +3814,61 @@ function(iccdev_add_json_calc_var_size_tint_type_test)
   endif()
 endfunction()
 
+# #3073: every file a JSON document names (calculator import, CLUT data, tint
+# array data) opens through IccJsonOpenImportFile(): the import gate, a bare-name
+# rule and the IccJsonSetOpenFileIO() hook, the same for all three.
+function(iccdev_add_json_import_opener_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonImportOpenerTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-import-opener.cpp"
+  )
+  target_compile_features(iccJsonImportOpenerTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonImportOpenerTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonImportOpenerTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonImportOpenerTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.json-import-opener
+      COMMAND "$<TARGET_FILE:iccJsonImportOpenerTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.json-import-opener
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccJsonImportOpenerTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.json-import-opener PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;import;security;issue-3073;regression"
+  )
+  if(WIN32)
+    set(_json_import_opener_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonImportOpenerTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_import_opener_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-import-opener PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_import_opener_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_json_reader_strictness_test)
   if(NOT TARGET "${TARGET_LIB_ICCJSON}" OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -13806,6 +13861,7 @@ if(WIN32)
   iccdev_add_islegalutf8_bound_test()
   iccdev_add_json_reader_strictness_test()
   iccdev_add_json_calc_var_size_tint_type_test()
+  iccdev_add_json_import_opener_test()
   iccdev_add_json_escape_codepoint_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -14479,6 +14535,7 @@ iccdev_add_pcc_standard_observer_and_illuminant_test()
 iccdev_add_islegalutf8_bound_test()
 iccdev_add_json_reader_strictness_test()
 iccdev_add_json_calc_var_size_tint_type_test()
+iccdev_add_json_import_opener_test()
 iccdev_add_json_escape_codepoint_test()
 iccdev_add_v5_required_tag_sets_test()
 iccdev_add_mpe_acs_zero_signature_test()
