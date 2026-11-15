@@ -275,15 +275,14 @@ public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
     icUInt32Number n, j;
-    if (!op->extra) {
-      for (n=1; n+os.idx<os.nOps; n++)
-        if (op[n].sig!=icSigDataOp)
-          break;
-      op->extra = n;
-    }
-    else {
-      n=(icUInt32Number)op->extra;
-    }
+    // The operation array belongs to the immutable calculator function and is
+    // shared by every apply object.  Caching this count in op->extra during the
+    // first Apply() raced when two threads reached the same data block (#3069).
+    // Scan within this ApplySequence instead; its nOps boundary can be shorter
+    // than the containing operation array for nested calculator blocks.
+    for (n=1; n+os.idx<os.nOps; n++)
+      if (op[n].sig!=icSigDataOp)
+        break;
     size_t ss = os.pStack->size();
     os.pStack->resize(ss+n);
     icFloatNumber *s = &(*os.pStack)[ss];
