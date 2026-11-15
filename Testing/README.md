@@ -95,7 +95,9 @@ Run from any directory with an optional build or tools directory:
 ```
 
 This Bash-only exhaustive JSON parity lane finds every `Testing/**/*.icc`,
-writes temporary JSON and ICC round-trip files, and compares their byte sizes.
+writes JSON and ICC round-trip files in a private per-invocation temporary
+directory, and compares their byte sizes. Concurrent invocations therefore do
+not remove or replace one another's outputs.
 Known malformed Calculator under-stack fixtures are reported as expected
 failures. A profile rejected by either JSON tool is a skip; size differences
 outside `CalcTest` fail the script.

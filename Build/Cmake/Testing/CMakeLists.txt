@@ -15303,6 +15303,18 @@ endif()
 
 if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
+    iccdev.issue-3070-json-temp-isolation
+    120
+    "iccdev;json;roundtrip;concurrency;issue-3070;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh"
+  )
+  set_tests_properties(iccdev.issue-3070-json-temp-isolation PROPERTIES
+    PROCESSORS 4
+    SKIP_RETURN_CODE 77
+  )
+
+  iccdev_add_script_test(
     iccdev.json-cli-exercise
     300
     "iccdev;json;cli;asan"
