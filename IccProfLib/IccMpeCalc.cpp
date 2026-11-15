@@ -275,15 +275,16 @@ public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
     icUInt32Number n, j;
-    if (!op->extra) {
-      for (n=1; n+os.idx<os.nOps; n++)
-        if (op[n].sig!=icSigDataOp)
-          break;
-      op->extra = n;
-    }
-    else {
-      n=(icUInt32Number)op->extra;
-    }
+    // Count the run of data operations each time instead of caching it in
+    // op->extra.  The op array belongs to the calculator and is shared by every
+    // apply object, so the cached write raced between threads applying the
+    // same transform (#3069).  The run ends at the end of the sequence being
+    // executed, so a count made once in Begin() would need its own walk of the
+    // if/else/case structure; a count over the whole array would merge a
+    // block's last run with the data after the block.
+    for (n=1; n+os.idx<os.nOps; n++)
+      if (op[n].sig!=icSigDataOp)
+        break;
     size_t ss = os.pStack->size();
     os.pStack->resize(ss+n);
     icFloatNumber *s = &(*os.pStack)[ss];
