@@ -121,14 +121,28 @@ std::string fragment(const char *name)
 // MPE element readers take the element node itself: they read its attributes
 // and search its children.
 template <class T>
-bool parse(T &elem, const std::string &doc, std::string &parseStr)
+bool parse(T &elem, const std::string &doc, std::string &parseStr,
+           const char *label)
 {
   xmlDoc *pDoc = xmlReadMemory(doc.c_str(), (int)doc.size(), "frag.xml", NULL,
                                XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
-  if (!pDoc)
+  if (!pDoc) {
+    std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                 "xmlReadMemory failed for fixture fragment\n", label);
     return false;
+  }
   xmlNode *pRoot = xmlDocGetRootElement(pDoc);
-  bool rv = pRoot && elem.ParseXml(pRoot, parseStr);
+  if (!pRoot) {
+    std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                 "fixture fragment has no root element\n", label);
+    xmlFreeDoc(pDoc);
+    return false;
+  }
+  bool rv = elem.ParseXml(pRoot, parseStr);
+  if (!rv)
+    std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                 "fixture ParseXml failed: %s\n", label,
+                 parseStr.empty() ? "(no parser detail)" : parseStr.c_str());
   xmlFreeDoc(pDoc);
   return rv;
 }
@@ -143,7 +157,7 @@ void roundTrip(const char *name, const char *label)
   T src;
   std::string parseStr;
   std::snprintf(msg, sizeof(msg), "%s: the fixture fragment did not parse", label);
-  check(parse(src, fragment(name), parseStr), msg);
+  check(parse(src, fragment(name), parseStr, label), msg);
   std::snprintf(msg, sizeof(msg), "%s: StorageType=\"1\" did not reach the reader", label);
   check(src.storageType() == 1, msg);
 
@@ -167,16 +181,37 @@ void roundTrip(const char *name, const char *label)
                                XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
   if (pDoc) {
     xmlNode *pRoot = xmlDocGetRootElement(pDoc);
+    if (!pRoot)
+      std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                   "writer output has no root element\n", label);
     CIccMultiProcessElement *pElem =
       pRoot ? CIccTagXmlMultiProcessElement::CreateElement((const icChar *)pRoot->name) : NULL;
+    if (pRoot && !pElem)
+      std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                   "CreateElement returned NULL for <%s>\n", label,
+                   (const char *)pRoot->name);
     CIccMpeXml *pXml = pElem ? dynamic_cast<CIccMpeXml *>(pElem) : NULL;
+    if (pElem && !pXml)
+      std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                   "factory element is not CIccMpeXml\n", label);
     std::string parseStr2;
-    if (pXml && pXml->ParseXml(pRoot, parseStr2)) {
-      bReloaded = true;
-      pXml->ToXml(xml2, "");
+    if (pXml) {
+      if (pXml->ParseXml(pRoot, parseStr2)) {
+        bReloaded = true;
+        pXml->ToXml(xml2, "");
+      }
+      else {
+        std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                     "writer output ParseXml failed: %s\n", label,
+                     parseStr2.empty() ? "(no parser detail)" : parseStr2.c_str());
+      }
     }
     delete pElem;
     xmlFreeDoc(pDoc);
+  }
+  else {
+    std::fprintf(stderr, "[mpexml-reflectance-clut-writer] %s: "
+                 "xmlReadMemory failed for writer output\n", label);
   }
   std::snprintf(msg, sizeof(msg), "%s: the element factory and reader refused the writer's own output", label);
   check(bReloaded, msg);
