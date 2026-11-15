@@ -181,6 +181,7 @@ run_xml_reject_test() {
 run_fromjson_success_test() {
   local name="$1"
   local json_file="$2"
+  local timeout_seconds="${3:-30}"
   local output_file="$OUTDIR/${name}.icc"
   local logfile="$OUTDIR/${name}.log"
   local exit_code=0
@@ -188,7 +189,7 @@ run_fromjson_success_test() {
   TOTAL=$((TOTAL + 1))
   rm -f "$output_file" "$logfile"
 
-  timeout 30 "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+  timeout "$timeout_seconds" "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
 
   if ! check_sanitizers "$name" "$logfile"; then
     FAIL=$((FAIL + 1))
@@ -1192,7 +1193,11 @@ run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "
 # responseCurveSet16Type document would satisfy all three reject cases below while
 # removing the guards they exist to pin.
 run_fromjson_success_test "responsecurve-control" "$OUTDIR/responsecurve-control.json"
-run_fromjson_success_test "responsecurve-types-65535" "$OUTDIR/responsecurve-types-65535.json"
+# This maximum-representable fixture expands 65,535 response-curve objects.
+# GCC ASan+UBSan completes it in about 9 seconds alone, but four-way CTest load
+# has exceeded the ordinary 30-second small-fixture budget. Keep a finite bound
+# while allowing the intentionally maximal positive control to finish in CI.
+run_fromjson_success_test "responsecurve-types-65535" "$OUTDIR/responsecurve-types-65535.json" 120
 run_reject_test "responsecurve-types-65536" "$OUTDIR/responsecurve-types-65536.json" "Too many ResponseCurves in ResponseCurveSet16"
 run_reject_test "responsecurve-count-overflow" "$OUTDIR/responsecurve-count-overflow.json" "Missing or invalid CountOfChannels in ResponseCurveSet16"
 run_reject_test "responsecurve-devicecode-overflow" "$OUTDIR/responsecurve-devicecode-overflow.json" "Invalid Measurement DeviceCode in ResponseCurveSet16"
