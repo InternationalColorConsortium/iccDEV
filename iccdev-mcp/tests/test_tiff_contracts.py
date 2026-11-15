@@ -137,7 +137,7 @@ def test_specsep_rest_and_mcp_output_and_cleanup(monkeypatch, tmp_path):
     assert all(not output.exists() for output in outputs)
 
 
-def test_native_tiff_binding_alignment(tmp_path):
+def test_native_tiff_binding_alignment(tmp_path, monkeypatch):
     """Run against explicitly selected current-branch tools, not mocks."""
     fixture = os.environ.get("ICCDEV_TIFF_FIXTURE")
     if not fixture:
@@ -191,6 +191,8 @@ def test_native_tiff_binding_alignment(tmp_path):
     }
     config_path = tmp_path / "apply.json"
     config_path.write_text(json.dumps(config), encoding="ascii")
+    # This test deliberately exercises the trusted native -cfg contract.
+    monkeypatch.setenv("ICCDEV_MCP_ALLOW_RAW_CLI_ARGS", "1")
     assert server.apply_profiles(config_args=["-cfg", str(config_path)])["returncode"] == 0
     config["imageFiles"].update(dstImageFile=str(tile_path), dstTileWidth=16,
                                dstTileHeight=32, dstBigTiff=True)

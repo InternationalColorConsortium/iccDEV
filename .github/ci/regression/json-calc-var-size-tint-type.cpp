@@ -46,6 +46,7 @@
 #include "IccMpeJson.h"
 #include "IccTagJsonFactory.h"
 #include "IccMpeJsonFactory.h"
+#include "IccJsonConfig.h"
 
 #include <cstdio>
 #include <string>
@@ -113,6 +114,54 @@ void tint(bool wantOk, const char *szArrayType, const std::string &label)
     std::printf("      %s", err.c_str());
 }
 
+void tintFileImport()
+{
+  const char *filename = "iccdev-json-tint-file-import-control.txt";
+  std::FILE *file = std::fopen(filename, "wb");
+  check(file != NULL, "create tint file import control");
+  if (!file)
+    return;
+  std::fputs("0 0 0 1 1 1", file);
+  std::fclose(file);
+
+  IccJson j = {
+    { "type", "TintArrayElement" },
+    { "inputChannels", 1 },
+    { "outputChannels", 3 },
+    { "file", filename },
+    { "format", "text" },
+  };
+  std::string err;
+  CIccMpeJsonTintArray blocked;
+  IccJsonSetAllowFileImports(false);
+  check(!blocked.ParseJson(j, err), "tint file import refused by default");
+  check(err.find("disabled") != std::string::npos,
+        "tint file import refusal explains the policy");
+
+  err.clear();
+  CIccMpeJsonTintArray allowed;
+  IccJsonSetAllowFileImports(true);
+  check(allowed.ParseJson(j, err), "tint file import accepts trusted CLI mode");
+
+  // Allowing imports still reads only a bare name, as the CLUT and calculator
+  // import loaders do.
+  const char *unsafe[] = { "../iccdev-json-tint-file-import-control.txt",
+                           "./iccdev-json-tint-file-import-control.txt",
+                           ".\\iccdev-json-tint-file-import-control.txt" };
+  for (const char *path : unsafe) {
+    IccJson jPath = j;
+    jPath["file"] = path;
+    err.clear();
+    CIccMpeJsonTintArray refused;
+    std::string what = std::string("tint file path refused with imports allowed: ") + path;
+    check(!refused.ParseJson(jPath, err), what.c_str());
+    check(err.find("Unsafe") != std::string::npos,
+          "tint file path refusal names the unsafe path");
+  }
+  IccJsonSetAllowFileImports(false);
+  std::remove(filename);
+}
+
 } // namespace
 
 int main()
@@ -133,6 +182,7 @@ int main()
   tint(true,  NULL,                 "tint array with no arrayType");
   tint(true,  "float32ArrayType",   "tint array arrayType float32ArrayType");
   tint(false, "definitelyNotAType", "tint array arrayType definitelyNotAType");
+  tintFileImport();
 
   if (g_failures)
     std::printf("%d assertion(s) failed\n", g_failures);

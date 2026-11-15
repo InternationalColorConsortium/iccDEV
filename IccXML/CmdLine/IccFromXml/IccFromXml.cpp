@@ -56,7 +56,7 @@
 static void Usage(FILE *out)
 {
   fprintf(out, "iccFromXml built with IccProfLib Version " ICCPROFLIBVER ", IccLibXML Version " ICCLIBXMLVER "\n\n");
-  fprintf(out, "Usage: iccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}\n");
+  fprintf(out, "Usage: iccFromXml xml_file saved_profile_file {-noid -no-file-includes -v{=[relax_ng_schema_file - optional]}}\n");
   fprintf(out, "       iccFromXml -h | --help\n");
 }
 
@@ -169,12 +169,6 @@ int main(int argc, char* argv[])
   std::string srcName = icSanitizeConsoleText(argv[1]);
   std::string dstName = icSanitizeConsoleText(argv[2]);
 
-  // Profile XML on the CLI tool's filesystem is trusted by the invoking
-  // user (same trust boundary as the XML file itself), so opt in to
-  // <tag File="..."/> / <tag Filename="..."/> loaders. Library/WASM
-  // callers leave the flag at its default-off state.
-  IccXmlSetAllowFileIncludes(true);
-
   CIccTagCreator::PushFactory(new CIccTagXmlFactory());
   CIccMpeCreator::PushFactory(new CIccMpeXmlFactory());
 
@@ -183,6 +177,7 @@ int main(int argc, char* argv[])
 
   std::string szRelaxNGDir;
   bool bNoId = false;
+  bool bAllowFileIncludes = true;
   // Whether -v was given at all, kept apart from whether a schema was found.  The two
   // used to be conflated in szRelaxNGDir, which is why a failed lookup was
   // indistinguishable from "no validation asked for" (#2387).
@@ -193,6 +188,9 @@ int main(int argc, char* argv[])
   for (i=3; i<argc; i++) {
     if (!stricmp(argv[i], "-noid")) {
       bNoId = true;
+    }
+    else if (!stricmp(argv[i], "-no-file-includes")) {
+      bAllowFileIncludes = false;
     }
     // Exact forms only.  This used to be strncmp(argv[i], "-v", 2), which accepted
     // "-verbose", "-vx" and anything else beginning "-v" as a validation request.
@@ -246,6 +244,10 @@ int main(int argc, char* argv[])
       return EXIT_FAILURE;
     }
   }
+
+  // Local CLI inputs may use sidecar files. Service callers pass
+  // -no-file-includes so an uploaded document cannot read the server's files.
+  IccXmlSetAllowFileIncludes(bAllowFileIncludes);
 
   // Validation was requested and no schema could be found: fail CLOSED.  Previously
   // the lookup simply left the schema string empty, and CIccProfileXml::LoadXml

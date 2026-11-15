@@ -5,10 +5,12 @@ function profile_bytes = from_json(json_input, varargin)
 %   profile_bytes = iccdev.from_json(json_path)
 %   profile_bytes = iccdev.from_json(json_input, 'BuildDir', build_dir)
 %   profile_bytes = iccdev.from_json(json_input, 'FromJsonTool', tool_path)
+%   profile_bytes = iccdev.from_json(json_input, 'AllowFileImports', true)
 %
 % A scalar string that names an existing file is read as JSON input; all other
 % scalar text is encoded as UTF-8 JSON content. The returned column vector is
 % suitable for fwrite(output_path, profile_bytes, 'uint8').
+% File imports are disabled by default. Enable them only for trusted local JSON.
 %
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
@@ -23,6 +25,8 @@ function profile_bytes = from_json(json_input, varargin)
   addRequired(p, 'json_input', @is_text_scalar);
   addParameter(p, 'BuildDir', '', @is_text_scalar);
   addParameter(p, 'FromJsonTool', '', @is_text_scalar);
+  addParameter(p, 'AllowFileImports', false, ...
+    @(value) islogical(value) && isscalar(value));
   parse(p, json_input, varargin{:});
 
   json_input = char(p.Results.json_input);
@@ -38,7 +42,11 @@ function profile_bytes = from_json(json_input, varargin)
 
   output_path = [tempname '.icc'];
   cleanup = onCleanup(@() cleanup_files(input_path, temporary_input, output_path));
-  run_cli_tool('iccFromJson', input_path, {output_path}, ...
+  import_option = '-no-file-imports';
+  if p.Results.AllowFileImports
+    import_option = '-allow-file-imports';
+  end
+  run_cli_tool('iccFromJson', input_path, {output_path, import_option}, ...
     char(p.Results.BuildDir), char(p.Results.FromJsonTool), 'iccdev:json');
   if exist(output_path, 'file') ~= 2
     error('iccdev:jsonOutputMissing', ...
