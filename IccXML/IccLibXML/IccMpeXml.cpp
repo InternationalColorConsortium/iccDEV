@@ -63,6 +63,10 @@
 namespace iccDEV {
 #endif
 
+CIccMpeXml::~CIccMpeXml(void)
+{
+}
+
 // Match the defensive cap used by CIccMpeMatrix::Read before narrowing
 // user-controlled matrix-family XML channel counts.
 static const icUInt16Number kIccXmlMaxMatrixChannels = 255;

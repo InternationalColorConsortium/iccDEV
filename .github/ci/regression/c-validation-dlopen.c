@@ -120,7 +120,15 @@ int main(int argc, char **argv)
 
   library = open_library(argv[1]);
   if (!library) {
-    fprintf(stderr, "unable to load %s\n", argv[1]);
+#ifdef _WIN32
+    DWORD error = GetLastError();
+    fprintf(stderr, "unable to load %s (GetLastError=%lu)\n", argv[1],
+            (unsigned long)error);
+#else
+    const char *error = dlerror();
+    fprintf(stderr, "unable to load %s: %s\n", argv[1],
+            error ? error : "no dlerror available");
+#endif
     return 1;
   }
   /* ISO C has no conversion from an object pointer to a function pointer, and
