@@ -10266,6 +10266,59 @@ function(iccdev_add_copyright_tag_icc2_test)
   endif()
 endfunction()
 
+# #3065: CIccProfile::IsTypeValid() refused v4 DToB3/BToD3 (they shared the v5-only
+# MCS/BRDF row), refused lutAToBType for preview0Tag, accepted lut8/lut16 for v5
+# AToB/BToA, and let metaDataTag, profileSequenceIdentifierTag and
+# colorimetricIntentImageStateTag accept any type.  Links IccProfLib only.
+function(iccdev_add_tag_type_table_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTagTypeTableTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-type-table.cpp"
+  )
+  target_compile_features(iccTagTypeTableTest PRIVATE cxx_std_17)
+  target_include_directories(iccTagTypeTableTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccTagTypeTableTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccTagTypeTableTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tag-type-table
+      COMMAND "$<TARGET_FILE:iccTagTypeTableTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tag-type-table
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTagTypeTableTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tag-type-table PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;validate;tagtype;issue-3065;regression"
+  )
+  if(WIN32)
+    set(_tagtype_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTagTypeTableTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tagtype_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tag-type-table PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tagtype_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2028: g_icStructNames is the struct-name analogue of the tag table above and was
 # not covered by that sweep. It published brdfTransfromStructure and
 # colorantInfoStruct, each of which had a second entry for the same signature that
@@ -13716,6 +13769,7 @@ if(WIN32)
   iccdev_add_device_attributes_icc2_test()
   iccdev_add_lms_colour_space_test()
   iccdev_add_copyright_tag_icc2_test()
+  iccdev_add_tag_type_table_test()
   iccdev_add_mlnk_header_test()
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
@@ -14322,6 +14376,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_device_attributes_icc2_test()
 iccdev_add_lms_colour_space_test()
 iccdev_add_copyright_tag_icc2_test()
+iccdev_add_tag_type_table_test()
 iccdev_add_mlnk_header_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()

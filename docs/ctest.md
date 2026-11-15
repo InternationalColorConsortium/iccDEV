@@ -297,6 +297,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
 | `iccdev.named-colour-signature-v5` | `.github/ci/regression/named-colour-signature-v5.cpp`; the v5 named colour tag signature `nmcl` and array type identifier `ncol`, read as bytes, for issue #2562 |
+| `iccdev.tag-type-table` | `.github/ci/regression/tag-type-table.cpp`; the permitted tag types #3065 corrected in `CIccProfile::IsTypeValid()` (v4 DToB3/BToD3, preview0 lutAToBType, no legacy LUTs in v5 AToB/BToA, metaDataTag/psid/ciis) |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
 | `iccdev.issue-1148-writer-device-regression` | `.github/scripts/iccdev-issue-1148-writer-device-regression.sh` |
