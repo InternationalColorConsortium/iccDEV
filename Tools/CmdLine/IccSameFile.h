@@ -49,6 +49,11 @@
 #include <system_error>
 #include "IccFileUtil.h"
 
+#if defined(__APPLE__)
+#include <strings.h>
+#include <unistd.h>
+#endif
+
 #if defined(_WIN32)
 // stat() leaves st_ino zero on Windows, so it cannot compare file identity
 // there.  NOMINMAX and WIN32_LEAN_AND_MEAN as in
@@ -116,6 +121,27 @@ inline bool icIsSameFile(const char* szA, const char* szB)
 #endif
 }
 
+#if defined(__APPLE__)
+// macOS can mount either case-sensitive or case-insensitive volumes.  Query the
+// nearest existing ancestor because a future output's immediate parent may not
+// exist yet.
+inline bool icPathIsCaseInsensitive(const std::filesystem::path& path)
+{
+  std::filesystem::path probe = path;
+  while (!probe.empty()) {
+    const long caseSensitive = pathconf(probe.c_str(), _PC_CASE_SENSITIVE);
+    if (caseSensitive >= 0)
+      return caseSensitive == 0;
+
+    const std::filesystem::path parent = probe.parent_path();
+    if (parent == probe)
+      break;
+    probe = parent;
+  }
+  return false;
+}
+#endif
+
 // Compare output paths before either file exists.  File identity alone cannot
 // catch two spellings of the same future destination (for example, out.json
 // and ./out.json).  weakly_canonical also resolves an existing symlink parent.
@@ -139,6 +165,11 @@ inline bool icOutputPathsAlias(const char* szA, const char* szB)
 #if defined(_WIN32)
   return CompareStringOrdinal(pathA.c_str(), -1, pathB.c_str(), -1, TRUE) ==
          CSTR_EQUAL;
+#elif defined(__APPLE__)
+  if (pathA == pathB)
+    return true;
+  return icPathIsCaseInsensitive(pathA.parent_path()) &&
+         strcasecmp(pathA.c_str(), pathB.c_str()) == 0;
 #else
   return pathA == pathB;
 #endif
