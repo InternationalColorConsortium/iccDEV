@@ -2146,16 +2146,17 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
 
   const size_t sigLineLength = strnlen(tempBuf, tempBufSize - 1);
   int i = 0;
-  if (!sigLineLength || tempBuf[0] != '\'') {
+  const icChar quote = tempBuf[0];
+  if (!sigLineLength || (quote != '\'' && quote != '"')) {
     delete[] tempBuf;
     return false;
   }
   for (; i < 6 && (size_t)(i + 1) < sigLineLength &&
-         tempBuf[i + 1] != '\''; i++) {
+         tempBuf[i + 1] != quote; i++) {
     ColorSig[i] = tempBuf[i + 1];
   }
   if (i < 4 || (size_t)(i + 1) >= sigLineLength ||
-      tempBuf[i + 1] != '\'') {
+      tempBuf[i + 1] != quote) {
     delete[] tempBuf;
     return false;
   }
