@@ -54,6 +54,7 @@ short_fixture="$fixture_dir/json-parametric-short-params.json"
 control_fixture="$fixture_dir/json-parametric-complete-params.json"
 colorant_reject_fixture="$fixture_dir/json-colorant-table-nonnumeric-pcs.json"
 colorant_control_fixture="$fixture_dir/json-colorant-table-complete-pcs.json"
+legacy_truncated_fixture="$fixture_dir/issue-3066-truncated-legacy-color-data.txt"
 xml_control_fixture="$source_dir/Testing/V2/v2GrayTRC.xml"
 out_dir="${out_dir:-$build_dir/msan-taint-logs}"
 
@@ -67,6 +68,7 @@ if [ ! -f "$source_dir/Build/Cmake/CMakeLists.txt" ] ||
    [ ! -f "$short_fixture" ] || [ ! -f "$control_fixture" ] ||
    [ ! -f "$colorant_reject_fixture" ] ||
    [ ! -f "$colorant_control_fixture" ] ||
+   [ ! -f "$legacy_truncated_fixture" ] ||
    [ ! -f "$xml_control_fixture" ]; then
   echo "[FAIL] --source-dir is not a complete taint-trace checkout" >&2
   exit 2
@@ -97,16 +99,18 @@ ICCDEV_MSAN_LIBCXX_DIR="$runtime_dir" cmake \
   -DENABLE_SHARED_LIBS=ON \
   -DENABLE_STATIC_LIBS=OFF
 cmake --build "$build_dir" \
-  --target iccFromJson iccFromXml iccConnectThreadTest iccTaintTraceMemoryStateProbe \
+  --target iccFromJson iccFromXml iccApplyNamedCmm iccConnectThreadTest \
+    iccTaintTraceMemoryStateProbe \
   --parallel "${BUILD_JOBS:-$(nproc)}"
 
 from_json="$build_dir/Tools/IccFromJson/iccFromJson"
 from_xml="$build_dir/Tools/IccFromXml/iccFromXml"
+apply_named="$build_dir/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
 thread_test="$build_dir/Testing/iccConnectThreadTest"
 memory_probe="$build_dir/Testing/iccTaintTraceMemoryStateProbe"
 msan_options="halt_on_error=1:exit_code=86:origin_history_size=7"
 
-for binary in "$from_json" "$from_xml" "$thread_test"; do
+for binary in "$from_json" "$from_xml" "$apply_named" "$thread_test"; do
   ldd "$binary" > "$out_dir/$(basename "$binary").ldd"
   if grep -Fq 'libstdc++.so' "$out_dir/$(basename "$binary").ldd" ||
      ! grep -Fq "$runtime_dir/lib/libc++.so.1" \
@@ -164,6 +168,12 @@ xml_status=0
 MSAN_OPTIONS="$msan_options" \
   "$from_xml" "$xml_control_fixture" "$out_dir/v2GrayTRC.icc" \
   >"$out_dir/xml.stdout" 2>"$out_dir/xml.stderr" || xml_status=$?
+legacy_status=0
+MSAN_OPTIONS="$msan_options" \
+  "$apply_named" "$legacy_truncated_fixture" 3 1 \
+    "$source_dir/Testing/sRGB_v4_ICC_preference.icc" 1 \
+  >"$out_dir/legacy-truncated.stdout" \
+  2>"$out_dir/legacy-truncated.stderr" || legacy_status=$?
 
 if [ "$short_status" -ne 1 ] || [ -e "$out_dir/short.icc" ] ||
    ! grep -Fq 'parametricCurveType params count does not match functionType' \
@@ -210,10 +220,17 @@ if [ "$xml_status" -ne 0 ] || [ ! -s "$out_dir/v2GrayTRC.icc" ] ||
   sed -n '1,160p' "$out_dir/xml.stderr" >&2
   exit 2
 fi
+if [ "$legacy_status" -eq 0 ] ||
+   grep -Fq 'MemorySanitizer:' "$out_dir/legacy-truncated.stderr"; then
+  echo "[FAIL] truncated legacy colour signature was not rejected cleanly" >&2
+  sed -n '1,160p' "$out_dir/legacy-truncated.stderr" >&2
+  exit 2
+fi
 
 echo "[PASS] memory-state probe reported initialized, then poisoned at offset 5"
 echo "[PASS] short parametric parameters were rejected before serialization"
 echo "[PASS] non-numeric colorant PCS was rejected before serialization"
 echo "[PASS] complete JSON, colorant PCS, and threaded controls are MSan-clean"
 echo "[PASS] v2GrayTRC XML control is clean with instrumented libxml2"
+echo "[PASS] truncated legacy colour signature was rejected without an MSan finding"
 echo "[EVIDENCE] $out_dir"

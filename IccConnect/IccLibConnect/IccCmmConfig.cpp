@@ -2135,17 +2135,30 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   }
 
   int tempBufSize = 20000;
-  icChar ColorSig[7], *tempBuf = new (std::nothrow) icChar[tempBufSize];
+  icChar ColorSig[7] = {0};
+  icChar *tempBuf = new (std::nothrow) icChar[tempBufSize];
   if (!tempBuf)
     return false;
-  InputData.getline(tempBuf, tempBufSize);
+  if (!InputData.getline(tempBuf, tempBufSize)) {
+    delete[] tempBuf;
+    return false;
+  }
 
-  int i;
-  for (i = 0; (i < 4 || tempBuf[i + 1] != '\'') && i < 6; i++) {
+  const size_t sigLineLength = strnlen(tempBuf, tempBufSize - 1);
+  int i = 0;
+  if (!sigLineLength || tempBuf[0] != '\'') {
+    delete[] tempBuf;
+    return false;
+  }
+  for (; i < 6 && (size_t)(i + 1) < sigLineLength &&
+         tempBuf[i + 1] != '\''; i++) {
     ColorSig[i] = tempBuf[i + 1];
   }
-  for (; i < 7; i++)
-    ColorSig[i] = '\0';
+  if (i < 4 || (size_t)(i + 1) >= sigLineLength ||
+      tempBuf[i + 1] != '\'') {
+    delete[] tempBuf;
+    return false;
+  }
 
   //Init source number of samples from color signature is source data file
   m_srcSpace = (icColorSpaceSignature)icGetSigVal(ColorSig);
@@ -2157,10 +2170,16 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
     }
   }
 
-  InputData.getline(tempBuf, tempBufSize);
+  if (!InputData.getline(tempBuf, tempBufSize)) {
+    delete[] tempBuf;
+    return false;
+  }
   {
-    char encodeBuf[20000];
-    sscanf(tempBuf, "%19999s", encodeBuf);
+    char encodeBuf[20000] = {0};
+    if (sscanf(tempBuf, "%19999s", encodeBuf) != 1) {
+      delete[] tempBuf;
+      return false;
+    }
     size_t encodeLen = strnlen(encodeBuf, tempBufSize - 1);
     memcpy(tempBuf, encodeBuf, encodeLen);
     tempBuf[encodeLen] = '\0';

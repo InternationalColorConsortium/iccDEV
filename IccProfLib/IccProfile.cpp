@@ -4206,8 +4206,12 @@ bool CIccProfile::calcLumIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnectio
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
-    if (!illuminant)
+    if (!illuminant) {
+      pXYZ[0] = icFtoD(m_Header.illuminant.X) * icDefaultLuminance;
+      pXYZ[1] = icFtoD(m_Header.illuminant.Y) * icDefaultLuminance;
+      pXYZ[2] = icFtoD(m_Header.illuminant.Z) * icDefaultLuminance;
       return false;
+    }
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
@@ -4254,8 +4258,12 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
-    if (!illuminant)
+    if (!illuminant) {
+      pXYZ[0] = icFtoD(m_Header.illuminant.X);
+      pXYZ[1] = icFtoD(m_Header.illuminant.Y);
+      pXYZ[2] = icFtoD(m_Header.illuminant.Z);
       return false;
+    }
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 

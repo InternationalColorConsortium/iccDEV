@@ -170,7 +170,7 @@ run_zero_illuminant_helper() {
   fi
 
   rm -f "$helper_bin"
-  pass_case "$name" "zero-Y custom PCC illuminant is rejected without D50 fallback"
+  pass_case "$name" "zero-Y reflectance PCC is rejected and missing-SPD recomputation is initialized"
 }
 
 echo "=== PCC zero-illuminant regression ==="

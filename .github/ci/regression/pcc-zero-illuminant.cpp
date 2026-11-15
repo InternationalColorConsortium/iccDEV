@@ -103,5 +103,27 @@ int main()
   if (combined.getMediaWhiteXYZ(mediaXYZ))
     return 8;
 
+  // The non-reflectance constructor recomputes the illuminant from the copied
+  // viewing conditions.  A custom tag without an SPD makes that calculation
+  // return false, but it must still initialize both XYZ arrays from the profile
+  // header rather than exposing indeterminate values (#3066).
+  CIccCombinedConnectionConditions nonReflectance(&profile, &profile, false);
+  xyz[0] = xyz[1] = xyz[2] = -1.0f;
+  nonReflectance.getNormIlluminantXYZ(xyz);
+  if (!is_d50_xyz(xyz))
+    return 9;
+
+  icFloatNumber lumXYZ[3] = {-1.0f, -1.0f, -1.0f};
+  nonReflectance.getLumIlluminantXYZ(lumXYZ);
+  const icFloatNumber expectedLum[3] = {
+    icFtoD(profile.m_Header.illuminant.X) * icDefaultLuminance,
+    icFtoD(profile.m_Header.illuminant.Y) * icDefaultLuminance,
+    icFtoD(profile.m_Header.illuminant.Z) * icDefaultLuminance
+  };
+  if (!is_near(lumXYZ[0], expectedLum[0]) ||
+      !is_near(lumXYZ[1], expectedLum[1]) ||
+      !is_near(lumXYZ[2], expectedLum[2]))
+    return 10;
+
   return 0;
 }
