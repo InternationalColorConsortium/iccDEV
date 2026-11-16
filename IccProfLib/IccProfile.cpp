@@ -2583,9 +2583,11 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
   case icSigAToB2Tag:
     {
       switch(typeSig) {
+      // ICC.2 AToB0-2Tag do not list lut8Type or lut16Type; those are ICC.1
+      // types (#3065).
       case icSigLut8Type:
       case icSigLut16Type:
-        return true;
+        return m_Header.version < icVersionNumberV5;
 
       case icSigLutAtoBType:
         if (m_Header.version >= icVersionNumberV4)
@@ -2617,9 +2619,10 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
         return false;
 
       switch(typeSig) {
+        // ICC.2 AToB3Tag does not list lut8Type or lut16Type (#3065).
         case icSigLut8Type:
         case icSigLut16Type:
-          return true;
+          return false;
 
         case icSigLutAtoBType:
           if (m_Header.version >= icVersionNumberV4)
@@ -2655,9 +2658,21 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
   case icSigPreview2Tag:  
     {
       switch(typeSig) {
+      // ICC.2 BToA0-2Tag do not list lut8Type or lut16Type (#3065).  gamutTag
+      // and the preview tags are ICC.1 tags.
       case icSigLut8Type:
       case icSigLut16Type:
+        if (m_Header.version >= icVersionNumberV5 &&
+            (tagSig == icSigBToA0Tag || tagSig == icSigBToA1Tag ||
+             tagSig == icSigBToA2Tag))
+          return false;
         return true;
+
+      // ICC.1 preview0Tag (device to PCS to device) also permits lutAToBType;
+      // preview1Tag, preview2Tag and gamutTag do not (#3065).
+      case icSigLutAtoBType:
+        return tagSig == icSigPreview0Tag &&
+               m_Header.version >= icVersionNumberV4;
 
       case icSigLutBtoAType:
         if (m_Header.version >= icVersionNumberV4)
@@ -2689,9 +2704,10 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
         return false;
 
       switch(typeSig) {
+        // ICC.2 BToA3Tag does not list lut8Type or lut16Type (#3065).
         case icSigLut8Type:
         case icSigLut16Type:
-          return true;
+          return false;
 
         case icSigLutBtoAType:
           if (m_Header.version >= icVersionNumberV4)
@@ -2717,12 +2733,16 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       }
     }
 
+  // ICC.1 defines DToB3Tag and BToD3Tag alongside DToB0-2 and BToD0-2; they
+  // used to share the v5-only row below (#3065).
   case icSigDToB0Tag:
   case icSigDToB1Tag:
   case icSigDToB2Tag:
+  case icSigDToB3Tag:
   case icSigBToD0Tag:
   case icSigBToD1Tag:
   case icSigBToD2Tag:
+  case icSigBToD3Tag:
     {
       if (m_Header.version < icVersionNumberV4_2)
         return false; 
@@ -2732,8 +2752,6 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       return true;
     }
 
-  case icSigDToB3Tag:
-  case icSigBToD3Tag:
   case icSigAToM0Tag:
   case icSigMToA0Tag:
   case icSigMToB0Tag:
@@ -3073,6 +3091,17 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       else
         return false;
     }
+
+  // Public tags with one permitted type.  Without a row they took the
+  // private-tag default and accepted any type (#3065).
+  case icSigMetaDataTag:
+    return typeSig == icSigDictType;
+
+  case icSigProfileSequceIdTag:
+    return typeSig == icSigProfileSequceIdType;
+
+  case icSigColorimetricIntentImageStateTag:
+    return typeSig == icSigSignatureType;
 
   //The Private Tag case
   default:
