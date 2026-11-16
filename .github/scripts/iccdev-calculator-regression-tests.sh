@@ -284,6 +284,7 @@ run_table102_operator_fixture() {
   local validate_log="$OUTDIR/${fixture}-${format}-validate.log"
   local apply_log="$OUTDIR/${fixture}-${format}-apply.log"
   local parser="$FROMXML"
+  local parser_label="iccFromXml"
   local exit_code=0
   local rows=0
   local row
@@ -293,6 +294,7 @@ run_table102_operator_fixture() {
 
   if [ "$format" = json ]; then
     parser="$FROMJSON"
+    parser_label="iccFromJson"
   fi
 
   if [ ! -f "$source" ] || [ ! -f "$source_txt" ]; then
@@ -305,7 +307,7 @@ run_table102_operator_fixture() {
     return
   fi
   if [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
-    fail_case "$name/$format" "iccFrom${format^^} rejected the Table 102 operators (exit=$exit_code)"
+    fail_case "$name/$format" "$parser_label rejected the Table 102 operators (exit=$exit_code)"
     sed -n '1,10p' "$parse_log"
     return
   fi
