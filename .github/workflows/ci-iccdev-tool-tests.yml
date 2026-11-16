@@ -655,6 +655,26 @@ jobs:
 
           python3 .github/scripts/run-recent-ctests.py "${ctest_args[@]}"
 
+      - name: Run full-sanitizer hybrid aggregate
+        if: ${{ inputs.ctest_mode == 'full' && inputs.ctest_recent_limit == '0' && inputs.exclude_extended_pr_tests == false && inputs.instrumentation == 'sanitizers' }}
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ctest --test-dir "${BUILD_DIR}" \
+            --parallel 4 \
+            --output-on-failure \
+            --output-junit "ctest-hybrid-results.xml" \
+            --fixture-exclude-setup '^iccdev_profiles$' \
+            -R '^iccdev\.hybrid-pipeline$' \
+            --no-tests=error
+
       - name: Capture all-tool FlameGraphs
         if: ${{ inputs.run_tool_flamegraphs }}
         env:
@@ -863,6 +883,13 @@ jobs:
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
           fi
+          hybrid_sanitizer_cmd="not selected"
+          if [ "$CTEST_MODE" = "full" ] &&
+             [ "$CTEST_RECENT_LIMIT" = "0" ] &&
+             [ "$EXCLUDE_EXTENDED_PR_TESTS" = "false" ] &&
+             [ "$INSTRUMENTATION" = "sanitizers" ]; then
+            hybrid_sanitizer_cmd="ctest --test-dir build --parallel 4 --output-on-failure --output-junit ctest-hybrid-results.xml --fixture-exclude-setup '^iccdev_profiles$' -R '^iccdev\\.hybrid-pipeline$' --no-tests=error"
+          fi
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
           qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
           qa_evidence="${qa_dir}/evidence.ndjson"
@@ -904,6 +931,7 @@ jobs:
             echo "| Infrastructure and ClusterFuzzLite CTests | excluded |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
+            echo "| Full-sanitizer hybrid aggregate | \`$(sanitize_line "$hybrid_sanitizer_cmd")\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
@@ -936,6 +964,9 @@ jobs:
                 echo "# CTest skipped by manual ctest_mode=skip input"
                 ;;
             esac
+            if [ "$hybrid_sanitizer_cmd" != "not selected" ]; then
+              echo "$hybrid_sanitizer_cmd"
+            fi
             echo '```'
             if [ -f "$qa_evidence" ]; then
               echo ""
@@ -1055,6 +1086,9 @@ jobs:
           copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
           copy_file_if_present "${BUILD_DIR}/recent-ctests.txt" "${data_dir}/recent-ctests.txt"
           copy_file_if_present "${BUILD_DIR}/ctest-results.xml" "${data_dir}/ctest-results.xml"
+          copy_file_if_present \
+            "${BUILD_DIR}/ctest-hybrid-results.xml" \
+            "${data_dir}/ctest-hybrid-results.xml"
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/Temporary" \
             "${data_dir}/ctest-temporary"

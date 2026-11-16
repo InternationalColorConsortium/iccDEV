@@ -71,8 +71,22 @@ def test_fast_mode_omits_slow_spectral_setup_and_adds_smoke_tests():
         r"--label-exclude calculator\)",
         ctest["run"],
     )
-    assert "ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)" in ctest["run"]
+    for label in ("ci-infrastructure", "clusterfuzzlite", "standalone-aggregate"):
+        assert f"--label-exclude {label}" in ctest["run"]
     assert "ICCDEV_SPECTRAL_PREVIEW_PYTHON" not in ctest.get("env", {})
+
+
+def test_full_sanitizer_runs_hybrid_aggregate_once():
+    hybrid = tool_step("Run full-sanitizer hybrid aggregate")
+
+    assert hybrid["if"] == (
+        "${{ inputs.ctest_mode == 'full' && inputs.ctest_recent_limit == '0' "
+        "&& inputs.exclude_extended_pr_tests == false "
+        "&& inputs.instrumentation == 'sanitizers' }}"
+    )
+    assert "--fixture-exclude-setup '^iccdev_profiles$'" in hybrid["run"]
+    assert "-R '^iccdev\\.hybrid-pipeline$'" in hybrid["run"]
+    assert '--output-junit "ctest-hybrid-results.xml"' in hybrid["run"]
 
 
 def test_developer_report_copies_junit_from_ctest_build_dir():
@@ -82,6 +96,7 @@ def test_developer_report_copies_junit_from_ctest_build_dir():
     assert '--test-dir "${BUILD_DIR}"' in ctest_run
     assert '--output-junit "ctest-results.xml"' in ctest_run
     assert 'copy_file_if_present "${BUILD_DIR}/ctest-results.xml"' in report_run
+    assert '"${BUILD_DIR}/ctest-hybrid-results.xml"' in report_run
 
 
 @pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,

@@ -167,7 +167,10 @@ cleanup_visualize() {
 }
 trap cleanup_visualize EXIT
 cp sRGB_v4_ICC_preference.icc "$VIZ_DIR/"
-iccProfileVisualize "$VIZ_DIR/sRGB_v4_ICC_preference.icc"
+(
+	cd "$VIZ_DIR"
+	iccProfileVisualize sRGB_v4_ICC_preference.icc
+)
 cleanup_visualize
 trap - EXIT
 
