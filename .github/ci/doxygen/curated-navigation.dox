@@ -169,7 +169,6 @@ configuration. Link the `IccConnect2` target. See \ref IccConnect.h
 - \subpage md_docs_2documentation-maintenance "Documentation maintenance"
 - \subpage md_docs_2label-system "Maintainer label system"
 - \subpage md_docs_2label-inventory-audit "Label inventory audit"
-- \subpage upstream-pr-readiness "Upstream pull request readiness"
 */
 
 /**
@@ -190,9 +189,6 @@ configuration. Link the `IccConnect2` target. See \ref IccConnect.h
 \page curatedmaintainerreports Analysis and Issue Reports
 
 - \subpage md_docs_2avx2-clut-diagnostics "AVX2 CLUT diagnostics"
-- \subpage md_docs_2avx2-clut-linux-performance "Linux CLUT profiling report"
-- \subpage md_docs_2avx2-clut-windows-performance "Windows CLUT performance report"
-- \subpage md_docs_2analysis_2image-tool-tiff-qa-2026-11-01 "Image-tool and TIFF QA review"
 - \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2COMPRESSION__PATHS "PAWG compression paths"
 - \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2GOVERNANCE__SUBMISSIONS "PAWG governance submissions"
 - \subpage md_Tools_2CmdLine_2IccPawgReport_2registry_2PERMISSIVENESS__DELTAS "PAWG signature validator deltas"

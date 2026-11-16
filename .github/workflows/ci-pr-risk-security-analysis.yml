@@ -1,7 +1,8 @@
 ###############################################################
 # Copyright (c) 2026 International Color Consortium
 #
-# Intent: Manual and reusable risk and security analysis
+# Intent: Opt-in Linux/Windows risk inventory with the shared preflight policy
+#         gate; complements automatic preflight rather than replacing it.
 #
 # Last Updated: 2026-04-05 23:46:16 UTC by David Hoyt
 #
@@ -1011,6 +1012,39 @@ jobs:
             echo '```' >> "$RISK_REPORT_PATH"
           fi
           echo "" >> "$RISK_REPORT_PATH"
+
+      - name: "Shared Workflow Policy"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        # preflight: allow-codeql-actions reason=readonly-target-analysis-checkout
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          policy_log="$(mktemp)"
+          trap 'rm -f "$policy_log"' EXIT
+          policy_help="$("$TRUSTED_SCRIPTS/preflight-safety-checks.sh" --help)"
+          if ! grep -Fq -- '--workflow-risk-only' <<< "$policy_help"; then
+            policy_result="[SKIP] Trusted base lacks shared workflow policy mode"
+          elif PREFLIGHT_SCAN_ROOT="$SCAN_ROOT" \
+            "$TRUSTED_SCRIPTS/preflight-safety-checks.sh" --workflow-risk-only > "$policy_log" 2>&1; then
+            policy_result="[OK] Shared workflow policy check passed"
+          else
+            policy_result="[FAIL] Shared workflow policy check failed"
+          fi
+          cat "$policy_log"
+          {
+            echo "## Shared Workflow Policy"
+            echo ""
+            sanitize_print "$policy_result"
+            printf '\n\n```text\n'
+            while IFS= read -r policy_line; do
+              printf '%s\n' "$(sanitize_code_line "$policy_line")"
+            done < "$policy_log"
+            printf '```\n\n'
+          } >> "$RISK_REPORT_PATH"
 
       - name: "6. Output Sanitization Audit"
         if: always()
@@ -2357,6 +2391,7 @@ jobs:
           fi
 
           blocking_patterns=(
+            '^\[FAIL\] Shared workflow policy check failed'
             '^\[CRITICAL\] Found .*injectable expression'
             '^\[CRITICAL\].*Unpinned actions'
             '^\[CRITICAL\].*curl/wget\|bash'
@@ -2382,6 +2417,10 @@ jobs:
             local finding="$1"
             local cause remediation
             case "$finding" in
+              *"Shared workflow policy check failed"*)
+                cause="The shared preflight workflow policy rejected the target, or its scanner could not complete."
+                remediation="Fix the exact policy diagnostic above and rerun local preflight; static output writes still require the repository annotation."
+                ;;
               *"injectable expression"*)
                 cause="Untrusted GitHub context or matrix data is interpolated directly inside a run block."
                 remediation="Move the expression to an env value and consume the quoted environment variable from shell."
@@ -2556,6 +2595,7 @@ jobs:
           fi
 
           blocking_patterns=(
+            '^\[FAIL\] Shared workflow policy check failed'
             '^\[CRITICAL\] Found .*injectable expression'
             '^\[CRITICAL\].*Unpinned actions'
             '^\[CRITICAL\].*curl/wget\|bash'

@@ -118,6 +118,7 @@ jobs:
 
     outputs:
       run_native_matrix: ${{ steps.diffcheck.outputs.run_native_matrix }}
+      run_debug_sanitizers: ${{ steps.diffcheck.outputs.run_debug_sanitizers }}
       ci_scope: ${{ steps.diffcheck.outputs.ci_scope }}
       source_changed: ${{ steps.diffcheck.outputs.source_changed }}
       build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
@@ -313,6 +314,12 @@ jobs:
           # shellcheck disable=SC2153
           pr_number="${PR_NUMBER}"
           fast_lane=false
+          run_debug_sanitizers=false
+          if [[ "$GH_EVENT_NAME" == "pull_request" ]]; then
+            case "$PR_ACTION" in
+              opened|reopened|ready_for_review) run_debug_sanitizers=true ;;
+            esac
+          fi
           include_windows=true
           ctest_recent_limit=0
           warning_policy=fail
@@ -357,6 +364,7 @@ jobs:
             }
 
             write_github_output run_native_matrix "$run_full"
+            write_github_output run_debug_sanitizers "$run_debug_sanitizers"
             write_github_output ci_scope "$ci_scope"
             write_github_output source_changed "$source_changed"
             write_github_output build_config_changed "$build_config_changed"
@@ -673,6 +681,12 @@ jobs:
               exit 1
             fi
           done
+
+          # Preserve the retired standalone gate's path scope, including script
+          # and fixture changes that do not select the native build matrix.
+          if ! has_changed_file '^(IccProfLib/|IccXML/|IccJSON/|IccConnect/|Tools/|Testing/|Build/Cmake/|\.github/ci/regression/|\.github/ci/test-data/|\.github/scripts/|\.github/workflows/(ci-iccdev-tool-tests|ci-pr-action)\.yml$)'; then
+            run_debug_sanitizers=false
+          fi
 
           if has_changed_file '^\.github/(ci|workflows|scripts|actions|codeql-queries)/|^\.githooks/'; then
             ci_changed=true
@@ -1121,6 +1135,21 @@ jobs:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
       pr_number: ${{ needs.detect-src.outputs.pr_number }}
 
+  sanitizer-regression:
+    if: ${{ needs.detect-src.outputs.run_debug_sanitizers == 'true' }}
+    name: ASAN+UBSAN Debug Tool Tests
+    needs: [detect-src]
+    uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+    with:
+      target_sha: ${{ needs.detect-src.outputs.target_sha }}
+      pr_number: ${{ needs.detect-src.outputs.pr_number }}
+      tool_build_type: Debug
+      ctest_mode: full
+      ctest_recent_limit: '0'
+      exclude_extended_pr_tests: true
+      instrumentation: sanitizers
+      warning_policy: fail
+
   mcp-server:
     if: ${{ (needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.fast_lane != 'true') || needs.detect-src.outputs.mcp_changed == 'true' }}
     name: MCP server package and Docker checks
@@ -1315,6 +1344,7 @@ jobs:
       # - lint
       # - scan-build
       - tool-tests
+      - sanitizer-regression
       - mcp-server
       - win-ci
       - macos-release-lto
@@ -1374,6 +1404,8 @@ jobs:
           LINT_RESULT: skipped
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
+          SANITIZER_RESULT: ${{ needs['sanitizer-regression'].result }}
+          RUN_DEBUG_SANITIZERS: ${{ needs.detect-src.outputs.run_debug_sanitizers }}
           MCP_RESULT: ${{ needs['mcp-server'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
           MACOS_RELEASE_LTO_RESULT: ${{ needs['macos-release-lto'].result }}
@@ -1415,6 +1447,8 @@ jobs:
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
+          SANITIZER_RESULT="${SANITIZER_RESULT:-skipped}"
+          RUN_DEBUG_SANITIZERS="${RUN_DEBUG_SANITIZERS:-false}"
           MCP_RESULT="${MCP_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
           MACOS_RELEASE_LTO_RESULT="${MACOS_RELEASE_LTO_RESULT:-success}"
@@ -1444,6 +1478,8 @@ jobs:
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
+          SANITIZER_RESULT="$(trim_and_norm "$SANITIZER_RESULT")"
+          RUN_DEBUG_SANITIZERS="$(trim_and_norm "$RUN_DEBUG_SANITIZERS")"
           MCP_RESULT="$(trim_and_norm "$MCP_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           MACOS_RELEASE_LTO_RESULT="$(trim_and_norm "$MACOS_RELEASE_LTO_RESULT")"
@@ -1454,7 +1490,7 @@ jobs:
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$MCP_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$APPLE_XCODE_RESULT" "$EXAMPLE_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$SANITIZER_RESULT" "$MCP_RESULT" "$WIN_RESULT" "$MACOS_RELEASE_LTO_RESULT" "$MACOS_DEBUG_RESULT" "$APPLE_XCODE_RESULT" "$EXAMPLE_RESULT")
           for s in "${required_results[@]}"; do
             # 'skipped' is acceptable when run_native_matrix is false.
             # only 'failure' or 'cancelled' should cause overall failure
@@ -1463,6 +1499,10 @@ jobs:
               break
             fi
           done
+          if [[ "$RUN_DEBUG_SANITIZERS" == "true" && "$SANITIZER_RESULT" != "success" ]]; then
+            job_res=failure
+          fi
+
           # --- write header ----------------------------------------------------
           {
             echo "<div align=\"center\">"
@@ -1525,6 +1565,7 @@ jobs:
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
+            printf "| sanitizer-regression | %s |\n" "$(sanitize_line "$SANITIZER_RESULT")"
             printf "| mcp-server         | %s |\n" "$(sanitize_line "$MCP_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| macos-release-lto  | %s |\n" "$(sanitize_line "$MACOS_RELEASE_LTO_RESULT")"

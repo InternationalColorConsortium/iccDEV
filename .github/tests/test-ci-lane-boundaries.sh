@@ -48,7 +48,6 @@ pr_unix_workflow="$repo_root/.github/workflows/ci-pr-unix.yml"
 unix_workflow="$repo_root/.github/workflows/_build-test-unix.yml"
 windows_workflow="$repo_root/.github/workflows/_build-test-windows.yml"
 pr_windows_workflow="$repo_root/.github/workflows/ci-pr-win.yml"
-sanitizer_workflow="$repo_root/.github/workflows/ci-sanitizer-regression.yml"
 cfl_workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 ctest_file="$repo_root/Build/Cmake/Testing/CMakeLists.txt"
 
@@ -84,9 +83,9 @@ require_head_concurrency "$pr_unix_workflow" target-sha
 # A PR event and trusted-master dispatch for the same PR/head may run together.
 # shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
 grep -Fq 'group: pr-unix-${{ github.event_name }}-' "$pr_unix_workflow"
-# All five ci-pr-action calls to these reusable lanes must pass its resolved PR.
+# All six ci-pr-action calls to these reusable lanes must pass its resolved PR.
 # shellcheck disable=SC2016 # GitHub expression is literal workflow syntax.
-test "$(grep -Fc 'pr_number: ${{ needs.detect-src.outputs.pr_number }}' "$pr_workflow")" -eq 5
+test "$(grep -Fc 'pr_number: ${{ needs.detect-src.outputs.pr_number }}' "$pr_workflow")" -eq 6
 
 grep -Fq 'uses: ./.github/workflows/ci-mcp-server.yml' "$pr_workflow"
 grep -Fq 'needs.detect-src.outputs.mcp_changed' "$pr_workflow"
@@ -116,11 +115,22 @@ test "$(grep -Fc -- "--label-exclude 'slow|clusterfuzzlite'" "$unix_workflow")" 
 grep -Fq -- "--label-exclude 'known-red|clusterfuzzlite'" "$windows_workflow"
 test "$(grep -Fc -- '--label-exclude clusterfuzzlite' "$pr_windows_workflow")" -eq 1
 test "$(grep -Fc -- "'--label-exclude', 'clusterfuzzlite'" "$pr_windows_workflow")" -eq 2
-grep -q '^  pull_request:$' "$sanitizer_workflow"
-grep -Fq "      - '.github/ci/test-data/**'" "$sanitizer_workflow"
-grep -Fq "      - '.github/scripts/**'" "$sanitizer_workflow"
-grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' "$sanitizer_workflow"
-grep -Fq 'instrumentation: sanitizers' "$sanitizer_workflow"
+if [[ -e "$repo_root/.github/workflows/ci-sanitizer-regression.yml" ]]; then
+  echo "[FAIL] Retired sanitizer wrapper still exists" >&2
+  exit 1
+fi
+sanitizer_job="$(awk '
+  /^  sanitizer-regression:$/ { in_job=1; next }
+  in_job && /^  [[:alnum:]_-]+:$/ { exit }
+  in_job { print }
+' "$pr_workflow")"
+grep -Fq "run_debug_sanitizers == 'true'" <<< "$sanitizer_job"
+grep -Fq 'needs: [detect-src]' <<< "$sanitizer_job"
+grep -Fq 'uses: ./.github/workflows/ci-iccdev-tool-tests.yml' <<< "$sanitizer_job"
+grep -Fq 'tool_build_type: Debug' <<< "$sanitizer_job"
+grep -Fq 'instrumentation: sanitizers' <<< "$sanitizer_job"
+grep -Fq 'SANITIZER_RESULT:' "$pr_workflow"
+grep -Fq 'RUN_DEBUG_SANITIZERS:' "$pr_workflow"
 grep -q '^  schedule:$' "$cfl_workflow"
 grep -Fq 'default: smoke' "$cfl_workflow"
 if grep -q '^  push:$' "$cfl_workflow"; then

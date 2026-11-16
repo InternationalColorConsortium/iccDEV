@@ -169,6 +169,7 @@ fi
 
 # Create results directory
 mkdir -p "$RESULTS_DIR"
+SARIF_FILES=()
 
 echo ""
 echo "=== Running CodeQL analysis ==="
@@ -176,63 +177,59 @@ echo "=== Running CodeQL analysis ==="
 # Standard suite
 if [ "$CUSTOM_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
     echo "  Running standard cpp-security-and-quality suite..."
+    : > "$RESULTS_DIR/cpp-security-and-quality.sarif"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/cpp-security-and-quality.sarif" \
         --threads=0 \
-        codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls
+        .github/codeql-queries/iccdev-cpp-security-and-quality.qls
+    SARIF_FILES+=("$RESULTS_DIR/cpp-security-and-quality.sarif")
     echo "[OK] Standard suite complete"
 fi
 
 # Custom core suite
 if [ "$STANDARD_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
     echo "  Running custom iccDEV security queries..."
+    : > "$RESULTS_DIR/iccdev-security.sarif"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/iccdev-security.sarif" \
         --threads=0 \
         .github/codeql-queries/iccdev-security-suite.qls
+    SARIF_FILES+=("$RESULTS_DIR/iccdev-security.sarif")
     echo "[OK] Custom suite complete"
 fi
 
 # IccJSON/IccConnect suite
 if [ "$STANDARD_ONLY" -eq 0 ] && [ "$CUSTOM_ONLY" -eq 0 ]; then
     echo "  Running IccJSON/IccConnect targeted security queries..."
+    : > "$RESULTS_DIR/iccdev-jsonlib-security.sarif"
     "${CODEQL[@]}" database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/iccdev-jsonlib-security.sarif" \
         --threads=0 \
         .github/codeql-queries/iccdev-jsonlib-suite.qls
+    SARIF_FILES+=("$RESULTS_DIR/iccdev-jsonlib-security.sarif")
     echo "[OK] IccJSON/IccConnect suite complete"
 fi
 
 # Generate report
 echo ""
 echo "=== Generating report ==="
-SARIF_FILES=()
-if [ -f "$RESULTS_DIR/cpp-security-and-quality.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/cpp-security-and-quality.sarif")
-fi
-if [ -f "$RESULTS_DIR/iccdev-security.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/iccdev-security.sarif")
-fi
-if [ -f "$RESULTS_DIR/iccdev-jsonlib-security.sarif" ]; then
-    SARIF_FILES+=("$RESULTS_DIR/iccdev-jsonlib-security.sarif")
-fi
-
 if [ ${#SARIF_FILES[@]} -gt 0 ]; then
     "$SCRIPT_DIR/codeql-report.sh" "${SARIF_FILES[@]}" > "$RESULTS_DIR/report.txt"
     echo "[OK] Report saved to $RESULTS_DIR/report.txt"
 else
-    echo "[WARN] No SARIF files found to generate report"
+    echo "[FAIL] No analysis was selected to generate a report" >&2
+    exit 1
 fi
 
 # Print summary
 echo ""
 echo "=== Results ==="
-find "$RESULTS_DIR" -maxdepth 1 \( -name "*.sarif" -o -name "report.txt" \) -print | sort | xargs -r ls -lh
+ls -lh -- "${SARIF_FILES[@]}" "$RESULTS_DIR/report.txt"
 echo ""
 echo "View report:  cat $RESULTS_DIR/report.txt"
-echo "View SARIF:   python3 -m json.tool $RESULTS_DIR/iccdev-security.sarif | sed -n '1,100p'"
+echo "View SARIF:   python3 -m json.tool ${SARIF_FILES[0]} | sed -n '1,100p'"
 echo ""
 echo "[OK] CodeQL analysis complete"

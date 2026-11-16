@@ -122,13 +122,10 @@ fuzzer runtime boundary, and replay the pinned #2687 artifact before fuzzing.
   focused, and do not modify maintainer-owned infrastructure unless a
   maintainer requested it.
 - Before opening, updating, or finalizing a PR, use the pre-PR security cycle:
-  `docs/pre-pr-security-cycle.md`,
-  `.github/skills/pre-pr-security-cycle/SKILL.md`, and
-  `.github/prompts/pre-pr-security-cycle.prompt.md`.
-- Before creating, reopening, or requesting review on a PR, satisfy
-  `docs/governance/UPSTREAM_PR_READINESS.md` and use
-  `.github/skills/upstream-pr-readiness/SKILL.md`. A branch push, CI request,
-  or review request is not PR-creation authorization.
+  `docs/pre-pr-security-cycle.md` and
+  `.github/skills/pre-pr-security-cycle/SKILL.md`.
+- Create or reopen a PR only with explicit user authorization. A branch push,
+  CI request, or review request does not authorize PR creation.
 - For maintainer branch grooming, set repository-local Git defaults from
   `docs/linear-stack-workflow.md` so pulls rebase, non-fast-forward merges fail,
   repository hooks run, and the final `base..HEAD` range remains merge-free.
@@ -187,13 +184,9 @@ agent-policy surfaces.
   generic requests for broader tests when focused validation covers the diff.
 - Use one comment for one root cause. State the affected path, triggering
   condition, and the smallest safe remediation.
-- Review every head against the complete cumulative `base...HEAD` diff and
-  contract matrix. For a later PR update, use the changed delta only to focus
-  new evidence; do not narrow the review scope or re-post resolved findings
-  unless the update reintroduces the defect.
-- Request review only after the head is frozen and the readiness evidence is
-  current. If a re-review finds any new blocker, stop serial automated review
-  and return the branch to grooming until a maintainer directs the next step.
+- Review the complete cumulative `base...HEAD` diff. Do not re-post resolved
+  findings unless the update reintroduces the defect. Follow the agent scope
+  and review rule in `AGENTS.md`.
 - Conserve maintainer attention: prioritize a small set of high-confidence,
   actionable findings over exhaustive comment volume. No comment is better
   than a low-value concern.
@@ -264,7 +257,6 @@ Key safety rules:
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Valgrind-family analysis | `.github/prompts/valgrind-analysis.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
-| Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
 | Debug MCP subprocess | `.github/prompts/debug-mcp-subprocess.prompt.md` |
@@ -275,7 +267,6 @@ Key safety rules:
 | AVX2 CLUT diagnostics | `.github/prompts/avx2-clut-diagnostics.prompt.md` |
 | IIS ISAPI endpoint QA | `.github/prompts/iis-isapi-qa.prompt.md` |
 | Version bump | `.github/prompts/version-bump.prompt.md` |
-| Upstream PR readiness | `.github/prompts/upstream-pr-readiness.prompt.md` |
 
 ## Skills
 
@@ -299,7 +290,6 @@ Key safety rules:
 | Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
-| Upstream PR readiness | `.github/skills/upstream-pr-readiness/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | vcpkg exported-consumer debug | `.github/skills/vcpkg-export-consumer-debug/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |

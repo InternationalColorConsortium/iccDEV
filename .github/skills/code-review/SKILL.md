@@ -34,12 +34,9 @@ the review controls that evaluate it.
 
 1. Read `AGENTS.md`, `.github/copilot-instructions.md`, and all matching
    path-specific instruction files from the PR head branch.
-2. Identify the merge base and build a `base...HEAD` contract matrix for every
-   changed cross-cutting surface: producer, consumer, build/runtime behavior,
-   supported platform or toolchain, CI trigger, dependency owner, and evidence.
-   Reconcile the matrix with the complete cumulative diff before inspecting a
-   later update's delta.
-3. Review the changed files and their mapped consumers before reading broad
+2. Identify the merge base, read the complete cumulative diff, and trace
+   directly affected consumers, platform boundaries, and CI behavior.
+3. Review the changed files and affected consumers before reading broad
    surrounding code.
 4. Select the smallest relevant repository skill, prompt, MCP context, or
    static analysis. Use MCP tools only when they directly reduce uncertainty.
@@ -67,18 +64,13 @@ requests for broad tests.
 
 ## Review Lifecycle
 
-Review only a frozen head that has passed the readiness gate in
-`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR surface,
-cumulative diff, and contract matrix, not incremental slices. A request for
-changes returns the branch to branch-only grooming; the author must re-run the
-readiness gate and complete contract matrix before requesting a re-review. If a
-re-review finds any new blocker, whether in the repair or unchanged code, stop
-serial automated review and require maintainer direction. Prefer a small set of
-high-confidence, actionable findings over low-value comments.
+Review the complete diff at the current head. Follow `../../../AGENTS.md` for
+scope and review limits. Prefer a small set of high-confidence, actionable
+findings over low-value comments.
 
 ## Review Flow
 
-1. Reconcile coupled surfaces in the contract matrix, including
+1. Check coupled surfaces touched by the diff, including
    Dockerfile/.github/ci/requirements/Dependabot, CMake/compiler/sanitizer/runtime
    suppression, and workflow/helper/trust-boundary changes.
 2. Group related changed lines by root cause.

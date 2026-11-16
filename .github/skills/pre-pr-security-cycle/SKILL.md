@@ -43,18 +43,11 @@ security automation.
 6. Repeat only the checks affected by the fix.
 7. On the pushed pre-PR branch, run `ci-qa-pr` with `ctest-mode=full` and
    `ctest-recent-limit=0`, plus `ci-codeql-security` on the same head. Wait
-   for terminal results; repair failures and repeat affected checks on the
-   new head.
-8. Freeze the head and record the evidence and `base...HEAD` contract matrix in
-   `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review. Map
-   each changed cross-cutting surface to its producer, consumer, build/runtime
-   behavior, platform or toolchain boundary, CI trigger, dependency owner, and
-   local evidence.
-9. If a re-review finds any new blocker, including one in the repair, stop
-   serial review and return to branch-only grooming until a maintainer directs
-   the next step.
-10. Open the PR only after explicit user authorization and a passing readiness
-    gate. Run `ci-pr-action` with `ci_scope=full` on the PR head for final
+   for terminal results on that head.
+8. Review the complete diff and directly affected consumers before pushing.
+   Follow `../../../AGENTS.md` for scope and review limits.
+9. Open the PR only after explicit user authorization and applicable checks.
+    Run `ci-pr-action` with `ci_scope=full` on the PR head for final
     cross-platform builds, profile checks, and representative CTest coverage;
     it does not replace local or pre-PR screening. A push or rebase on an
     open same-repository PR targeting `master` starts the bounded fast lane
@@ -63,7 +56,8 @@ security automation.
     absent, dispatch the trusted `master` workflow with `pr_number` and
     `expected_head_sha`, then refresh labels manually. Follow
     `../../../docs/label-system.md` for commands and stacked-PR limits.
-11. Prepare a concise handoff.
+10. Report the current head, checks and results, and unresolved issues
+    concisely.
 
 For focused local iteration, run
 `.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` for MATLAB-only
@@ -73,8 +67,8 @@ MATLAB-only changes use the focused MATLAB build and QA, while the full local
 or hosted preflight remains the final workflow security signal.
 
 Use the current maintainer image and its installed local tooling where
-applicable; record the image digest and revision. Keep local, pre-PR hosted,
-and PR-head results distinct in the handoff.
+applicable. Keep local, pre-PR hosted, and PR-head results distinct when
+reporting.
 
 ## SAST Selection
 
@@ -120,21 +114,6 @@ Choose the smallest dynamic check that proves the changed behavior:
 - Release ZIP/checksum/artifact shape check for release packaging changes.
 - vcpkg consumer smoke for port/export changes.
 
-## Handoff
-
-Report only merge-relevant evidence:
-
-- branch and commit SHA;
-- changed surface;
-- local commands, pre-PR `ci-qa-pr` and `ci-codeql-security` run IDs, and
-  final PR-head `ci-pr-action` run ID;
-- pass/fail conclusion and key sentinel counts;
-- known skips, suppressions, warnings, or deferred follow-ups;
-- reviewed cache/artifact/token/script exceptions and trust-boundary notes;
-- whether the PR is merge-ready.
-
-Prefer a short human-golfed report over raw logs.
-
 ## References
 
 - `../../../docs/pre-pr-security-cycle.md`
@@ -143,8 +122,6 @@ Prefer a short human-golfed report over raw logs.
 - `../../../docs/ctest.md`
 - `../../../docs/codeql.md`
 - `../../../docs/regression-workflow-governance.md`
-- `../../../docs/governance/UPSTREAM_PR_READINESS.md`
-- `../../prompts/pre-pr-security-cycle.prompt.md`
 - `../../prompts/audit-workflow-governance.prompt.md`
 - `../../prompts/build-and-test.prompt.md`
 - `../../prompts/code-review-hunting.prompt.md`

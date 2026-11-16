@@ -1,20 +1,11 @@
 # Audit Workflow Governance Compliance
 
-Use this prompt to audit any GitHub Actions workflow for compliance.
+Use this prompt to audit any GitHub Actions workflow for compliance. Follow
+`AGENTS.md` for scope and review limits.
 
 For maintainer-owned CI, release, packaging, Docker, MCP, and security
-automation, prefer conservative evidence over speed: run the applicable local
-security battery, patch confirmed findings, retest, and document accepted
-scanner noise with a rationale.
-
-## Review Convergence
-
-Review only a frozen head that passes
-`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR and
-cumulative diff, not incremental slices. A requested change returns the branch
-to branch-only grooming; renew the readiness evidence before a complete
-re-review. If a re-review finds any new blocker, including one in the repair, stop serial
-automated review and require maintainer direction.
+automation, run the applicable local security checks, patch confirmed findings,
+retest the affected behavior, and classify scanner noise with a rationale.
 
 ## Audit Checklist
 
@@ -90,13 +81,7 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Documented container commands work from a fresh checkout or clean
       container, with explicit ref fetches when comparing branches
 
-### 10. Review-Churn Prevention
-- [ ] Review the repeat-review avoidance checklist for the changed surface (canonical: `docs/regression-workflow-governance.md`, section "Recent maintainer PRs...").
-- [ ] Contract matrix maps every changed workflow, helper, Dockerfile, manifest,
-      and dependency updater to its consumer, failure path, trigger, and local
-      evidence before the first review.
-
-### 11. Full Run Log Audit
+### 10. Full Run Log Audit
 - [ ] Full log archive downloaded with `gh api /repos/OWNER/REPO/actions/runs/RUN_ID/logs`
 - [ ] Runtime diagnostics grepped across every job, not only failed jobs
 - [ ] Echoed shell source filtered out before classifying findings
@@ -113,7 +98,7 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] Cache pilots record cold/warm elapsed time, hit status, and entry size
 - [ ] Matrix smoke-test skips reviewed for missing coverage
 
-### 12. Comprehensive Matrix Coverage
+### 11. Comprehensive Matrix Coverage
 - [ ] The comprehensive matrix calls MSVC, ClangCL, and MinGW UCRT64 Windows
       coverage.
 - [ ] One Unix and one Windows lane run complete CTest with

@@ -73,6 +73,3 @@ python3 .github/scripts/test_heif_output_safety.py \
 The <a href="https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/ci/test-data/heif/Readme.md">native HEIF fixtures</a>
 also cover no-ICC and malformed-input behavior in the Python and MATLAB CLI
 tests and staged release bundles.
-
-See the [image-tool QA review](../../../docs/analysis/image-tool-tiff-qa-2026-11-01.md)
-for remaining cross-tool work.

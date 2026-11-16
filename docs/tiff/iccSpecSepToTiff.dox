@@ -37,9 +37,7 @@ literal prefix is not a `printf` pattern.
 `-h`, `--help`, and `--version` succeed only as standalone invocations.
 Malformed or incomplete conversions print diagnostics to stderr. Mixed
 help/version requests and unknown long options fail with status 1. Most older
-conversion failure paths return `-1` (exit 255 on POSIX); graceful exit-code
-normalization is tracked in the \ref md_docs_2analysis_2image-tool-tiff-qa-2026-11-01
-"image-tool audit".
+conversion failure paths return `-1` (exit 255 on POSIX).
 
 For each input in turn, its main chain is inventoried without pixel decoding,
 then its selected IFD is opened for pixels. Dimensions, resolution, sample encoding,

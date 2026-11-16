@@ -1,7 +1,8 @@
 # iOS CLUT Editor Proof-of-Concept
 
 Use this prompt when updating `examples/ios-clut-editor` or planning a related
-iOS profile/CLUT editing proof of concept.
+iOS profile/CLUT editing proof of concept. Follow `AGENTS.md` for scope and
+review limits.
 
 ## Scope
 
@@ -14,7 +15,7 @@ iOS profile/CLUT editing proof of concept.
 - Keep it manual-review only unless a maintainer explicitly asks for CTest or
   workflow integration.
 
-## Contract Checklist
+## Implementation Checks
 
 Before editing, compare against the existing iOS examples and Apple helpers:
 
@@ -23,7 +24,6 @@ Before editing, compare against the existing iOS examples and Apple helpers:
 3. `Build/AppleMobile`
 4. `.github/scripts/iccdev-apple-simulator-smoke.sh`
 5. `docs/build.md`
-6. `docs/governance/UPSTREAM_PR_READINESS.md`
 
 Preserve these invariants:
 
@@ -81,7 +81,3 @@ cmake --preset apple-ios-simulator-core -S Build/Cmake \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0
 cmake --build out/apple-ios-simulator-core --config Release --parallel
 ```
-
-Do not use cloud review or CI as the implementation loop. If automated review
-finds a blocker after a prior automated review cycle, stop and apply the
-review-repair gate from `docs/governance/UPSTREAM_PR_READINESS.md`.

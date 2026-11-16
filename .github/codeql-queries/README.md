@@ -1,8 +1,9 @@
 # iccDEV CodeQL Queries
 
 iccDEV includes custom CodeQL queries for ICC-specific C/C++ security patterns.
-They complement GitHub's standard `cpp-security-and-quality` suite. The
-`iccdev-mcp/` subdirectory contains Python queries for the MCP REST/API package.
+They complement the filtered standard `cpp-security-and-quality` suite, which
+excludes `cpp/path-injection`. The `iccdev-mcp/` subdirectory contains Python
+queries for the MCP REST/API package.
 
 ## Query Summary
 
@@ -11,7 +12,6 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `argv-unchecked-index` | CWE-125, CWE-787 | CmdLine tool indexes argv without bound check |
 | `describe-without-validate` | CWE-476 | `Describe()` called without prior `Validate()` check |
 | `signed-offset-overflow` | CWE-190 | Profile-derived offset used in pointer arithmetic |
-| `signed-char-byte-conversion` | CWE-704 | Signed char data assigned to unsigned byte without explicit cast |
 | `unchecked-file-io` | CWE-252 | Ignored `fopen`, `fread`, or `fwrite` results |
 | `unsafe-header-cast` | CWE-681 | Header field cast to narrower type |
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
@@ -21,7 +21,6 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
 | `unsafe-tag-downcast` | CWE-843 | `FindTag()` result cast without type check |
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |
-| `tell-subtraction-underflow` | CWE-191, CWE-681 | Tell-derived offset subtraction narrowed without bounds check |
 | `factory-bare-new` | CWE-252, CWE-755 | Factory allocation without `std::nothrow` |
 | `fixedpoint-type-confusion` | CWE-681, CWE-197 | Fixed-point conversion function called with wrong type |
 | `ignored-save-profile-result` | CWE-252 | `SaveIccProfile()` result ignored before reporting output success |
@@ -44,6 +43,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `unterminated-ucs2-settext` | CWE-125, CWE-170 | Unterminated UCS-2 buffer passed to `SetText()` |
 | `unterminated-suffix-comparison` | CWE-125, CWE-191 | Unchecked suffix length subtracted from color-name length before `strncmp()` |
 | `self-alias-owning-setter` | CWE-415, CWE-416 | Owning setter deletes its member before storing an unguarded pointer parameter (#2631) |
+| `version-blind-space-validation` | CWE-393 | Header colour space or PCS validated without a profile-version gate (#1359) |
 
 ## iccdev-mcp Python Queries
 
@@ -109,9 +109,10 @@ exclusions to other job or count fields.
 Keep the negative query-test case: genuinely unguarded profile-count loops must
 still be reported.
 
-`iccdev-security-suite.qls` owns the non-JSON C/C++ queries. JSON-derived
+`iccdev-security-suite.qls` owns non-JSON-specific C/C++ queries, including
+the cross-format `localized-text-unsafe-serialization` rule. JSON-specific
 queries, including `json-size-to-narrow-setsize`, belong only to
-`iccdev-jsonlib-suite.qls` so the core and JSON reports remain disjoint.
+`iccdev-jsonlib-suite.qls`, keeping the two reports disjoint.
 
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.

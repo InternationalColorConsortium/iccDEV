@@ -14,7 +14,8 @@ command-line tools.
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and
   `.github/ci/fuzz-patches/cfl`
 - Patch stack validation: `.github/scripts/check-fuzz-patches.sh`
-- CFL smoke: `.github/ci/cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
+- Local CFL smoke: `.github/ci/cfl/build.sh`
+- Official ClusterFuzzLite: `.github/workflows/ci-clusterfuzzlite.yml`
 - Governance: `.github/instructions/workflow-governance.instructions.md`
 - Docs: `docs/afl-fuzzing.md`
 
@@ -23,12 +24,10 @@ command-line tools.
 Update the AFL smoke target, seed set, or workflow inputs while keeping the job
 manual, bounded, and governance-compliant.
 
-Treat AFL/CFL work in this branch as experimental maintainer scaffolding. The
-goal is to register manual/reusable workflows, docs, helper scripts, and local
-validation patch stacks for future runs off `master` or integration branches.
-Do not present the fuzz patch stack as production source hardening, and do not
-turn these workflows into mandatory merge gates unless a maintainer explicitly
-asks for that policy change.
+Treat AFL smoke and the local CFL runner as bounded maintainer tools. The
+official ClusterFuzzLite workflow is a separate manual/nightly in-process
+lane. Do not present a fuzz patch stack as production source hardening or turn
+fuzzing into a mandatory merge gate without maintainer direction.
 
 Keep AFL++ bootstrap aligned with the regression container's LLVM major
 version. For Clang/LLVM 22, build the pinned AFL++ commit with `CC=clang-22`,
@@ -47,28 +46,26 @@ at least 128 MiB, reject non-numeric values, and normalize positive values
 below the AFL++ 5.04a minimum to `0` with a warning so the smoke reaches the
 forkserver without multiplying memory use across parallel targets.
 
-The target sets differ per lane, and are not interchangeable.
+The target sets differ by runner and are not interchangeable.
 
 - **AFL** accepts `dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube` -- see
   the allow-list in `.github/scripts/iccdev-afl-smoke.sh`.
-- **CFL** accepts
-  `dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize`.
+- **Local CFL** defaults to six command-line wrappers and eight in-process
+  targets (14 total); see `.github/ci/cfl/README.md`.
+- **Official ClusterFuzzLite** runs only the eight in-process targets.
 
-The two in-process targets are CFL-only; passing them to the AFL lane is an
-error. The first six CFL
-targets are command-line wrappers. `profilevisualize` and `writerserialize` are
-in-process public-API harnesses: compile the engine sources separately, include
-only public headers, and do not include a CLI implementation or call
+`profilevisualize` and `writerserialize` are two of the in-process public-API
+harnesses: compile the engine sources separately, include only public headers,
+and do not include a CLI implementation or call
 `processLuts()`. `writerserialize` additionally links `Mini{PDF,SVG,TIFF}.cpp`,
 whose serialization entries are not reachable through `IccVizModel` alone.
 
-Manual dispatches should expose the same operator controls on AFL and CFL:
-`target_ref` for a branch, tag, or ref, optional `target_sha` for a full
-40-character exact commit pin, and `patch_mode` with `all` or `none`. Use `all`
-when validating maintainer-local patch stacks before promoting them to source
-PRs, and `none` when comparing raw branch behavior.
-Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
-counts, so the manual UI matches AFL's duration model.
+Manual AFL dispatch accepts `target_ref`, optional exact 40-character
+`target_sha`, and `patch_mode` (`none` by default, `all` for local patches).
+The local CFL runner accepts `--targets`, seconds per target, and `--patches`;
+it runs unpatched by default. Official ClusterFuzzLite uses `run_mode`,
+`fuzz_minutes` per group/sanitizer pair, and `known_bug_patch_mode` (patched by
+default).
 
 The unified image packages the compiler runtime needed by its packaged
 AFL++ wrapper for short local smoke checks. The AFL workflow should still
@@ -98,8 +95,10 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 jactionlint --profile correctness --no-color .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-.github/ci/cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize --seconds 30
 ```
+
+Run the local CFL smoke when shared patch handling or CFL runner behavior
+changes; use `.github/ci/cfl/README.md` for the target selection.
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing
 workflow changes.

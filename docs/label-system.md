@@ -266,9 +266,8 @@ Manual and label-triggered dispatches use an event- and PR-qualified
 concurrency group. One PR's dispatch cannot cancel another PR's validation.
 Inspect a dispatched run by its run ID; its check run is attached to the
 trusted `master` ref, while its `PR Summary` status is on the PR head.
-For an owner-visible long-cycle build inventory, dispatch either
-`ci-qa-pr` (including Windows) or `CI Build Test (No
-Fuzzers)` (without Windows). Both callers use `_build-matrix.yml`, which
+For an owner-visible long-cycle build inventory, dispatch `ci-qa-pr`
+(including Windows). It uses `_build-matrix.yml`, which
 centralizes the current reusable Unix and Windows gates plus focused sanitizer,
 option, version-header, and clean-rebuild lanes.
 

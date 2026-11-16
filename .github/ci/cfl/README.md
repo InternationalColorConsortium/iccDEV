@@ -1,15 +1,12 @@
 # CFL Smoke Fuzzing
 
-This directory contains the maintainer-owned CFL smoke entry point for the
-current AFL/CFL onboarding branch. It covers the core iccDEV command-line
-surfaces and the public profile-visualization model:
+This directory contains the local CFL smoke entry point: six command-line
+wrappers and eight in-process targets that exercise iccDEV library surfaces.
 
-The CFL smoke harnesses are experimental maintainer validation scaffolding.
-They are registered for manual or reusable workflow use from `master` and
-integration branches; they are not a mandatory CI quality gate and they do not
-replace normal source-level regression tests. Findings from these harnesses
-should be promoted only after replay with an existing iccDEV tool and a durable
-input artifact.
+The six command-line wrappers are local exploratory checks. The eight
+in-process targets also run in the official ClusterFuzzLite workflow. Neither
+replaces source-level regression tests. Promote findings only after replay
+with an existing iccDEV tool and a durable input artifact.
 
 - `dump`: `iccDumpProfile input.icc ALL`
 - `toxml`: `iccToXml input.icc output.xml`
@@ -130,10 +127,9 @@ All CFL modes require a matching Clang C/C++ pair at major version 21 or 22.
 The local builder prefers 22, falls back to 21, and rejects older or mismatched
 compilers. The pinned ClusterFuzzLite builder currently supplies Clang 22.
 
-Apply the local CFL patch stack before configuring iccDEV with `--patches`.
-The
-`ci-cfl-smoke` workflow applies `.github/ci/fuzz-patches/cfl` by default so
-patch branches test local fixes before they are promoted to source PRs:
+The local builder runs unpatched by default. Use `--patches` to apply
+`.github/ci/fuzz-patches/cfl` before configuring iccDEV; the official
+`ci-clusterfuzzlite` workflow defaults to patched mode:
 
 ```bash
 .github/ci/cfl/build.sh --patches --seconds 30

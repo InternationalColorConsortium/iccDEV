@@ -16,18 +16,16 @@ allowed-tools:
 
 Use this skill when changing `examples/ios-clut-editor/**`, its documentation,
 or its local build helper.
+Follow `../../../AGENTS.md` for scope and review limits. Do not add workflow or
+CTest registration unless a maintainer explicitly requests it.
 
-## Start Gate
+## Before Editing
 
-1. Confirm the branch is intended for branch-local grooming, not PR publication.
-2. Read `AGENTS.md`, `.github/copilot-instructions.md`,
-   `.github/instructions/build-system.instructions.md`, and
-   `docs/governance/UPSTREAM_PR_READINESS.md`.
-3. Review prior iOS examples before editing:
+1. Read `AGENTS.md`, `.github/copilot-instructions.md`, and
+   `.github/instructions/build-system.instructions.md`.
+2. Review prior iOS examples before editing:
    `examples/ios-apply-preview`, `examples/ios-benchapply`,
    `Build/AppleMobile`, and `.github/scripts/iccdev-apple-simulator-smoke.sh`.
-4. Inventory active and suppressed review findings if this branch already has a
-   PR. Do not repair comment-by-comment.
 
 ## Required Invariants
 
@@ -86,12 +84,3 @@ test ! -s docs/generated/doxygen-warnings.log
 For documentation-only edits, keep the Doxygen and diff checks. For code or
 helper edits, run the simulator smoke unless unavailable and record the exact
 skip reason.
-
-## Stop Rules
-
-- Do not push until the local gate covering the current diff passes.
-- Do not request repeated automated reviews for convergence. If a second review
-  cycle finds a new blocker, report `review-stop: FAIL - maintainer direction
-  required` and stop.
-- Do not add workflow or CTest registration unless a maintainer explicitly
-  requests it.

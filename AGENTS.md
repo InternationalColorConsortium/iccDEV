@@ -27,7 +27,9 @@ shares one source of truth. Update rules here, not in the mirrors.
 - Use 2-space C++ indentation, K&R braces, `m_` members, and return-value errors.
 - Exit 1-127 is graceful failure. Exit 128+ is signal termination.
 - Use sanitizer builds for bug hunting; see `.github/instructions/build-system.instructions.md`.
-- Add the nearest regression test for behavior fixes.
+- Prefer extending an existing regression over adding a CTest. CTest changes
+  must add measured code coverage and cover CVSS 4.5-10 or ASAN scariness 25+.
+  Prefer CodeQL for suitable known defects identified through bisected commits.
 - For legacy packed intent decoding and named-color overprint behavior, keep
   `iccApplyNamedCmm` and `iccApplySearch` coverage aligned with
   `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh`,
@@ -49,12 +51,12 @@ shares one source of truth. Update rules here, not in the mirrors.
   `docs/label-system.md` for commands and stacked-PR limits. The automatic
   fast lane does not replace the final full-scope PR gate.
   Keep the final full-scope PR gate in the readiness sequence above.
-- Before the first automated review, record a `base...HEAD` contract matrix for
-  every changed cross-cutting surface: producer, consumer, build/runtime
-  behavior, platform or toolchain boundary, CI trigger, dependency owner, and
-  local evidence. A later update still requires the complete contract matrix,
-  not a delta-only review. Any newly found blocker returns the branch to
-  branch-only grooming before another review.
+- Keep agent changes within requested files and unavoidable direct consumers.
+  Report new scope before editing it. Review the complete diff and run focused
+  positive and negative checks before an authorized push, then hand control
+  back to the maintainer. Do not create contract matrices, expand PR bodies,
+  or add process artifacts for automated review. Use automated review only
+  to confirm completed work; stop if it exposes unexpected scope.
 - Every new or relocated ICC-owned C/C++ source or header must retain the
   complete BSD-3-Clause notice derived from `LICENSE.md`; run
   `.github/scripts/check-license-notices.py` before review. Abbreviated,
@@ -117,7 +119,6 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Maintainer local Git/devenv defaults | `docs/linear-stack-workflow.md` |
 | ClusterFuzzLite integration | `.github/ci/cfl/README.md`, `.github/skills/clusterfuzzlite/SKILL.md` |
 | Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
-| Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Stacked PR and fast-lane workflow | `.github/skills/stacked-pr-fast-lane/SKILL.md` |
 | Focused pull request review | `.github/skills/code-review/SKILL.md` |
 | Code-review bug hunting | `.github/prompts/code-review-hunting.prompt.md` |

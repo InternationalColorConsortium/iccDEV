@@ -28,7 +28,7 @@ Injection rejects animated PNG (APNG) before creating output because the
 current writer handles only one image frame. The tool limits a decoded raster
 to 256 MiB and an ICC profile or PNG chunk to 64 MiB. A requested extraction
 can currently report success without writing a file when no iCCP profile is
-present; the correction is tracked in the image-tool audit.
+present.
 
 `--version` reports the IccProfLib and libpng build versions plus the linked
 libpng runtime version. `--help` puts that banner before the usage text.
@@ -38,4 +38,3 @@ libpng runtime version. `--help` puts that banner before the usage text.
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
 - [IccJpegDump](../IccJpegDump/Readme.md)
 - [IccTiffDump](../IccTiffDump/Readme.md)
-- [Image-tool QA review](../../../docs/analysis/image-tool-tiff-qa-2026-11-01.md)
