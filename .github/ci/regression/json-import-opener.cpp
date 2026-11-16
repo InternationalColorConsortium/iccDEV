@@ -40,7 +40,8 @@
 // "dir\name" or "D:name" path with imports on; loaded from a bare name with
 // imports on.
 // Then a recording IIccJsonOpenFileIO checks that all three go through the
-// hook.
+// hook. #3081 adds reserved-device refusal before that hook and per-file and
+// cumulative calculator import limits, including unknown-length streams.
 //
 // Returns 0 on success; 1 if any check failed (each printed).
 #include "IccMpeJson.h"
@@ -52,6 +53,8 @@
 #include "IccTagLut.h"
 
 #include <cstdio>
+#include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -164,6 +167,166 @@ public:
   }
 };
 
+// No test involving a reserved name ever reaches the operating system, even
+// when the production path check regresses (CON could otherwise block CTest).
+class NameRecorder : public IIccJsonOpenFileIO
+{
+public:
+  std::vector<std::string> names;
+  CIccIO *OpenFile(const icChar *name, const char *) override
+  {
+    names.push_back(name);
+    return NULL;
+  }
+};
+
+struct GeneratedFile {
+  std::string prefix;
+  size_t length;
+  size_t reportedLength;
+  size_t bytesRead = 0;
+  bool closed = false;
+};
+
+// Large inputs are generated a chunk at a time. JSON whitespace exercises the
+// actual read budget without allocating a similarly large fixture or DOM.
+class GeneratedIO : public CIccIO
+{
+public:
+  explicit GeneratedIO(GeneratedFile &file) : m_file(file), m_pos(0) {}
+  ~GeneratedIO() override { m_file.closed = true; }
+  size_t GetLength() override { return m_file.reportedLength; }
+  size_t Read8(void *buf, size_t count = 1) override
+  {
+    size_t available = m_file.length - m_pos;
+    if (count > available)
+      count = available;
+    std::memset(buf, ' ', count);
+    if (m_pos < m_file.prefix.size()) {
+      size_t prefixBytes = m_file.prefix.size() - m_pos;
+      if (prefixBytes > count)
+        prefixBytes = count;
+      std::memcpy(buf, m_file.prefix.data() + m_pos, prefixBytes);
+    }
+    m_pos += count;
+    m_file.bytesRead += count;
+    return count;
+  }
+private:
+  GeneratedFile &m_file;
+  size_t m_pos;
+};
+
+class GeneratedOpener : public IIccJsonOpenFileIO
+{
+public:
+  std::map<std::string, GeneratedFile> files;
+  CIccIO *OpenFile(const icChar *name, const char *) override
+  {
+    auto file = files.find(name);
+    return file == files.end() ? NULL : new GeneratedIO(file->second);
+  }
+};
+
+IccJson imports(const std::vector<std::string> &names)
+{
+  IccJson j = { { "imports", IccJson::array() } };
+  for (const std::string &name : names)
+    j["imports"].push_back({ { "file", name } });
+  return j;
+}
+
+void checkNames()
+{
+  static NameRecorder recorder;
+  IccJsonSetOpenFileIO(&recorder);
+  const std::string unsafe[] = {
+    "CON", "con.json", "PrN", "aux.txt", "NUL.", "nul ",
+    "COM1", "com9.json", "LPT1", "lpt9.txt", "CONIN$", "conout$",
+    "CON .json", "nul.txt ", "LPT2. ",
+    "COM\xc2\xb9", "LPT\xc2\xb2.json", "COM\xc2\xb3.txt",
+    "COM\xb9", "LPT\xb2.json", "COM\xb3.txt",
+    std::string("safe\0.json", 10)
+  };
+  for (const Kind &k : kKinds) {
+    for (const std::string &name : unsafe) {
+      recorder.names.clear();
+      expect(k, name, false, "Unsafe", "reserved or NUL-containing name refused");
+      check(recorder.names.empty(), std::string(k.name) + ": refused before host hook");
+    }
+  }
+  for (const char *name : { "console.json", "NULfile", "COM0", "COM10", "LPT10", "auxiliary" }) {
+    recorder.names.clear();
+    std::string err;
+    CIccIO *io = IccJsonOpenImportFile(name, "test", err);
+    check(!io && recorder.names.size() == 1 && recorder.names[0] == name,
+          std::string("ordinary name reaches host hook: ") + name);
+    delete io;
+  }
+}
+
+void checkBudgets()
+{
+  static GeneratedOpener opener;
+  IccJsonSetOpenFileIO(&opener);
+  const size_t limit = IccJsonMaxImportBytes();
+  opener.files["large.json"] = { "{}", limit + 1, limit + 1 };
+  opener.files["exact.json"] = { "{}", limit, limit };
+  std::string err;
+  CIccIO *io = IccJsonOpenImportFile("large.json", "test", err);
+  check(!io && err.find("too large") != std::string::npos &&
+        opener.files["large.json"].bytesRead == 0 && opener.files["large.json"].closed,
+        "per-file bound refuses limit + 1 before reading and closes IO");
+  delete io;
+  err.clear();
+  io = IccJsonOpenImportFile("exact.json", "test", err);
+  check(io != NULL && err.empty(), "per-file bound accepts exactly the configured limit");
+  delete io;
+
+  CIccMpeJsonCalculator calc;
+  opener.files["small.json"] = { "{}", 2, 2 };
+  err.clear();
+  check(!calc.ParseImport(imports({ "small.json", "exact.json" }), "*", err) &&
+        err.find("byte budget exceeded") != std::string::npos &&
+        opener.files["exact.json"].bytesRead == 0,
+        "sibling imports share a byte budget and reject known length before reading");
+
+  std::string parent = imports({ "exact.json" }).dump();
+  opener.files["parent.json"] = { parent, parent.size(), parent.size() };
+  err.clear();
+  check(!calc.ParseImport(imports({ "parent.json" }), "*", err) &&
+        err.find("byte budget exceeded") != std::string::npos,
+        "nested imports share their parent's byte budget");
+
+  const size_t half = limit / 2 + 1;
+  opener.files["stream-a.json"] = { "{}", half, 0 };
+  err.clear();
+  check(!calc.ParseImport(imports({ "stream-a.json", "stream-a.json" }), "*", err) &&
+        err.find("byte budget exceeded") != std::string::npos &&
+        opener.files["stream-a.json"].bytesRead > half &&
+        opener.files["stream-a.json"].closed,
+        "unknown-length repeated siblings count every actual read toward the budget");
+
+  opener.files["half-a.json"] = { "{}", limit / 2, limit / 2 };
+  opener.files["half-b.json"] = { "{}", limit - limit / 2, limit - limit / 2 };
+  err.clear();
+  check(calc.ParseImport(imports({ "half-a.json", "half-b.json" }), "*", err) &&
+        opener.files["half-a.json"].bytesRead + opener.files["half-b.json"].bytesRead == limit,
+        "sibling imports accept exactly the cumulative byte boundary");
+
+  err.clear();
+  check(calc.ParseImport(imports({ "small.json", "small.json" }), "*", err),
+        "a new parse resets the budget after failure and permits ordinary siblings");
+  err.clear();
+  check(calc.ParseImport(imports({ "small.json" }), "*", err),
+        "a new parse resets the budget after success");
+  parent = imports({ "small.json" }).dump();
+  opener.files["parent.json"] = { parent, parent.size(), parent.size() };
+  err.clear();
+  check(calc.ParseImport(imports({ "parent.json", "small.json" }), "*", err),
+        "ordinary nested and sibling imports remain valid");
+}
+
 } // namespace
 
 int main()
@@ -202,6 +365,8 @@ int main()
     check(rec.names.size() == 1 && rec.names[0] == k.file,
           std::string(k.name) + ": opened through IccJsonSetOpenFileIO()");
   }
+  checkNames();
+  checkBudgets();
   IccJsonSetOpenFileIO(&standard);
   IccJsonSetAllowFileImports(false);
 

@@ -304,6 +304,8 @@ public:
   bool ParseImport(const IccJson &j, std::string importPath, std::string &parseStr);
 
 protected:
+  bool ParseImportWithBudget(const IccJson &j, std::string importPath, std::string &parseStr,
+                   size_t &remainingImportBytes);
   void clean();
   static bool validNameChar(char c, bool bFirst);
   static bool validName(const char *szName);

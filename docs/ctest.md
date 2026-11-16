@@ -275,7 +275,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.issue-3070-json-temp-isolation` | `.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh`; eight concurrent `RunJsonTests.sh` copies must keep JSON and ICC temporary files private to each invocation |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
-| `iccdev.json-import-opener` | `.github/ci/regression/json-import-opener.cpp`; calculator imports, CLUT data and tint array data share one opener: refused with imports off, bare names only, read through `IccJsonSetOpenFileIO()` (#3073) |
+| `iccdev.json-import-opener` | `.github/ci/regression/json-import-opener.cpp`; calculator imports, CLUT data and tint array data share one opener: imports opt-in, bare names only, Windows devices refused before the host hook, per-file size limit and cumulative calculator import budget (#3073, #3081) |
 | `iccdev.stdobserver-regressions` | `.github/scripts/iccdev-stdobserver-regression-tests.sh` |
 | `iccdev.mluc-setter-regressions` | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` |
 | `iccdev.mluc-read-utf16-regressions` | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` |

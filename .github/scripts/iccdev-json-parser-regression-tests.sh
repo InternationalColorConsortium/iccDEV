@@ -1155,6 +1155,81 @@ echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
 echo ""
 
+# #3081: drive the import refusal through the real converter, including the
+# default 128 MiB boundary using a sparse file rather than a checked-in payload.
+# The successful control proves that the document reaches its calculator, and
+# every refusal must fail gracefully without creating or replacing output.
+TOTAL=$((TOTAL + 1))
+IMPORT_CLI_LOG="$OUTDIR/json-import-cli.log"
+if python3 - "$BASE_JSON" "$OUTDIR" "$FROMJSON" "$JSON_MAX_FILE_MB" > "$IMPORT_CLI_LOG" 2>&1 <<'PY'
+import copy
+import json
+import pathlib
+import subprocess
+import sys
+
+base_path, outdir, converter, limit_mb = sys.argv[1:]
+outdir = pathlib.Path(outdir).resolve()
+base = json.loads(pathlib.Path(base_path).read_text(encoding="utf-8"))
+limit = int(limit_mb) * 1024 * 1024
+small = outdir / "import-control.json"
+large = outdir / "import-oversize.json"
+small.write_text("{}", encoding="ascii")
+with large.open("wb") as stream:
+    stream.seek(limit)
+    stream.write(b" ")
+
+def document(filename):
+    doc = copy.deepcopy(base)
+    doc["IccProfile"]["Tags"].append({"PrivateTag_999": {"sig": "ZZZ1", "data": {
+        "type": "multiProcessElementType", "inputChannels": 1, "outputChannels": 1,
+        "elements": [{"type": "CalculatorElement", "inputChannels": 1,
+                      "outputChannels": 1, "imports": [{"file": filename}],
+                      "mainFunction": "{ in(0) out(0) }"}]
+    }}})
+    return doc
+
+def run(name, filename, options, diagnostic=None, preserve=False):
+    source = outdir / (name + ".json")
+    output = outdir / (name + ".icc")
+    source.write_text(json.dumps(document(filename)), encoding="utf-8")
+    sentinel = b"existing output must survive a refused import"
+    if preserve:
+        output.write_bytes(sentinel)
+    else:
+        output.unlink(missing_ok=True)
+    result = subprocess.run([converter, str(source), str(output)] + options,
+                            cwd=outdir, capture_output=True, text=True, timeout=30)
+    log = result.stdout + result.stderr
+    assert "ERROR: AddressSanitizer" not in log and "runtime error:" not in log, log
+    if diagnostic is None:
+        assert result.returncode in (0, 1) and output.is_file() and output.stat().st_size > 0, log
+        assert "saved correctly" in log, log
+    else:
+        assert 1 <= result.returncode <= 127 and diagnostic in log, log
+        assert output.read_bytes() == sentinel if preserve else not output.exists(), log
+    print("ok:", name, "exit=" + str(result.returncode))
+
+try:
+    run("import-cli-control", small.name, ["-allow-file-imports"])
+    run("import-cli-default-off", small.name, [], "disabled")
+    run("import-cli-explicit-off", small.name, ["-no-file-imports"], "disabled")
+    run("import-cli-unsafe", "../" + small.name, ["-allow-file-imports"], "Unsafe")
+    run("import-cli-device", "CON", ["-allow-file-imports"], "Unsafe")
+    run("import-cli-too-large", large.name, ["-allow-file-imports"], "too large")
+    run("import-cli-preserve-output", small.name, [], "disabled", preserve=True)
+finally:
+    large.unlink(missing_ok=True)
+PY
+then
+  echo "  [PASS] json-import-cli (control, refusal propagation, device name, sparse size boundary)"
+  PASS=$((PASS + 1))
+else
+  echo "  [FAIL] json-import-cli"
+  sed -n '1,15p' "$IMPORT_CLI_LOG"
+  FAIL=$((FAIL + 1))
+fi
+
 run_reject_test "mpe-calculator-missing-main" "$OUTDIR/mpe-calculator-missing-main.json" "Missing mainFunction in CalculatorElement"
 run_reject_test "inline-clut-truncated" "$OUTDIR/inline-clut-truncated.json" "Inline CLUT data count does not match CLUT size"
 run_reject_test "curve-gamma-out-of-range" "$OUTDIR/curve-gamma-out-of-range.json" "Invalid gamma in curveType"

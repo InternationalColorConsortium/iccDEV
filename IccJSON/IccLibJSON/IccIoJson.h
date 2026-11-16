@@ -84,7 +84,9 @@ CIccIO* ICCPROFLIB_API IccJsonOpenFileIO(const icChar *szFilename, const char *s
 // tint array data.  Every such loader goes through here, so they share one
 // rule: the read needs IccJsonSetAllowFileImports(true), and even then only a
 // bare name -- no '/', '\', ':' or ".." -- is opened, through
-// IccJsonOpenFileIO(), and a file longer than IccJsonMaxImportBytes() is
+// IccJsonOpenFileIO(). Embedded NULs and Windows device names (including their
+// extensions and aliases) are refused on every platform before the opener.
+// A file longer than IccJsonMaxImportBytes() is
 // refused.  On refusal or failure returns NULL and appends a diagnostic that
 // names szWhat (for example "CLUT") to parseStr.
 CIccIO* ICCPROFLIB_API IccJsonOpenImportFile(const std::string &filename, const char *szWhat,
