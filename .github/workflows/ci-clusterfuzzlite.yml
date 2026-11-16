@@ -294,7 +294,7 @@ jobs:
           echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build and check fuzzers
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:6cf6c58751d21ec3dcfe7792c78e07fe83ec705cbdb07b89793596213c8094a7
         env:
           ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
           BAD_BUILD_CHECK: "true"
@@ -372,7 +372,7 @@ jobs:
           done
 
       - name: Run bounded batch fuzzing
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:eb0fda81bc8fe8b9be6f220817879b1c1ddf8d285db61810d90901e11f976354
         env:
           FUZZ_SECONDS: ${{ needs.configure.outputs.fuzz_seconds }}
           MODE: batch
@@ -431,7 +431,7 @@ jobs:
           echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build fuzzers for pruning
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:6cf6c58751d21ec3dcfe7792c78e07fe83ec705cbdb07b89793596213c8094a7
         env:
           ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
           BAD_BUILD_CHECK: "true"
@@ -479,7 +479,7 @@ jobs:
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Prune persistent corpus
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:eb0fda81bc8fe8b9be6f220817879b1c1ddf8d285db61810d90901e11f976354
         env:
           # ClusterFuzzLite divides this total across all eight targets.
           FUZZ_SECONDS: "960"
@@ -567,7 +567,7 @@ jobs:
           echo "source_digest=$source_digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Build fuzzers for coverage
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:fde96247c3488104b96822156a6e107d58487140115247a34e1f967c23df5604
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-build-fuzzers@sha256:6cf6c58751d21ec3dcfe7792c78e07fe83ec705cbdb07b89793596213c8094a7
         env:
           ALLOWED_BROKEN_TARGETS_PERCENTAGE: ""
           BAD_BUILD_CHECK: "false"
@@ -615,7 +615,7 @@ jobs:
           sed 's/^/[EVIDENCE] cfl_/' "$provenance"
 
       - name: Generate coverage artifact
-        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:4c1febe9ddec42ff005c6115f7769608d1beff57e96ae365d5c4fea1013926dc
+        uses: docker://gcr.io/oss-fuzz-base/clusterfuzzlite-run-fuzzers@sha256:eb0fda81bc8fe8b9be6f220817879b1c1ddf8d285db61810d90901e11f976354
         env:
           FUZZ_SECONDS: "120"
           MODE: coverage
