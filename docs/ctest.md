@@ -225,7 +225,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.issue-2686-curve-gamma-xml` | `.github/ci/regression/issue-2686-curve-gamma.xml`; serialized profile setup for issue #2686 |
 | `iccdev.issue-2686-curve-gamma-profileplot` | `iccProfilePlot`; applies the generated BToA1 one-entry curve for issue #2686 and asserts the plotted values, not the graph subtitle, which is built without applying the curve |
 | `iccdev.issue-2688-colorant-table-pcs-xml` | `.github/ci/regression/issue-2688-colorant-table-pcs.xml`; serialized profile setup for issue #2688 |
-| `iccdev.issue-2688-colorant-table-pcs-dump` | `iccDumpProfile`; requires the generated XYZ-PCS colorant table to use XYZ column labels; see the [issue #2688 MSan reproduction](issue-2688-colorant-table-pcs.md) |
+| `iccdev.issue-2688-colorant-table-pcs-dump` | `iccDumpProfile`; requires the generated XYZ-PCS colorant table to use XYZ column labels |
 | `iccdev.issue-2688-colorant-table-devicelink-xml` | `.github/ci/regression/issue-2688-colorant-table-devicelink.xml`; serialized DeviceLink setup for issue #2688 |
 | `iccdev.issue-2688-colorant-table-devicelink-dump` | `iccDumpProfile`; requires a DeviceLink's colorant table to use Lab column labels even though its PCS field spells XYZ, per ICC.1:2022 9.2.19 |
 | `iccdev.owning-setter-self-alias-contract` | `.github/ci/regression/owning-setter-self-alias-contract.cpp`; ownership contract of five exported setters for issue #2630, the three `CIccMpeSpectral*` `copyData()` self-assignment cases for issue #2637, the apply table `SetData()` releases for issue #2638, and the two protected-member setters `CIccSampledCalculatorCurve::SetCalculator()` and `CIccMpeCalculator::SetCalcFunc()` for issue #2645 |
@@ -251,8 +251,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.mid-mlnk-header-checks` | `.github/ci/regression/mid-mlnk-header-checks.cpp`; MultiplexIdentification and MultiplexLink run the class-independent header checks, and MultiplexIdentification has no zero data colour space, for issue #2563; v5 NamedColor and Abstract accept a zero data colour space, a zero-data Abstract's AToB0Tag needs a spectral PCS and range, and the tag validators take its A side from the spectral PCS, for issue #2725; a zero-PCS Abstract's data colour space must be a colorimetric PCS or a spectral colour space to define its DToB0Tag's D side, for issue #2756 |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
-| `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
-| `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh`; all six phases with four representative overprint cases under sanitizers |
+| `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh`; all six phases with four representative overprint cases under sanitizers; labelled `standalone-aggregate` so its owning integration and coverage phases run it once |
 | `iccdev.apply-throughput` | `Build/Cmake/Testing/RunBenchApplySuite.cmake`; all built-in transform cases with checked CSV results and a bounded pixel budget |
 | `iccdev.searchvec-uio-regression` | `.github/scripts/iccdev-searchvec-uio-regression.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
@@ -273,6 +272,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
 | `iccdev.pawg-q1-quality-contract` | `.github/ci/regression/pawg-q1-quality-contract.cpp` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
+| `iccdev.issue-3070-json-temp-isolation` | `.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh`; eight concurrent `RunJsonTests.sh` copies must keep JSON and ICC temporary files private to each invocation |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
 | `iccdev.stdobserver-regressions` | `.github/scripts/iccdev-stdobserver-regression-tests.sh` |
@@ -283,11 +283,10 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.iccconnect-search-cost-regressions` | `.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh` |
 | `iccdev.iccconnect-htos-selector` | `.github/ci/regression/iccconnect-htos-selector.cpp`; the IccConnect `useHToS` control is on unless a configuration sets it false (ICC.2:2023 K.2.9), and false stops the HDR-to-SDR transform in standard and search chains (#2981) |
 | `iccdev.cam-degenerate-regressions` | `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` |
-| `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh` |
+| `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh`; hand-authored XML/JSON calculator pairs must parse and validate independently and produce the same exact results |
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.applynamedcmm-cli-args` | `.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh` |
 | `iccdev.applysearch-cli-args` | `.github/scripts/iccdev-applysearch-cli-args-regression.sh` |
-| `iccdev.applysearch-cli-args-exhaustive` | Same script with `--exhaustive-thread-matrix`; comprehensive pre-PR thread matrix |
 | `iccdev.applyprofiles-cli-args` | `.github/scripts/iccdev-applyprofiles-cli-args-regression.sh`; checks telemetry-enabled `--debug` with `-threads`/`-exportcfg`, `--verbose` with `-cfg`, and disabled-build rejection |
 | `iccdev.iccApply*-build-toggle` | Four apply-tool checks run with telemetry both enabled and disabled; help exposes telemetry only when built, and disabled builds reject telemetry options. Configure separate build trees with `ICCDEV_ENABLE_TELEMETRY=ON` and `OFF` to cover both cases. |
 | `iccdev.applyprofiles-headless-receipts` | Unix quick check and Windows Python smoke; verify JSONL lifecycle receipts, post-close JSON evidence, sidecar path rejection, and byte-identical TIFF output with telemetry enabled |
@@ -315,10 +314,9 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
 | `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
 
-`iccdev.issue-1781-applytolink-qa-matrix` reserves up to four CTest processor slots.
-Its grid-255 positive control processes 16,581,375 nodes under a bounded
-subprocess timeout, so the reservation prevents unrelated sanitizer tests from
-starving it without increasing that timeout.
+`iccdev.issue-1781-applytolink-qa-matrix` uses a one-channel grid-255 positive
+control. It still proves that the documented maximum was not reduced to 254,
+but creates 255 nodes instead of the former RGB control's 16,581,375 nodes.
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and
@@ -327,33 +325,43 @@ files in `Testing/`.
 
 `iccdev.applysearch-cli-args` derives exactly 257 rows from the tracked RGB
 input, enough to activate two workers, and requires byte-identical output for
-the default path and `-threads 0`, `1`, and `2`. It also covers configuration
+the default path and `-threads 2`. It also covers configuration
 mode, malformed thread counts, and the single-thread requirement for
 `-debugcalc`. It rejects the packed BPC selector in the `-INIT` position,
 whose API has no BPC member or hint channel, while retaining a positive control
 for BPC on an ordinary profile stage.
-`iccdev.applysearch-cli-args-exhaustive` reruns that contract
-with exactly 1,025 rows and `-threads 0`, `1`, `2`, `4`, and `8`, activating the
-bulk path and all eight workers. It carries `slow;pr-extended` for the
-comprehensive pre-PR matrix; the routine PR CTest checks the smaller boundary.
-Both modes count transformed rows and compare output bytes across thread modes.
+The native `iccdev.iccconnect-threaded-cmm` regression owns the 1,024-pixel bulk
+boundary, four-worker partitioning, repeated applies, and concurrent apply-object
+ownership. The removed exhaustive ApplySearch CTest repeated the complete CLI
+contract to vary only worker counts, adding no distinct branch after that native
+coverage and the two-worker CLI parity control.
 
-`iccdev.tool-coverage` may add focused command-line regressions inside the
-existing script without changing the CTest suite count. When a bug is tied to an
-AFL-minimized crash or hang, embed the smallest stable reproducer in the script
-or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
-directories or commit generated crash artifacts. Validate both the direct script
-path and the CTest wrapper when changing this suite. The aggregate reserves up
-to four CTest processor slots because it launches more than 100 sanitizer-instrumented
-commands with bounded per-command timeouts; this lets the surrounding suite run
-in parallel without starving the aggregate's subprocesses. The JSON parser suite
-includes malformed curve gamma and out-of-range numeric narrowing coverage, and
-must reject invalid numeric fields before conversion without sanitizer findings.
+### Apply regression elapsed-time review (2026-11-16)
 
-`iccdev.clusterfuzzlite-configuration` and
-`iccdev.clusterfuzzlite-targets` are build-independent `ci-infrastructure`
-contract tests for
-the official ClusterFuzzLite lane. They check the pinned builder image,
+[Hosted run 43788394358](https://github.com/InternationalColorConsortium/iccDEV/actions/runs/43788394358/job/133041095405)
+provided the before-change timing evidence. The optimized tests were then run
+under the local sanitizer build; hosted after-change timings require the next
+manual run and are not inferred from local results.
+
+| CTest | Before evidence | Decision and focused local evidence |
+| --- | --- | --- |
+| `iccdev.tool-coverage` | 72.20 seconds hosted | Removed. Its more than 100 tool invocations, including 42 apply invocations, duplicated focused CTests. |
+| `iccdev.hybrid-pipeline` | 136.64 seconds hosted | Retained as the integration owner and labelled `standalone-aggregate`; coverage runs it once before the remaining inventory. |
+| `iccdev.applysearch-cli-args` | 25.71 seconds hosted; 14.52 seconds locally before the edit | Retained CLI parsing and two-worker output parity; 8.89 seconds locally after the edit. |
+| `iccdev.applysearch-cli-args-exhaustive` | 107.75 seconds hosted | Removed. Native threaded-CMM coverage owns the repeated, bulk, worker-partition, and concurrent-object cases. |
+| `iccdev.issue-1781-applytolink-qa-matrix` | 95.96 seconds hosted | Retained all rejection and format cases; the equivalent one-channel grid-255 control completed the full matrix in 1.74 seconds locally. |
+| `iccdev.applyprofiles-observer-hbo-regression` | 28.13 seconds hosted | Retained because it uniquely replays the observer/HBO sanitizer regression. |
+| `iccdev.apply-throughput` | 8.38 seconds hosted | Retained because it is the bounded all-case throughput contract rather than another CLI matrix. |
+
+The focused native `iccdev.iccconnect-threaded-cmm` ownership control passed in
+0.04 seconds locally. The two modified script-backed CTests passed together in
+10.67 seconds. No long CTest, Doxygen, or CodeQL suite was used for this review.
+
+`iccdev.clusterfuzzlite-configuration` is a build-independent
+`ci-infrastructure` contract test for the official ClusterFuzzLite lane. It
+includes `.github/scripts/iccdev-clusterfuzzlite-target-tests.sh`, so target,
+corpus, dictionary, and option checks run once rather than through a second
+overlapping CTest registration. The aggregate checks the pinned builder image,
 the manual and nightly scheduled triggers, the single-job manual smoke mode,
 the three full-mode sanitizer entries, three target groups, eight in-process harness sources, matching seed
 families, dictionaries and options, complete canonical BSD-3-Clause notices,
@@ -398,12 +406,12 @@ appearance state regressions without committing generated profiles.
 four representative T-shirt overprint cases in CTest. The complete colour and
 background matrix remains in the default `Testing/hybrid/BuildAndTest.sh`, which
 the comprehensive Unix profile workflow runs separately and now treats a script
-failure as a failed job. The CTest remains a
-`slow` gate. The maintainer `check` target runs it; routine CI tool sweeps use the fast lane
-with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
-target excludes `slow` and `known-red` with one label regular expression. Run
-full CTest or the hybrid gate explicitly when the slow and calculator suites
-are in scope. The hybrid aggregate reserves up to four CTest processor slots:
+failure as a failed job. The CTest remains a `slow` gate and is labelled
+`standalone-aggregate`. Granular tool CTest sweeps exclude that label; the code
+coverage workflow runs the focused hybrid phase before its remaining full CTest
+inventory and excludes the duplicate from that second phase. The maintainer
+`check` target can still run it directly. The hybrid aggregate reserves up to
+four CTest processor slots:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
 The `ci-pr-action` tool gate excludes `pr-extended` and `ci-infrastructure`
@@ -412,9 +420,10 @@ other slow tests remain in the full mode. The manual `ci-regression-checks`
 workflow uses the same tool gate and has no infrastructure opt-in. Run any
 deferred test directly when the change affects it.
 
-### Elapsed-time review (2026-10-30)
+### Historical elapsed-time review (2026-10-30)
 
-The GCC strict ASAN+UBSAN Debug tool gate in
+This dated baseline is retained for comparison and is not the current suite
+inventory. The GCC strict ASAN+UBSAN Debug tool gate in
 <a href="https://github.com/InternationalColorConsortium/iccDEV/actions/runs/40980169467/job/123817966230">ci-qa-pr run 40980169467</a>
 spent 953 seconds in its CTest step. Individual durations below identify work
 to inspect, but CTest runs tests concurrently; adding durations does not
@@ -430,10 +439,10 @@ assertions even when they are slow.
 | `iccdev.apply-throughput` | 121.80 s | Replace the large measurement with a bounded all-case correctness smoke; run large throughput measurements manually. |
 | `iccdev.xml-parser-regressions` | 47.86 s | Keep XML depth, size, and large CLUT checks; split the large case only if the fast checks retain a current-head gate. |
 | `iccdev.json-parser-regressions` | 142.81 s | Keep the large round trip and parser guards under `pr-extended`. |
-| `iccdev.json-sort-regression` | 174.68 s | Keep sorting, determinism, and round-trip assertions under `pr-extended`. |
-| `iccdev.hybrid-pipeline` | 344.30 s | Keep a representative blocking sanitizer CTest; the direct script retains the complete overprint matrix in comprehensive Unix validation. |
-| `iccdev.applysearch-cli-args` | 105.02 s | Keep a fast two-worker boundary in the PR gate; put the eight-worker bulk matrix in `pr-extended`. |
-| `iccdev.issue-1781-applytolink-qa-matrix` | 96.80 s | Keep its grid-255 capacity control under `pr-extended`; review prerequisite skips before making it a universal gate. |
+| `iccdev.json-sort-regression` | 174.68 s | Replace oversized profiles with compact shape-equivalent fixtures; keep the unique sorting, determinism, and round-trip assertions under `pr-extended`. |
+| `iccdev.hybrid-pipeline` | 344.30 s | Retained as the single standalone integration aggregate; granular tool sweeps exclude it. |
+| `iccdev.applysearch-cli-args` | 105.02 s | Retained the two-worker CLI boundary; the later redundant eight-worker CLI matrix was removed in favor of the native threaded-CMM owner. |
+| `iccdev.issue-1781-applytolink-qa-matrix` | 96.80 s | Retained the grid-255 boundary with a one-channel positive control instead of the former 16.6-million-node RGB transform. |
 
 On the same cached container image, the original throughput CTest took 66.29
 seconds and the bounded version took 4.06 seconds. The original hybrid CTest
@@ -475,6 +484,11 @@ without native tools. Registration precedes the Windows/no-Bash boundaries;
 the native test also requires all five conversion/validation targets. See
 `docs/xml-json-roundtrip-qa.md` for broad corpus operation and evidence
 interpretation.
+
+Authored document symmetry is kept separate from that blob-first corpus
+runner. `iccdev.calculator-regressions` parses hand-authored XML and manually
+translated JSON pairs, validates each resulting profile, and requires identical
+calculator behavior on shared inputs. It remains one aggregate CTest.
 
 Windows full tool builds register these tests when all targets are available:
 
@@ -672,9 +686,6 @@ For repeatable agent-assisted work, use
    --target check`, and `git diff --check`.
    Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
    to catch stale count and workflow-name references before opening a PR.
-   For changes inside `iccdev.tool-coverage`, also run the direct script with
-   explicit `ICCDEV_TOOLS_DIR`, `ICCDEV_TESTING_DIR`, and
-   `ICCDEV_TEST_OUTDIR`, plus `ctest -R '^iccdev\.tool-coverage$'`.
 
 Do not let a workflow keep `|| true` around profile generation, CTest
 discovery, or regression execution. Expected skips should be explicit in the

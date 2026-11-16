@@ -117,9 +117,6 @@ the bundled libc++ runtime, and the exact #2687 input is replayed before the
 targets are accepted. This prevents uninstrumented standard-library or XML
 dependency writes from leaving poisoned shadow state and being misattributed
 to iccDEV.
-See `docs/issue-2687-msan-runtime.md` for the report and producer-consumer
-contract.
-
 Manual workflow dispatch accepts a whole-number `fuzz_minutes` input from 2
 through 45 as the budget for each selected target group and sanitizer pair.
 The smoke mode therefore consumes one two-minute `address`/`core` fuzz budget

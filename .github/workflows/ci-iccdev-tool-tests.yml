@@ -584,7 +584,7 @@ jobs:
 
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
           ctest --test-dir "${BUILD_DIR}" -N \
-            --label-exclude 'ci-infrastructure|clusterfuzzlite' \
+            --label-exclude 'ci-infrastructure|clusterfuzzlite|standalone-aggregate' \
             --no-tests=error | tee "${CTEST_LIST}"
 
       - name: Run CTest tool suites
@@ -622,9 +622,14 @@ jobs:
           # here. Kept so a future quarantine needs no workflow edit -- but a
           # test added to it stops being covered, so label sparingly.
           ctest_args+=(--label-exclude known-red)
-          # Keep infrastructure contracts and ClusterFuzzLite harness checks
-          # out of tool and PR test lanes; run those checks explicitly.
-          ctest_args+=(--label-exclude ci-infrastructure --label-exclude clusterfuzzlite)
+          # Keep infrastructure contracts, ClusterFuzzLite harness checks, and
+          # standalone integration aggregates out of the granular tool lane.
+          # Their owning workflows run those checks explicitly.
+          ctest_args+=(
+            --label-exclude ci-infrastructure
+            --label-exclude clusterfuzzlite
+            --label-exclude standalone-aggregate
+          )
           case "$EXCLUDE_EXTENDED_PR_TESTS" in
             true)
               ctest_args+=(--label-exclude pr-extended)
@@ -649,6 +654,26 @@ jobs:
           esac
 
           python3 .github/scripts/run-recent-ctests.py "${ctest_args[@]}"
+
+      - name: Run full-sanitizer hybrid aggregate
+        if: ${{ inputs.ctest_mode == 'full' && inputs.ctest_recent_limit == '0' && inputs.exclude_extended_pr_tests == false && inputs.instrumentation == 'sanitizers' }}
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ctest --test-dir "${BUILD_DIR}" \
+            --parallel 4 \
+            --output-on-failure \
+            --output-junit "ctest-hybrid-results.xml" \
+            --fixture-exclude-setup '^iccdev_profiles$' \
+            -R '^iccdev\.hybrid-pipeline$' \
+            --no-tests=error
 
       - name: Capture all-tool FlameGraphs
         if: ${{ inputs.run_tool_flamegraphs }}
@@ -840,10 +865,10 @@ jobs:
 
           case "$CTEST_MODE" in
             fast)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate --output-junit ctest-results.xml"
               ;;
             full)
-              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --output-junit ctest-results.xml"
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel $(nproc) --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate --output-junit ctest-results.xml"
               ;;
             skip)
               test_cmd="skipped by manual ctest_mode=skip input"
@@ -857,6 +882,13 @@ jobs:
           fi
           if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
             test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
+          fi
+          hybrid_sanitizer_cmd="not selected"
+          if [ "$CTEST_MODE" = "full" ] &&
+             [ "$CTEST_RECENT_LIMIT" = "0" ] &&
+             [ "$EXCLUDE_EXTENDED_PR_TESTS" = "false" ] &&
+             [ "$INSTRUMENTATION" = "sanitizers" ]; then
+            hybrid_sanitizer_cmd="ctest --test-dir build --parallel 4 --output-on-failure --output-junit ctest-hybrid-results.xml --fixture-exclude-setup '^iccdev_profiles$' -R '^iccdev\\.hybrid-pipeline$' --no-tests=error"
           fi
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
           qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
@@ -899,6 +931,7 @@ jobs:
             echo "| Infrastructure and ClusterFuzzLite CTests | excluded |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
+            echo "| Full-sanitizer hybrid aggregate | \`$(sanitize_line "$hybrid_sanitizer_cmd")\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
@@ -915,23 +948,25 @@ jobs:
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --smoke --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate"
                 fi
                 ;;
               full)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate"
                 else
-                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite"
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --parallel \"\$(nproc)\" --limit '${CTEST_RECENT_LIMIT}' --label-exclude known-red --label-exclude ci-infrastructure --label-exclude clusterfuzzlite --label-exclude standalone-aggregate"
                 fi
-                echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;
               skip)
                 echo "# CTest skipped by manual ctest_mode=skip input"
                 ;;
             esac
+            if [ "$hybrid_sanitizer_cmd" != "not selected" ]; then
+              echo "$hybrid_sanitizer_cmd"
+            fi
             echo '```'
             if [ -f "$qa_evidence" ]; then
               echo ""
@@ -1051,6 +1086,9 @@ jobs:
           copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
           copy_file_if_present "${BUILD_DIR}/recent-ctests.txt" "${data_dir}/recent-ctests.txt"
           copy_file_if_present "${BUILD_DIR}/ctest-results.xml" "${data_dir}/ctest-results.xml"
+          copy_file_if_present \
+            "${BUILD_DIR}/ctest-hybrid-results.xml" \
+            "${data_dir}/ctest-hybrid-results.xml"
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/Temporary" \
             "${data_dir}/ctest-temporary"

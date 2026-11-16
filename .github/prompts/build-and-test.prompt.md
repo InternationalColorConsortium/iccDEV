@@ -10,18 +10,32 @@ cmake Cmake -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug
 make -j"$(nproc)"
 ```
 
-## Sanitizer Build
+## Sanitizer Builds
+
+`CMakePresets.json` is under `Build/Cmake`, so run preset commands from that
+directory. These are independent copy/paste one-liners from the repository
+root:
 
 ```bash
-cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ cmake Cmake \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_TOOLS=ON \
-  -DENABLE_ASAN=ON \
-  -DENABLE_UBSAN=ON \
-  -DENABLE_INTEGER_SANITIZER=ON \
-  -DENABLE_FLOAT_SANITIZER=ON
-make -j"$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
+```
+
+The direct CMake equivalents are:
+
+```bash
+cmake -S Build/Cmake -B out/linux-clang-asan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-asan-manual --parallel "$(nproc)"
+cmake -S Build/Cmake -B out/linux-clang-tsan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-tsan-manual --parallel "$(nproc)"
+export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && cmake -S Build/Cmake -B out/linux-clang-msan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_IMAGE_TOOLS=OFF -DICC_USE_ZLIB=OFF -DENABLE_LTO=OFF -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins" -DCMAKE_CXX_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdinc++ -isystem $ICCDEV_MSAN_LIBCXX_DIR/include/c++/v1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DLIBXML2_INCLUDE_DIR="$ICCDEV_MSAN_LIBCXX_DIR/include/libxml2" -DLIBXML2_LIBRARY="$ICCDEV_MSAN_LIBCXX_DIR/lib/libxml2.so" && cmake --build out/linux-clang-msan-manual --parallel "$(nproc)"
+```
+
+Verify the selected runtime before testing:
+
+```bash
+nm -D out/linux-clang-asan/Tools/IccDumpProfile/iccDumpProfile | grep __asan_init
+nm -D out/linux-clang-tsan/Tools/IccApplyProfiles/iccApplyProfiles | grep __tsan_init
+ldd out/linux-clang-msan/Tools/IccFromXml/iccFromXml && nm -D out/linux-clang-msan/Tools/IccFromXml/iccFromXml | grep __msan_init
 ```
 
 **Why `-fsanitize=integer`**: Unsigned integer overflow is well-defined
@@ -36,7 +50,7 @@ Run with sanitizers:
 ```bash
 ASAN_OPTIONS=halt_on_error=0,detect_leaks=0 \
 UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1 \
-  ./Tools/IccDumpProfile/iccDumpProfile profile.icc ALL
+  out/linux-clang-asan/Tools/IccDumpProfile/iccDumpProfile profile.icc ALL
 ```
 
 ## WASM Build
@@ -105,6 +119,8 @@ libc++abi, and libxml2 runtime and run the focused controls:
 Equivalent standalone analysis presets are `linux-clang-tsan`,
 `linux-clang-msan` (requires `ICCDEV_MSAN_LIBCXX_DIR`), and
 `linux-clang-valgrind`. The Valgrind preset is deliberately non-sanitized.
+Do not run `cmake --preset ... -S Build/Cmake` from the repository root: preset
+discovery happens before `-S` is applied. Run the subshell forms above.
 
 ## vcpkg Port Build
 
@@ -134,7 +150,7 @@ See `ports/iccdev/portfile.cmake` for the full build configuration.
 CC=clang-22 CXX=clang++-22 cmake -S Build/Cmake -B out/coverage \
   -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \
   -DENABLE_COVERAGE=ON
-cmake --build out/coverage --parallel 4
+cmake --build out/coverage --parallel
 mkdir -p out/coverage-profraw
 LLVM_PROFILE_FILE="$PWD/out/coverage-profraw/ctest-%4m.profraw" \
   ctest --test-dir out/coverage -R '^iccdev\.hybrid-pipeline$' \

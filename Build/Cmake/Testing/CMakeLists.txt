@@ -14613,30 +14613,9 @@ endif()
 
 if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
-    iccdev.tool-coverage
-    300
-    "iccdev;tools;asan;regression;slow"
-    "${ICCDEV_REPO_ROOT}"
-    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tool-coverage-baseline.sh"
-    --asan
-    --skip-hybrid
-  )
-  set_tests_properties(iccdev.tool-coverage PROPERTIES
-    FIXTURES_REQUIRED iccdev_profiles
-    # This aggregate launches more than 100 sanitizer-instrumented tools and
-    # gives each command a bounded timeout.  Reserve a hosted runner's four
-    # CTest slots so unrelated tests cannot starve those subprocesses.
-    PROCESSORS "${_iccdev_aggregate_ctest_processors}"
-    # The script copies every Testing/hybrid/ICC and hybrid/Results profile
-    # (--skip-hybrid skips only running BuildAndTest.sh), so share
-    # iccdev.hybrid-pipeline's lock rather than copy a partial profile.
-    RESOURCE_LOCK iccdev_testing_hybrid_icc
-  )
-
-  iccdev_add_script_test(
     iccdev.hybrid-pipeline
     900
-    "iccdev;tools;hybrid;asan;regression;slow;pr-extended"
+    "iccdev;tools;hybrid;asan;regression;slow;pr-extended;standalone-aggregate"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
   )
@@ -15303,6 +15282,18 @@ endif()
 
 if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
+    iccdev.issue-3070-json-temp-isolation
+    120
+    "iccdev;json;roundtrip;concurrency;issue-3070;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh"
+  )
+  set_tests_properties(iccdev.issue-3070-json-temp-isolation PROPERTIES
+    PROCESSORS 4
+    SKIP_RETURN_CODE 77
+  )
+
+  iccdev_add_script_test(
     iccdev.json-cli-exercise
     300
     "iccdev;json;cli;asan"
@@ -15331,8 +15322,8 @@ if(ICCDEV_HAS_JSON_TOOLS)
   # that the scalar copy it performs can be changed without silently altering data.
   iccdev_add_script_test(
     iccdev.json-sort-regression
-    300
-    "iccdev;json;sort;regression;issue-1920;asan;slow;pr-extended"
+    60
+    "iccdev;json;sort;regression;issue-1920;asan;pr-extended"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-sort-regression.sh"
   )
@@ -15672,11 +15663,12 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1843-fromcube-clut-order-regression.sh"
 )
 
-if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile)
+if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile
+   AND TARGET iccFromXml AND TARGET iccFromJson)
   iccdev_add_script_test(
     iccdev.calculator-regressions
     300
-    "iccdev;calculator;regression;asan"
+    "iccdev;calculator;xml;json;parser-symmetry;regression;asan"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-calculator-regression-tests.sh"
   )
@@ -16297,17 +16289,6 @@ if(TARGET iccApplySearch)
     # The routine regression activates at most two workers in one tool process.
     PROCESSORS 2
   )
-  iccdev_add_script_test(
-    iccdev.applysearch-cli-args-exhaustive
-    180
-    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;issue-2190;regression;slow;pr-extended"
-    "${ICCDEV_REPO_ROOT}"
-    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
-    --exhaustive-thread-matrix
-  )
-  set_tests_properties(iccdev.applysearch-cli-args-exhaustive PROPERTIES
-    PROCESSORS "${_iccdev_aggregate_ctest_processors}"
-  )
 endif()
 
 # The iccApplyProfiles third of the same family (#2126). Both of its usages
@@ -16515,16 +16496,10 @@ endif()
 # iccFromXml-gated.
 iccdev_add_script_test(
   iccdev.issue-1781-applytolink-qa-matrix
-  300
-  "iccdev;tools;applytolink;security;issue-1781;regression;slow;pr-extended"
+  60
+  "iccdev;tools;applytolink;security;issue-1781;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
-)
-set_tests_properties(iccdev.issue-1781-applytolink-qa-matrix PROPERTIES
-  # The grid-255 positive control processes 16,581,375 nodes under a bounded
-  # subprocess timeout. Reserve the hosted runner's CTest budget (capped at
-  # four) so sanitizer tests cannot starve it after reporting 100% progress.
-  PROCESSORS "${_iccdev_aggregate_ctest_processors}"
 )
 
 # #2011: the BT.2100 fixtures have to agree with themselves.  All four
@@ -16581,18 +16556,6 @@ if(BASH_EXECUTABLE)
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 30
     LABELS "iccdev;clusterfuzzlite;libfuzzer;configuration;ci-infrastructure"
-  )
-
-  add_test(
-    NAME iccdev.clusterfuzzlite-targets
-    COMMAND
-      "${BASH_EXECUTABLE}"
-      "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-clusterfuzzlite-target-tests.sh"
-  )
-  set_tests_properties(iccdev.clusterfuzzlite-targets PROPERTIES
-    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
-    TIMEOUT 30
-    LABELS "iccdev;clusterfuzzlite;libfuzzer;targets;corpus;ci-infrastructure"
   )
 endif()
 

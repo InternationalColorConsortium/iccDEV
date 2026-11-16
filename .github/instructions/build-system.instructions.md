@@ -102,31 +102,44 @@ CMake and can leave a stale `/usr/bin/cc` cache entry after a failed configure.
 
 Run these from the repository root. They intentionally use CMake options instead
 of hand-written sanitizer flags so compile and link flags stay synchronized.
+The preset file lives in `Build/Cmake`; `cmake --preset` must therefore run in
+that directory. `-S Build/Cmake` does not change where CMake searches for a
+preset file.
+
+```bash
+# ASan preset: configure and build
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
+
+# TSan preset: configure and build
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
+
+# MSan preset: bootstrap the pinned instrumented runtime, configure, and build
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
+```
+
+The matching direct CMake one-liners are:
 
 ```bash
 # ASan only
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON
+cmake -S Build/Cmake -B out/linux-clang-asan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-asan-manual --parallel "$(nproc)"
+
+# TSan only
+cmake -S Build/Cmake -B out/linux-clang-tsan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-tsan-manual --parallel "$(nproc)"
+
+# MSan; bootstrap out/msan-runtime first with iccdev-build-msan-libcxx.sh
+export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && cmake -S Build/Cmake -B out/linux-clang-msan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_IMAGE_TOOLS=OFF -DICC_USE_ZLIB=OFF -DENABLE_LTO=OFF -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins" -DCMAKE_CXX_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdinc++ -isystem $ICCDEV_MSAN_LIBCXX_DIR/include/c++/v1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DLIBXML2_INCLUDE_DIR="$ICCDEV_MSAN_LIBCXX_DIR/include/libxml2" -DLIBXML2_LIBRARY="$ICCDEV_MSAN_LIBCXX_DIR/lib/libxml2.so" && cmake --build out/linux-clang-msan-manual --parallel "$(nproc)"
 
 # UBSan + IntSan + float checks, no ASan
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
-
-# Security repro default: ASan + UBSan + IntSan + float checks, no coverage
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
+cmake -S Build/Cmake -B out/linux-clang-ubsan-int-float -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON && cmake --build out/linux-clang-ubsan-int-float --parallel "$(nproc)"
 
 # Equivalent combined security build
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_SANITIZERS=ON
-
-# ThreadSanitizer only; do not combine with ASan, LSan, fuzzing, or ENABLE_SANITIZERS
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TSAN=ON
-
-# MemorySanitizer with instrumented libc++, libc++abi, and libxml2
-.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
+cmake -S Build/Cmake -B out/linux-clang-sanitizers -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_SANITIZERS=ON && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
 
 # Source coverage; keep separate from sanitizer reproduction attempts
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
+cmake -S Build/Cmake -B out/linux-clang-coverage -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_COVERAGE=ON
 
 # gprof/perf profiling; keep separate from sanitizer reproduction attempts
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_PROFILING=ON
+cmake -S Build/Cmake -B out/linux-clang-profiling -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_PROFILING=ON
 ```
 
 Use `docs/code-coverage.md` for pooled profraw naming, deterministic
@@ -134,10 +147,11 @@ module-matched merging, and local build-configuration timing. Never pass an
 unbounded profile glob or an `xargs` batch to one fixed `llvm-profdata -o`
 output.
 
-Build after configure with:
+For the configure-only coverage and profiling commands above, build with:
 
 ```bash
-make -j"$(nproc)"
+cmake --build out/linux-clang-coverage --parallel "$(nproc)"
+cmake --build out/linux-clang-profiling --parallel "$(nproc)"
 ```
 
 Preset equivalents live in `Build/Cmake/CMakePresets.json`:
@@ -166,8 +180,7 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 Example:
 
 ```bash
-cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
-cmake --build out/linux-clang-sanitizers -j"$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
 ```
 
 The `macos-clang-sanitizers` preset sets
@@ -195,7 +208,7 @@ that decision only with the interleaved
 On macOS, use GuardMalloc separately from sanitizer builds:
 
 ```bash
-cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc)
 cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
 cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
 DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib MallocScribble=1 MallocPreScribble=1 MallocGuardEdges=1 MallocStackLogging=1 out/macos-clang-guard-malloc/Tools/IccToXml/iccToXml input.icc output.xml
@@ -256,7 +269,9 @@ When adding a tool that should be covered by standard testing:
 1. Add its build output directory to the CTest tool path list.
 2. Add the target to the `check` dependency list when the test needs the tool.
 3. Add or update a CTest suite for the tool.
-4. Update `docs/ctest.md` and any workflow test-count assertions.
+4. Update `docs/ctest.md` and any direct label, fixture, or generated-profile
+   consumers. Discover the platform-specific CTest total; do not add a global
+   count assertion.
 
 ## vcpkg Port Integration
 

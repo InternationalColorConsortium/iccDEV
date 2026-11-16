@@ -252,7 +252,8 @@ MemorySanitizer origins under `/opt/iccdev-msan-libcxx`. This avoids false
 reports at uninstrumented C++ and XML runtime boundaries. The system unwinder
 remains uninstrumented so MSan can report findings without recursively
 instrumenting its own stack unwinding. The QA link uses `-nostdlib++` and fails if `ldd`
-still resolves libstdc++ for the JSON, XML, or threaded test binaries, or if
+still resolves libstdc++ for the JSON, XML, ApplyNamedCmm, or threaded test
+binaries, or if
 `iccFromXml` resolves the distribution libxml2. Build and run the focused JSON,
 XML, and threaded controls with:
 
@@ -264,9 +265,11 @@ This is a Debug-only diagnostic lane. Release, RelWithDebInfo, and MinSizeRel
 always compile taint tracing out, including when
 `ICCDEV_ENABLE_TAINT_TRACE=ON` is requested. A later Debug reconfigure retains
 the requested option and enables tracing again. The malformed parametric-curve
-and nonnumeric colorant PCS fixtures are fail-closed controls; valid fixtures
-exercise the same paths and must remain MemorySanitizer-clean. Because none of
-those fixtures leaves poisoned bytes, both QA scripts first run
+and nonnumeric colorant PCS fixtures are fail-closed controls. The truncated
+legacy colour-data header is also rejected before its signature bytes are read
+(#3066); valid fixtures exercise the same paths and must remain
+MemorySanitizer-clean. Because none of those fixtures leaves poisoned bytes,
+both QA scripts first run
 `iccTaintTraceMemoryStateProbe`, which poisons a buffer itself and must be
 traced as `state=poisoned first_bad=5`. The Memcheck script expects that target
 built in the same Debug tree as `iccFromJson`.
@@ -302,6 +305,10 @@ does not bootstrap third-party runtimes, so the focused MSan QA script owns
 the linkage assertions and XML regression control. Use
 `linux-clang-valgrind` for a separate non-sanitized Debug tree and
 `linux-clang-tsan` for a separate race-detector tree.
+The canonical host ASan, TSan, and MSan preset and direct-CMake one-liners are
+in [Build](build.md). They run preset discovery from
+`Build/Cmake`; do not append `-S Build/Cmake` to a root-directory
+`cmake --preset` invocation.
 
 For a local PR #2378 comparison, check out the default branch as `TOOLING` and
 the PR head as `TARGET`. These setup commands are each independently

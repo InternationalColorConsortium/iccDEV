@@ -66,7 +66,13 @@ if grep -Fq 'unrelated-artifact' "$plan_file"; then
 fi
 test "$(awk -F '\t' '$1 == "KEEP" && $4 == "2026-09-26T17:00:00Z" { n++ } END { print n+0 }' "$plan_file")" -eq 8
 
-head -n -4 "$artifact_file" > "$work_dir/incomplete.tsv"
+artifact_line_count="$(wc -l < "$artifact_file")"
+if [ "$artifact_line_count" -le 4 ]; then
+  echo "[FAIL] Artifact fixture must contain more than 4 rows" >&2
+  exit 1
+fi
+head -n "$((artifact_line_count - 4))" "$artifact_file" \
+  > "$work_dir/incomplete.tsv"
 if "$cleanup_script" --plan "$work_dir/incomplete.tsv" >/dev/null 2>&1; then
   echo "[FAIL] Artifact cleanup accepted a missing canonical target" >&2
   exit 1

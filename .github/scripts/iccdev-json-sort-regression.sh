@@ -52,22 +52,18 @@ if [ ! -x "$TOJSON" ]; then
   exit 1
 fi
 
-# Profiles chosen for shape, not size: a CLUT-heavy CMYK profile (mixed integer
-# and float scalars), a 100%-float display profile, and a smaller profile that
-# puts proportionally more weight on the object path than the array path.
-#
-# The indent list is per profile on purpose. Indentation is handled by the final
-# dump() and is orthogonal to document shape, so the full 0/2/4 sweep only needs
-# the cheapest profile; the large ones would just buy the same coverage at many
-# times the cost. Running the whole matrix on all three took 97s of the 300s
-# timeout under ASAN on a developer machine, which is too little headroom for a
-# loaded runner, and held 175MB of intermediates at once.
+# Compact profiles preserve the three distinct shapes this test needs: a CLUT
+# with mixed integer and float scalars, nested calculator objects, and a
+# float-heavy display profile. Large-document coverage belongs to the JSON
+# parser regression, so repeating it here only multiplies serialization cost.
+# Indentation is orthogonal to document shape; sweep 0/2/4 on one profile and
+# use the default indent for the other two.
 # Entries are <profile>|<comma separated indents>; commas rather than spaces so
 # that each entry survives word splitting as a single token.
 PROFILE_MATRIX="
-SpecRef/srgbRef.icc|0,2,4
-CMYK-3DLUTs/CMYK-3DLUTs.icc|2
-Display/LaserProjector.icc|2
+V2/v2CmykLut16.icc|0,2,4
+Calc/srgbCalc++Test.icc|2
+Display/Rec2020rgbColorimetric.icc|2
 "
 
 # Recursively assert ascending key order, and compare sorted against unsorted
@@ -178,8 +174,7 @@ for entry in $PROFILE_MATRIX; do
       rm -f "$WORK/$name.roundtrip.icc"
     fi
 
-    # These documents run to tens of MB each. Release every intermediate as soon
-    # as it has been checked rather than accumulating the whole matrix on disk.
+    # Release each intermediate after its checks.
     rm -f "$s1"
   done
 done

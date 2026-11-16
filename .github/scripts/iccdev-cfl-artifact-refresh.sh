@@ -86,17 +86,19 @@ if ! command -v unzip >/dev/null 2>&1; then
   exit 2
 fi
 
-declare -A seen_targets=()
+seen_targets=""
 for target in "$@"; do
   if ! is_supported_target "$target"; then
     echo "[FAIL] Unsupported ClusterFuzzLite target: $target" >&2
     exit 2
   fi
-  if [ -n "${seen_targets[$target]:-}" ]; then
-    echo "[FAIL] Duplicate ClusterFuzzLite target: $target" >&2
-    exit 2
-  fi
-  seen_targets[$target]=1
+  case " $seen_targets " in
+    *" $target "*)
+      echo "[FAIL] Duplicate ClusterFuzzLite target: $target" >&2
+      exit 2
+      ;;
+  esac
+  seen_targets="${seen_targets}${seen_targets:+ }$target"
 done
 mkdir -p "$output_dir"
 work_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/iccdev-cfl-refresh.XXXXXX")"

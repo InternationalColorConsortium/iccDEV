@@ -39,11 +39,26 @@ records, every profile signature matched, nonempty HTML, and nonempty LCOV.
 ## CI Signal
 
 `ci-code-coverage.yml` records environment metadata and millisecond phase
-timings in the developer artifact. Required profile-generation scripts,
-coverage instrumentation, and the registered hybrid CTest are gates. Expected
-capability exits from `iccFromXml` and `iccRoundTrip` remain separately counted
-review data. The artifact is uploaded with `always()` so a failed run preserves
-partial logs and timing evidence.
+timings in the developer artifact. Its primary percentage is a broad
+module-matched aggregate from legacy profile generation, the focused hybrid
+CTest, and tool/profile exercises. It is not a full-CTest percentage.
+
+The workflow also builds `build-test-binaries`, discovers the complete CTest
+inventory, runs its granular tests while excluding `standalone-aggregate`, and
+publishes a separate core-library report. That report selects only the four
+build-tree IccProfLib, IccXML, IccJSON, and IccConnect signatures identified by
+the already validated broad mapping. The earlier focused hybrid run writes to
+`profraw/` and contributes only to the broad report; it is not merged into the
+full-CTest phase's `profraw-full-ctest/` profiles. This keeps instrumented helper
+executables, nested package rebuilds, and intentionally separate focused runs
+from changing the denominator. The workflow reports both denominators; do not
+combine or compare their percentages as though they were the same population.
+
+Required profile-generation scripts, both CTest gates, coverage
+instrumentation, signature selection, and report construction fail the job.
+Expected capability exits from `iccFromXml` and `iccRoundTrip` remain
+separately counted review data. The artifact is uploaded with `always()` so a
+failed run preserves partial logs and timing evidence.
 
 Compare coverage only between runs using the same compiler, source revision,
 test corpus, module-matching method, and build configuration. A material

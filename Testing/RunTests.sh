@@ -161,7 +161,18 @@ fi
 
 echo "==========================================================================="
 echo "Test iccProfileVisualize with sRGBv4_preference"
-iccProfileVisualize sRGB_v4_ICC_preference.icc
+VIZ_DIR="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-profile-visualize.XXXXXX")" || exit 1
+cleanup_visualize() {
+    rm -rf "$VIZ_DIR"
+}
+trap cleanup_visualize EXIT
+cp sRGB_v4_ICC_preference.icc "$VIZ_DIR/"
+(
+	cd "$VIZ_DIR"
+	iccProfileVisualize sRGB_v4_ICC_preference.icc
+)
+cleanup_visualize
+trap - EXIT
 
 
 echo "====================== Exiting Testing/RunTests.sh =========================="

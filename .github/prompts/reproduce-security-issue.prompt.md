@@ -32,19 +32,30 @@ gh api "repos/InternationalColorConsortium/iccDEV/security-advisories/GHSA-xxxx-
 
 ## Step 2: Build with Sanitizers
 
-```bash
-cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ cmake Cmake \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_TOOLS=ON \
-  -DENABLE_ASAN=ON \
-  -DENABLE_UBSAN=ON \
-  -DENABLE_INTEGER_SANITIZER=ON \
-  -DENABLE_FLOAT_SANITIZER=ON
-make -j"$(nproc)"
+The preset file is `Build/Cmake/CMakePresets.json`; run preset commands from
+that directory. From the repository root, the canonical ASan, TSan, and MSan
+copy/paste one-liners are:
 
-# CRITICAL: Verify ASAN is linked (must be > 0)
-nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
+```bash
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
+```
+
+The direct CMake equivalents are:
+
+```bash
+cmake -S Build/Cmake -B out/linux-clang-asan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-asan-manual --parallel "$(nproc)"
+cmake -S Build/Cmake -B out/linux-clang-tsan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-tsan-manual --parallel "$(nproc)"
+export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && cmake -S Build/Cmake -B out/linux-clang-msan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_IMAGE_TOOLS=OFF -DICC_USE_ZLIB=OFF -DENABLE_LTO=OFF -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins" -DCMAKE_CXX_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdinc++ -isystem $ICCDEV_MSAN_LIBCXX_DIR/include/c++/v1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DLIBXML2_INCLUDE_DIR="$ICCDEV_MSAN_LIBCXX_DIR/include/libxml2" -DLIBXML2_LIBRARY="$ICCDEV_MSAN_LIBCXX_DIR/lib/libxml2.so" && cmake --build out/linux-clang-msan-manual --parallel "$(nproc)"
+```
+
+Verify the selected runtime before claiming coverage:
+
+```bash
+nm -D out/linux-clang-asan/Tools/IccDumpProfile/iccDumpProfile | grep __asan_init
+nm -D out/linux-clang-tsan/Tools/IccApplyProfiles/iccApplyProfiles | grep __tsan_init
+ldd out/linux-clang-msan/Tools/IccFromXml/iccFromXml && nm -D out/linux-clang-msan/Tools/IccFromXml/iccFromXml | grep __msan_init
 ```
 
 **Note**: `-fsanitize=integer` detects unsigned integer overflow (wrapping),
@@ -52,6 +63,13 @@ which is well-defined per C/C++ standard and NOT caught by `undefined` alone.
 Issue #769 required this flag. MSVC does not support it. Do not add coverage
 flags or `-DENABLE_COVERAGE=ON` when reproducing sanitizer findings; coverage
 instrumentation can mask a bug.
+
+For the historical combined ASan, UBSan, IntSan, and float configuration, use
+a separate out-of-tree build:
+
+```bash
+cmake -S Build/Cmake -B out/linux-clang-sanitizers -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
+```
 
 For uninitialized-memory findings, do not keep suppressing frames when a JSON
 or threaded run stops in `libstdc++` or an ordinary distro `libc++`. That is an

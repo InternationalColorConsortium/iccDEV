@@ -28,6 +28,7 @@ if [ ! -d "$TOOLS_DIR" ]; then
 fi
 
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
+FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 DUMP="$TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 APPLYNCM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
 # Read the issue-1103 fixture from the regression corpus rather than from
@@ -260,6 +261,45 @@ run_reject_profile() {
   pass_case "$name"
 }
 
+capture_validation_inventory() {
+  local name="$1"
+  local logfile="$2"
+  local inventory="$3"
+
+  if ! grep -Eq '^Profile is valid( for version [^[:space:]]+)?$' "$logfile"; then
+    fail_case "$name" "iccDumpProfile did not report a clean-valid verdict"
+    sed -n '/^Validation Report$/,$p' "$logfile" | sed -n '1,20p'
+    return 1
+  fi
+
+  awk '
+    /^(Data Color Space|PCS Color Space|Profile Class|Version):/ ||
+    /^Profile Tags \([0-9]+\)$/ ||
+    /^Contents of .* tag \(.+\)$/ ||
+    /^Type: / ||
+    /^[[:space:]]*=== MPE Element Chain:/ ||
+    /^[[:space:]]*\[[0-9]+\].*[0-9]+->[0-9]+/ ||
+    /^Profile is / {
+      line = $0
+      gsub(/[[:space:]]+/, " ", line)
+      sub(/^ /, "", line)
+      sub(/ $/, "", line)
+      print line
+    }
+  ' "$logfile" > "$inventory"
+
+  if ! grep -q '^Profile Tags (' "$inventory" ||
+     ! grep -q '^Contents of ' "$inventory" ||
+     ! grep -q '^Type: ' "$inventory" ||
+     ! grep -q 'MPE Element Chain:' "$inventory"; then
+    fail_case "$name" "iccDumpProfile inventory evidence is incomplete"
+    sed -n '1,40p' "$inventory"
+    return 1
+  fi
+
+  return 0
+}
+
 # ICC.2:2023 Table 102 'noop', 'scnt' and 'vxor' (#2086). Before the fix
 # iccFromXml rejected these fixtures with Invalid Operator "..." and wrote no
 # profile, so the conversion alone is the red/green check for acceptance.
@@ -275,31 +315,178 @@ run_table102_operator_fixture() {
   local name="$1"
   local fixture="$2"
   local expected="$3"
-  local source_xml="$REPO_ROOT/.github/ci/regression/${fixture}.xml"
+  local format="$4"
+  local source="$REPO_ROOT/.github/ci/regression/${fixture}.${format}"
   local source_txt="$REPO_ROOT/.github/ci/regression/issue-2086-table102-operands.txt"
-  local built_icc="$OUTDIR/${fixture}.icc"
-  local fromxml_log="$OUTDIR/${fixture}-fromxml.log"
-  local apply_log="$OUTDIR/${fixture}-apply.log"
+  local built_icc="$OUTDIR/${fixture}-${format}.icc"
+  local parse_log="$OUTDIR/${fixture}-${format}-parse.log"
+  local validate_log="$OUTDIR/${fixture}-${format}-validate.log"
+  local inventory="$OUTDIR/${fixture}-${format}-inventory.txt"
+  local apply_log="$OUTDIR/${fixture}-${format}-apply.log"
+  local parser="$FROMXML"
+  local parser_label="iccFromXml"
   local exit_code=0
   local rows=0
   local row
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$built_icc" "$fromxml_log" "$apply_log"
+  rm -f "$built_icc" "$parse_log" "$validate_log" "$inventory" "$apply_log"
 
-  if [ ! -f "$source_xml" ] || [ ! -f "$source_txt" ]; then
-    fail_case "$name" "missing Table 102 fixture"
+  if [ "$format" = json ]; then
+    parser="$FROMJSON"
+    parser_label="iccFromJson"
+  fi
+
+  if [ ! -f "$source" ] || [ ! -f "$source_txt" ]; then
+    fail_case "$name/$format" "missing Table 102 fixture"
     return
   fi
 
-  timeout 30 "$FROMXML" "$source_xml" "$built_icc" > "$fromxml_log" 2>&1 || exit_code=$?
-  if ! check_log "$name/fromxml" "$fromxml_log"; then
+  timeout 30 "$parser" "$source" "$built_icc" > "$parse_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/$format/parse" "$parse_log"; then
     return
   fi
   if [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
-    fail_case "$name" "iccFromXml rejected the Table 102 operators (exit=$exit_code)"
-    sed -n '1,10p' "$fromxml_log"
+    fail_case "$name/$format" "$parser_label rejected the Table 102 operators (exit=$exit_code)"
+    sed -n '1,10p' "$parse_log"
     return
+  fi
+
+  exit_code=0
+  timeout 30 "$DUMP" -v "$built_icc" ALL > "$validate_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/$format/validate" "$validate_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name/$format" "iccDumpProfile validation failed with exit=$exit_code"
+    sed -n '1,20p' "$validate_log"
+    return
+  fi
+  if ! capture_validation_inventory "$name/$format" "$validate_log" "$inventory"; then
+    return
+  fi
+  if [ "$format" = json ]; then
+    local xml_inventory="$OUTDIR/${fixture}-xml-inventory.txt"
+    if ! cmp -s "$xml_inventory" "$inventory"; then
+      fail_case "$name/$format" "validation and profile inventories differ from XML"
+      diff -u "$xml_inventory" "$inventory" | sed -n '1,80p' || true
+      return
+    fi
+  fi
+
+  exit_code=0
+  timeout 30 "$APPLYNCM" "$source_txt" 3 0 "$built_icc" 1 > "$apply_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/$format/apply" "$apply_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name/$format" "iccApplyNamedCmm failed with exit=$exit_code"
+    return
+  fi
+
+  # Data rows carry the source values after a ';'. Compare only the result
+  # triple, and count the rows so that "no output at all" cannot pass.
+  while IFS= read -r row; do
+    rows=$((rows + 1))
+    if [ "$row" != "$expected" ]; then
+      fail_case "$name/$format" "row $rows was '$row', expected '$expected'"
+      return
+    fi
+  done < <(awk -F';' '/;/ && $1 ~ /[0-9]/ {print $1}' "$apply_log" |
+             awk '{ if (NF==3) printf "%s %s %s\n", $1, $2, $3 }')
+
+  if [ "$rows" -ne 3 ]; then
+    fail_case "$name/$format" "expected 3 result rows, saw $rows"
+    return
+  fi
+
+  pass_case "$name/$format"
+}
+
+run_table102_operators() {
+  run_table102_operator_fixture \
+    "issue-2086-vxor-operator" \
+    "issue-2086-vxor-operator" \
+    "1.0000 0.0000 0.0000" \
+    xml
+  run_table102_operator_fixture \
+    "issue-2086-vxor-operator" \
+    "issue-2086-vxor-operator" \
+    "1.0000 0.0000 0.0000" \
+    json
+  run_table102_operator_fixture \
+    "issue-2086-noop-scnt-operators" \
+    "issue-2086-noop-scnt-operators" \
+    "0.0000 1.0000 2.0000" \
+    xml
+  run_table102_operator_fixture \
+    "issue-2086-noop-scnt-operators" \
+    "issue-2086-noop-scnt-operators" \
+    "0.0000 1.0000 2.0000" \
+    json
+}
+
+# This pair is deliberately authored once in XML and once by hand in JSON.
+# The serialized ICC profile is not the document oracle: calculator source is
+# compiled into operations, and writing it back normalizes spelling, whitespace,
+# and float text. Instead, both documents must independently parse and act as
+# the same identity transform for every sample.
+run_structured_calculator_fixture() {
+  local format="$1"
+  local name="calculator-structure-symmetry/$format"
+  local source="$REPO_ROOT/.github/ci/regression/calculator-structure-symmetry.${format}"
+  local source_txt="$REPO_ROOT/.github/ci/regression/issue-2086-table102-operands.txt"
+  local built_icc="$OUTDIR/calculator-structure-symmetry-${format}.icc"
+  local parse_log="$OUTDIR/calculator-structure-symmetry-${format}-parse.log"
+  local validate_log="$OUTDIR/calculator-structure-symmetry-${format}-validate.log"
+  local inventory="$OUTDIR/calculator-structure-symmetry-${format}-inventory.txt"
+  local apply_log="$OUTDIR/calculator-structure-symmetry-${format}-apply.log"
+  local parser="$FROMXML"
+  local exit_code=0
+  local rows=0
+  local result source_sample
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$built_icc" "$parse_log" "$validate_log" "$inventory" "$apply_log"
+
+  if [ "$format" = json ]; then
+    parser="$FROMJSON"
+  fi
+  if [ ! -f "$source" ] || [ ! -f "$source_txt" ]; then
+    fail_case "$name" "missing calculator structure fixture"
+    return
+  fi
+
+  timeout 30 "$parser" "$source" "$built_icc" > "$parse_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/parse" "$parse_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$built_icc" ]; then
+    fail_case "$name" "parser rejected the structured calculator (exit=$exit_code)"
+    sed -n '1,20p' "$parse_log"
+    return
+  fi
+
+  exit_code=0
+  timeout 30 "$DUMP" -v "$built_icc" ALL > "$validate_log" 2>&1 || exit_code=$?
+  if ! check_log "$name/validate" "$validate_log"; then
+    return
+  fi
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "iccDumpProfile validation failed with exit=$exit_code"
+    sed -n '1,20p' "$validate_log"
+    return
+  fi
+  if ! capture_validation_inventory "$name" "$validate_log" "$inventory"; then
+    return
+  fi
+  if [ "$format" = json ]; then
+    local xml_inventory="$OUTDIR/calculator-structure-symmetry-xml-inventory.txt"
+    if ! cmp -s "$xml_inventory" "$inventory"; then
+      fail_case "$name" "validation and profile inventories differ from XML"
+      diff -u "$xml_inventory" "$inventory" | sed -n '1,80p' || true
+      return
+    fi
   fi
 
   exit_code=0
@@ -312,16 +499,15 @@ run_table102_operator_fixture() {
     return
   fi
 
-  # Data rows carry the source values after a ';'. Compare only the result
-  # triple, and count the rows so that "no output at all" cannot pass.
-  while IFS= read -r row; do
+  while IFS=';' read -r result source_sample; do
+    result="$(printf '%s\n' "$result" | awk '{$1=$1; print}')"
+    source_sample="$(printf '%s\n' "$source_sample" | awk '{$1=$1; print}')"
     rows=$((rows + 1))
-    if [ "$row" != "$expected" ]; then
-      fail_case "$name" "row $rows was '$row', expected '$expected'"
+    if [ "$result" != "$source_sample" ]; then
+      fail_case "$name" "row $rows was '$result', expected source '$source_sample'"
       return
     fi
-  done < <(awk -F';' '/;/ && $1 ~ /[0-9]/ {print $1}' "$apply_log" |
-             awk '{ if (NF==3) printf "%s %s %s\n", $1, $2, $3 }')
+  done < <(awk -F';' '/;/ && $1 ~ /[0-9]/ {print $1 ";" $2}' "$apply_log")
 
   if [ "$rows" -ne 3 ]; then
     fail_case "$name" "expected 3 result rows, saw $rows"
@@ -331,15 +517,9 @@ run_table102_operator_fixture() {
   pass_case "$name"
 }
 
-run_table102_operators() {
-  run_table102_operator_fixture \
-    "issue-2086-vxor-operator" \
-    "issue-2086-vxor-operator" \
-    "1.0000 0.0000 0.0000"
-  run_table102_operator_fixture \
-    "issue-2086-noop-scnt-operators" \
-    "issue-2086-noop-scnt-operators" \
-    "0.0000 1.0000 2.0000"
+run_structured_calculator_pair() {
+  run_structured_calculator_fixture xml
+  run_structured_calculator_fixture json
 }
 
 run_issue_1103_dump_profile_regression() {
@@ -555,6 +735,7 @@ run_calc_import_case() {
 }
 
 require_tool "$FROMXML" "iccFromXml" || true
+require_tool "$FROMJSON" "iccFromJson" || true
 require_tool "$DUMP" "iccDumpProfile" || true
 require_tool "$APPLYNCM" "iccApplyNamedCmm" || true
 
@@ -571,6 +752,7 @@ if [ "$FAIL" -eq 0 ]; then
   run_reject_profile "calcOverMem_tsav.icc"
   run_issue_1103_dump_profile_regression
   run_table102_operators
+  run_structured_calculator_pair
   run_calc_position_boundary_case "calc-position-intmax-overflow" 2147483647 2 reject
   run_calc_position_boundary_case "calc-position-past-end" 65535 2 reject
   run_calc_position_boundary_case "calc-position-last-register" 65535 1 accept

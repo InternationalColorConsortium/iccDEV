@@ -88,12 +88,13 @@ if [ -z "$FROMXML" ] || [ ! -x "$FROMXML" ]; then
   exit 0
 fi
 
-# All three inputs are tracked in git, unlike the Testing/*.icc profiles that
+# All four inputs are tracked in git, unlike the Testing/*.icc profiles that
 # CreateAllProfiles.sh generates -- so this test needs no profile fixture.
 CMYK_XML="$REPO_ROOT/Testing/CMYK-3DLUTs/CMYK-3DLUTs.xml"
+GRAY_XML="$REPO_ROOT/Testing/V2/v2GrayTRC.xml"
 SRGB="$REPO_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 PCC="$REPO_ROOT/Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
-for f in "$CMYK_XML" "$SRGB" "$PCC"; do
+for f in "$CMYK_XML" "$GRAY_XML" "$SRGB" "$PCC"; do
   if [ ! -f "$f" ]; then
     echo "[SKIP] required tracked input missing: $f"
     exit 0
@@ -108,6 +109,17 @@ if ! ( cd "$(dirname "$CMYK_XML")" && "$FROMXML" "$(basename "$CMYK_XML")" "$CMY
      > "$OUTDIR/fromxml.log" 2>&1 || [ ! -f "$CMYK" ]; then
   echo "[SKIP] could not build the CMYK source from $CMYK_XML"
   sed 's/^/    /' "$OUTDIR/fromxml.log"
+  exit 0
+fi
+
+# A one-channel source is sufficient for the positive grid-255 boundary: it
+# still fails if a repair simply lowers the documented maximum to 254, while
+# producing 255 nodes instead of the old RGB control's 16,581,375 nodes.
+GRAY="$OUTDIR/gray-source.icc"
+if ! ( cd "$(dirname "$GRAY_XML")" && "$FROMXML" "$(basename "$GRAY_XML")" "$GRAY" ) \
+     > "$OUTDIR/fromxml-gray.log" 2>&1 || [ ! -f "$GRAY" ]; then
+  echo "[SKIP] could not build the grayscale source from $GRAY_XML"
+  sed 's/^/    /' "$OUTDIR/fromxml-gray.log"
   exit 0
 fi
 
@@ -192,14 +204,12 @@ expect_reject "cap-v4-grid255" "LUT size too large" \
 expect_reject "cap-v5-grid255" "LUT size too large" \
   "$O" 0 255 1 "QA cap v5" 0 1 1 0 "$CMYK" 1 "$SRGB" 1
 
-# A three-channel source at the same lut_size stays viable: the rejection above
+# A one-channel source at the same lut_size stays viable: the rejection above
 # must come from the capacity arithmetic, not from lut_size 255 being refused
-# outright -- without this control, capping lut_size at 254 would "fix" the
-# crash and still pass.  255^3 = 16,581,375 nodes: measured at 8.9s and 195 MB
-# resident un-sanitized, and it dominates this script's runtime (8.8s of the
-# plain run, 35s under ASAN, against the 300s CTest budget).
-expect_ok "cap-rgb-grid255-still-ok" \
-  "$O" 0 255 0 "QA cap rgb" 0 1 1 0 "$SRGB" 1 "$SRGB" 1
+# outright. Without this control, capping lut_size at 254 would "fix" the crash
+# and still pass. The channel-independent parser boundary needs only 255 nodes.
+expect_ok "cap-gray-grid255-still-ok" \
+  "$O" 0 255 0 "QA cap gray" 0 1 1 0 "$GRAY" 1 "$SRGB" 1
 
 ###############################################################################
 # 2. Range ordering -- QA cases 19 and 20.  Both exited 0 pre-fix.

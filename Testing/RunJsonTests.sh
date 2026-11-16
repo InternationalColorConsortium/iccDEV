@@ -13,6 +13,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${1:-$SCRIPT_DIR/../Build/Tools}"
 
+TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-json-roundtrip.XXXXXX")"
+JSON_TEMP="$TEMP_DIR/json-rt-test.json"
+ICC_TEMP="$TEMP_DIR/json-rt-test.icc"
+trap 'rm -f -- "$JSON_TEMP" "$ICC_TEMP"; rmdir -- "$TEMP_DIR" 2>/dev/null || true' EXIT
+
 if [ -x "$BUILD_DIR/IccToJson/iccToJson" ] || [ -x "$BUILD_DIR/IccFromJson/iccFromJson" ]; then
   TOOLS_DIR="$BUILD_DIR"
   BUILD_ROOT="$(dirname "$TOOLS_DIR")"
@@ -61,7 +66,7 @@ while IFS= read -r icc; do
   relpath="${icc#"$SCRIPT_DIR"/}"
 
   # ToJson
-  if ! timeout 30 "$TOJSON" "$icc" /tmp/json-rt-test.json >/dev/null 2>&1; then
+  if ! timeout 30 "$TOJSON" "$icc" "$JSON_TEMP" >/dev/null 2>&1; then
     SKIP=$((SKIP + 1))
     echo "[SKIP] $relpath (ToJson failed)"
     continue
@@ -84,10 +89,10 @@ while IFS= read -r icc; do
   # what this gate can see: it compares bytes, and a profile whose bytes are
   # right cannot be distinguished here from one whose verdict is also right.
   # iccdev.json-namedcolor-colorspaces is what asserts the verdict.
-  rm -f /tmp/json-rt-test.icc
+  rm -f -- "$ICC_TEMP"
   fromjson_rc=0
-  timeout 30 "$FROMJSON" /tmp/json-rt-test.json /tmp/json-rt-test.icc >/dev/null 2>&1 || fromjson_rc=$?
-  if [ ! -s /tmp/json-rt-test.icc ]; then
+  timeout 30 "$FROMJSON" "$JSON_TEMP" "$ICC_TEMP" >/dev/null 2>&1 || fromjson_rc=$?
+  if [ ! -s "$ICC_TEMP" ]; then
     if is_expected_fromjson_failure "$relpath"; then
       XFAIL=$((XFAIL + 1))
       echo "[XFAIL] $relpath (expected invalid calculator profile)"
@@ -95,12 +100,12 @@ while IFS= read -r icc; do
       SKIP=$((SKIP + 1))
       echo "[SKIP] $relpath (FromJson wrote no profile, exit=$fromjson_rc)"
     fi
-    rm -f /tmp/json-rt-test.json
+    rm -f -- "$JSON_TEMP"
     continue
   fi
 
   orig_size=$(wc -c < "$icc" | tr -d ' ')
-  rt_size=$(wc -c < /tmp/json-rt-test.icc | tr -d ' ')
+  rt_size=$(wc -c < "$ICC_TEMP" | tr -d ' ')
 
   if [ "$orig_size" -eq "$rt_size" ]; then
     PASS=$((PASS + 1))
@@ -114,7 +119,7 @@ while IFS= read -r icc; do
     echo "[FAIL] $relpath (orig=$orig_size rt=$rt_size delta=$delta)"
   fi
 
-  rm -f /tmp/json-rt-test.json /tmp/json-rt-test.icc
+  rm -f -- "$JSON_TEMP" "$ICC_TEMP"
 done < <(find "$SCRIPT_DIR" -name '*.icc' -type f | sort)
 
 NON_CALC_FAIL=$((FAIL - CALC_FAIL))

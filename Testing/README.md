@@ -82,7 +82,10 @@ The final section performs an optional JSON round trip and invokes
 `iccProfileVisualize`. Missing JSON tools are a skip unless
 `ICCDEV_REQUIRE_JSON_ROUNDTRIP=1` in the shell lane. A failed command produces
 a failing script status: the shell stops at the failed command, while the batch
-lane records failures and completes the remaining independent cases.
+lane records failures and completes the remaining independent cases. The shell
+lane copies the visualization input into a temporary directory and removes its
+generated TIFF/PDF artifacts before returning, so CTest does not dirty the
+source `Testing/` tree.
 
 ### `RunJsonTests.sh`
 
@@ -95,7 +98,9 @@ Run from any directory with an optional build or tools directory:
 ```
 
 This Bash-only exhaustive JSON parity lane finds every `Testing/**/*.icc`,
-writes temporary JSON and ICC round-trip files, and compares their byte sizes.
+writes JSON and ICC round-trip files in a private per-invocation temporary
+directory, and compares their byte sizes. Concurrent invocations therefore do
+not remove or replace one another's outputs.
 Known malformed Calculator under-stack fixtures are reported as expected
 failures. A profile rejected by either JSON tool is a skip; size differences
 outside `CalcTest` fail the script.

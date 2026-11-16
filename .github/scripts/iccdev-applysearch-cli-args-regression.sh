@@ -10,25 +10,19 @@
 # ignored one. iccApplySearch shares that usage but never got the guard, so
 # "cfg-extra" below is the case that fails against an unfixed tool. The remaining
 # rejects already hold on master and are pinned here so the argument surface has
-# a home of its own rather than living only inside the tool-coverage baseline.
+# one focused regression contract.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools
 #   ICCDEV_TESTING_DIR -- path to Testing
 #   ICCDEV_TEST_OUTDIR -- output directory for generated logs/configs
-#   --exhaustive-thread-matrix: test 0/1/2/4/8 workers above the 1,024-pixel
-#                                bulk threshold (default: 0/1/2 above 256)
 ###############################################################################
 
 set -euo pipefail
 
-if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != "--exhaustive-thread-matrix" ]; }; then
-  echo "usage: $0 [--exhaustive-thread-matrix]" >&2
+if [ "$#" -ne 0 ]; then
+  echo "usage: $0" >&2
   exit 2
-fi
-THREAD_MATRIX_MODE=fast
-if [ "$#" -eq 1 ]; then
-  THREAD_MATRIX_MODE=exhaustive
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -179,17 +173,12 @@ fi
 run_expect_success valid-cfg "$APPLY" -cfg "$CFG"
 run_expect_success valid-legacy "$APPLY" "$DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
-# Exactly 257 rows activate two workers in the small-batch path (256 pixels
-# per worker). The exhaustive mode uses 1,025 rows to activate all eight in the
-# bulk path (128 pixels per worker). Keep both inputs at the threshold boundary
-# even if the tracked input's row count changes.
-if [ "$THREAD_MATRIX_MODE" = exhaustive ]; then
-  target_rows=1025
-  thread_counts=(0 1 2 4 8)
-else
-  target_rows=257
-  thread_counts=(0 1 2)
-fi
+# Exactly 257 rows activate both requested workers in the small-batch path (256
+# pixels per worker). The native iccdev.iccconnect-threaded-cmm regression owns
+# the 1,024-pixel bulk boundary and repeated threaded applies, so this CLI test
+# keeps only the explicit two-worker wiring and scalar-output parity unique to
+# iccApplySearch.
+target_rows=257
 awk -v target="$target_rows" '
   { sub(/\r$/, "") }
   NR <= 2 { header[NR] = $0; next }
@@ -212,16 +201,14 @@ if [ ! -s "$OUTDIR/valid-threads-default.log" ]; then
   fail "valid-threads-default produced no output"
 fi
 assert_output_rows valid-threads-default "$target_rows"
-for nthreads in "${thread_counts[@]}"; do
-  run_expect_success "valid-threads-$nthreads" \
-    "$APPLY" -threads "$nthreads" "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
-  if [ ! -s "$OUTDIR/valid-threads-$nthreads.log" ]; then
-    fail "valid-threads-$nthreads produced no output"
-  fi
-  assert_output_rows "valid-threads-$nthreads" "$target_rows"
-  cmp "$OUTDIR/valid-threads-default.log" "$OUTDIR/valid-threads-$nthreads.log" ||
-    fail "valid-threads-$nthreads output differs from the default output"
-done
+run_expect_success valid-threads-2 \
+  "$APPLY" -threads 2 "$THREADED_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+if [ ! -s "$OUTDIR/valid-threads-2.log" ]; then
+  fail "valid-threads-2 produced no output"
+fi
+assert_output_rows valid-threads-2 "$target_rows"
+cmp "$OUTDIR/valid-threads-default.log" "$OUTDIR/valid-threads-2.log" ||
+  fail "valid-threads-2 output differs from the default output"
 run_expect_success valid-threads-cfg "$APPLY" -threads 8 -cfg "$CFG"
 cmp "$OUTDIR/valid-cfg.log" "$OUTDIR/valid-threads-cfg.log" ||
   fail "valid-threads-cfg output differs from valid-cfg"

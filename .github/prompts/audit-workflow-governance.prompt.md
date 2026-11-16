@@ -124,11 +124,11 @@ For EVERY `run:` step in the workflow, verify:
 
 ## Running the Audit
 
-### Automated (preferred)
+### Hosted audit
 
-The cross-platform governance scanner runs automatically on every pull request
-as the read-only PR security canary. For branch, ref, or focused maintainer
-review, trigger it manually:
+The cross-platform governance scanner is a read-only manual and reusable
+workflow. Trigger its Linux and Windows audits directly for a branch, ref, or
+focused maintainer review:
 
 ```bash
 gh workflow run ci-pr-risk-security-analysis.yml \

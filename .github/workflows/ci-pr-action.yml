@@ -686,7 +686,7 @@ jobs:
             mcp_changed=true
           fi
 
-          if has_changed_file '^\.github/workflows/(ci-apple-platform-smoke|ci-apple-mobile-core|ci-pr-action)\.yml$|^\.github/scripts/iccdev-xcode-ctest-smoke\.sh$'; then
+          if has_changed_file '^\.github/workflows/(ci-apple-mobile-core|ci-pr-action)\.yml$|^\.github/scripts/iccdev-xcode-ctest-smoke\.sh$'; then
             apple_xcode_changed=true
           fi
 
@@ -1175,12 +1175,26 @@ jobs:
     if: ${{ (needs.detect-src.outputs.run_native_matrix == 'true' && needs.detect-src.outputs.fast_lane != 'true') || needs.detect-src.outputs.apple_xcode_changed == 'true' }}
     name: Apple Xcode CTest runtime layouts
     needs: [detect-src, validate-inputs]
-    uses: ./.github/workflows/ci-apple-platform-smoke.yml
-    with:
-      scope: xcode
-      target-sha: ${{ needs.detect-src.outputs.target_sha }}
-      base-sha: ${{ needs.detect-src.outputs.base_sha }}
-      pr_number: ${{ needs.detect-src.outputs.pr_number }}
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout test sources
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.detect-src.outputs.target_sha }}
+          persist-credentials: false
+
+      # preflight: allow-pr-script-execution reason=xcode-ctest-runtime-test-only
+      - name: Exercise Xcode CTest runtime layouts
+        # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/scripts/iccdev-xcode-ctest-smoke.sh
 
   example-project:
     if: ${{ needs.detect-src.outputs.example_consumer_changed == 'true' }}

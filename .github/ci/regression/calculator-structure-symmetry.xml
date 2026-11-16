@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Authored XML reference for calculator parser symmetry. The adjacent JSON is
+  maintained by hand; do not regenerate it through an ICC blob. Both documents
+  exercise named channels, variables with members, macros and macro locals,
+  calculator limits, and a named matrix sub-element as one identity transform.
+-->
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.0</ProfileVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-15T00:00:00</CreationDateTime>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[calculator structure parser symmetry]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiProcessElementType>
+      <TagSignature>A2B1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3"
+                           InputNames="rgb[3]" OutputNames="xyz[3]">
+          <CalculatorLimits MaxStackSize="32" MaxTempChannels="32"
+                            MaxOperations="128"/>
+          <Variables>
+            <Declare Name="sample" Size="3">r g b</Declare>
+          </Variables>
+          <Macros>
+            <Macro Name="store" Local="hold[3]">tput{@hold} tget{@hold}</Macro>
+            <Macro Name="throughIdentity">mtx{identity}</Macro>
+          </Macros>
+          <SubElements>
+            <MatrixElement Name="identity" InputChannels="3" OutputChannels="3">
+              <MatrixData>
+                1 0 0
+                0 1 0
+                0 0 1
+              </MatrixData>
+            </MatrixElement>
+          </SubElements>
+          <MainFunction>
+            {
+              in{rgb}
+              call{store}
+              #throughIdentity
+              tput{sample}
+              tget{sample.r} tget{sample.g} tget{sample.b}
+              out{xyz}
+            }
+          </MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <multiProcessElementType>
+      <TagSignature>B2A1</TagSignature>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <CalculatorElement InputChannels="3" OutputChannels="3">
+          <MainFunction>{ in(0,3) out(0,3) }</MainFunction>
+        </CalculatorElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9505" Y="1.00000000" Z="1.0891"/>
+    </XYZType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+  </Tags>
+</IccProfile>

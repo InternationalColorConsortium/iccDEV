@@ -161,7 +161,7 @@ can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
 is used with an executable that was linked without an `LC_UUID` load command.
 
 ```bash
-cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc)
 cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
 cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
 
@@ -216,17 +216,17 @@ reports this as a non-failing gap while exercising the library-backed
 capabilities those tools depend on.
 
 The `Apple mobile core libraries` workflow discovers installed Apple SDKs,
-builds every matching minimal and extended mobile-core preset, and runs the
-simulator and Xcode CTest smoke gates below on standalone manual dispatches.
+builds every matching minimal and extended mobile-core preset, and validates
+the resulting archive and bounded Xcode CTest runtime layouts on standalone
+manual dispatches.
 Manual runs upload the static libraries, generated version headers, and build manifest as
 `iccdev-apple-mobile-core`. The workflow also remains callable by trusted
 workflow orchestration without uploading PR-controlled artifacts. Normal PR CI
-calls `Apple platform smoke` for the bounded Xcode CTest runtime-layout gate;
-it does not run the long simulator gate. Dispatch
-`.github/workflows/ci-apple-mobile-core.yml` or
-`.github/workflows/ci-apple-platform-smoke.yml` when a change needs this Apple
-simulator gate before review. The platform workflow also offers a focused
-`xcode` scope for a standalone runtime-layout check.
+runs the bounded Xcode CTest runtime-layout gate directly in the central PR
+workflow. Hosted workflows do not run the long simulator matrix; use the
+explicit local simulator commands below when that evidence is needed. Dispatch
+`.github/workflows/ci-apple-mobile-core.yml` for a standalone archive build and
+Xcode runtime-layout check.
 
 The manual `ci-latest-release` workflow builds the Apple mobile-core artifact
 without rerunning simulator or Xcode smoke tests. For an approved release, it
@@ -398,9 +398,8 @@ on one disposable iOS simulator:
 .github/scripts/iccdev-ios-example-smoke.sh sanitizers
 ```
 
-The manually dispatched `Apple platform smoke` workflow exposes `core`,
-`examples`, and `all` scopes so example-only QA does not repeat the tvOS,
-watchOS, and Xcode CTest gates.
+The combined example helper is an explicit local gate. Hosted workflows do not
+run it automatically or repeat the tvOS and watchOS simulator matrix.
 
 Each helper removes bundle-ID drift by forwarding `BUNDLE_ID` to
 each app-specific CMake bundle variable, uses Release by default, and launches
@@ -612,11 +611,12 @@ presets turn on tests, tools, zlib-backed compressed tag support
 (`ICC_USE_ZLIB=ON`), and QA evidence hooks for the common local toolchains:
 
 ```bash
-cmake --preset linux-clang-qa-flags -S Build/Cmake -B out/linux-clang-qa-flags
+(cd Build/Cmake && cmake --preset linux-clang-qa-flags -B ../../out/linux-clang-qa-flags)
 cmake --build out/linux-clang-qa-flags --parallel "$(nproc)"
 ctest --test-dir out/linux-clang-qa-flags -R "^iccdev\.qa-target-flags$" --output-on-failure --no-tests=error
 
-cmake --preset linux-clang-qa-sanitizers -S Build/Cmake -B out/linux-clang-qa-sanitizers
+(cd Build/Cmake && cmake --preset linux-clang-qa-sanitizers)
+cmake --build out/linux-clang-qa-sanitizers --parallel "$(nproc)"
 ```
 
 QA builds also enable `ICCDEV_ENABLE_STRICT_WARNINGS` by default so CMake, not
@@ -680,10 +680,8 @@ before disabling telemetry in that build tree.
 The telemetry presets keep their outputs separate from ordinary builds:
 
 ```sh
-cmake --preset linux-clang-telemetry -S Build/Cmake
-cmake --build --preset linux-clang-telemetry
-cmake --preset macos-clang-telemetry -S Build/Cmake
-cmake --build --preset macos-clang-telemetry
+(cd Build/Cmake && cmake --preset linux-clang-telemetry && cmake --build --preset linux-clang-telemetry --parallel)
+(cd Build/Cmake && cmake --preset macos-clang-telemetry && cmake --build --preset macos-clang-telemetry --parallel)
 ```
 
 Linux GCC, Windows MSVC, ClangCL and MinGW, and macOS Xcode have matching
@@ -1019,16 +1017,59 @@ with both Clang 18.1.3 and GCC 13.3.0.
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when
 changing compiler or instrumentation mode, and use `CC=clang` plus `CXX=clang++`
-for environment compiler selection.
+for environment compiler selection. `CMakePresets.json` is stored in
+`Build/Cmake`, so preset commands must run from that directory. Supplying
+`-S Build/Cmake` while running `cmake --preset` from the repository root does
+not relocate preset discovery and fails before configuration.
+
+The following preset builds are independent copy/paste one-liners. Run them
+from the repository root. They configure by preset and build the explicit
+binary directory, which is valid even when consuming an older tree without a
+same-named build preset:
 
 ```bash
-# Security repro default: ASan + UBSan + IntSan + float checks, no coverage
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
-make -j"$(nproc)"
+# ASan only
+(cd Build/Cmake && cmake --preset linux-clang-asan) && cmake --build out/linux-clang-asan --parallel "$(nproc)"
+
+# TSan only
+(cd Build/Cmake && cmake --preset linux-clang-tsan) && cmake --build out/linux-clang-tsan --parallel "$(nproc)"
+
+# MSan with pinned instrumented libc++, libc++abi, and libxml2
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && (cd Build/Cmake && cmake --preset linux-clang-msan) && cmake --build out/linux-clang-msan --parallel "$(nproc)"
+```
+
+Verify the expected runtime before using the resulting logs as sanitizer
+evidence:
+
+```bash
+nm -D out/linux-clang-asan/Tools/IccDumpProfile/iccDumpProfile | grep __asan_init
+nm -D out/linux-clang-tsan/Tools/IccApplyProfiles/iccApplyProfiles | grep __tsan_init
+ldd out/linux-clang-msan/Tools/IccFromXml/iccFromXml && nm -D out/linux-clang-msan/Tools/IccFromXml/iccFromXml | grep __msan_init
+```
+
+The MSan `ldd` output must resolve libc++, libc++abi, and libxml2 from
+`$ICCDEV_MSAN_LIBCXX_DIR/lib` and must not resolve libstdc++.
+
+These direct CMake equivalents are also independent copy/paste one-liners:
+
+```bash
+# ASan only
+cmake -S Build/Cmake -B out/linux-clang-asan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-asan-manual --parallel "$(nproc)"
+
+# TSan only
+cmake -S Build/Cmake -B out/linux-clang-tsan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF && cmake --build out/linux-clang-tsan-manual --parallel "$(nproc)"
+
+# MSan; bootstrap out/msan-runtime first with iccdev-build-msan-libcxx.sh
+export ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" && cmake -S Build/Cmake -B out/linux-clang-msan-manual -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_MSAN=ON -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_IMAGE_TOOLS=OFF -DICC_USE_ZLIB=OFF -DENABLE_LTO=OFF -DCMAKE_C_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins" -DCMAKE_CXX_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdinc++ -isystem $ICCDEV_MSAN_LIBCXX_DIR/include/c++/v1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=memory -fsanitize-memory-track-origins -nostdlib++ -L$ICCDEV_MSAN_LIBCXX_DIR/lib -Wl,-rpath,$ICCDEV_MSAN_LIBCXX_DIR/lib -lc++ -lc++abi" -DLIBXML2_INCLUDE_DIR="$ICCDEV_MSAN_LIBCXX_DIR/include/libxml2" -DLIBXML2_LIBRARY="$ICCDEV_MSAN_LIBCXX_DIR/lib/libxml2.so" && cmake --build out/linux-clang-msan-manual --parallel "$(nproc)"
+```
+
+For the combined security configuration, use a separate tree:
+
+```bash
+cmake -S Build/Cmake -B out/linux-clang-sanitizers -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_WXWIDGETS=OFF -DENABLE_LTO=OFF -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
 
 # Coverage build; keep separate from sanitizer reproductions
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
-make -j"$(nproc)"
+cmake -S Build/Cmake -B out/linux-clang-coverage -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_COVERAGE=ON && cmake --build out/linux-clang-coverage --parallel "$(nproc)"
 
 # Profiling build
 CC=clang CXX=clang++ cmake -S Build/Cmake -B out/linux-profiling -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_PROFILING=ON
@@ -1036,13 +1077,12 @@ cmake --build out/linux-profiling --target iccDumpProfile --parallel "$(nproc)"
 ctest --test-dir out/linux-profiling -R '^iccdev\.profiling-smoke$' --output-on-failure --no-tests=error
 ```
 
-For ThreadSanitizer, use a standalone build. For MemorySanitizer, use the
-instrumented runtime and focused QA helper so distribution libc++, libc++abi,
-and libxml2 do not create false reports:
+Use the focused MSan QA helper so distribution libc++, libc++abi, and libxml2
+do not create false reports:
 
 ```bash
-cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TSAN=ON
-.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime" && .github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
+.github/scripts/iccdev-build-msan-libcxx.sh --prefix "$PWD/out/msan-runtime"
+.github/scripts/iccdev-msan-taint-qa.sh --source-dir "$PWD" --build-dir "$PWD/out/linux-clang-msan-taint" --runtime-dir "$PWD/out/msan-runtime" --out-dir "$PWD/out/msan-taint-evidence"
 ```
 
 Do not enable coverage while reproducing sanitizer findings; coverage
@@ -1050,18 +1090,17 @@ instrumentation can change optimizer and sanitizer behavior enough to mask a
 bug. Maintainer-level details live in
 `.github/instructions/build-system.instructions.md`.
 
-Preset equivalents are available for the same modes:
+Other preset equivalents are available for the same modes. Run every preset
+from `Build/Cmake`, where `CMakePresets.json` resides:
 
 ```bash
-cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
-cmake --preset linux-clang-ubsan-int-float -S Build/Cmake -B out/linux-clang-ubsan-int-float
-cmake --preset linux-clang-tsan -S Build/Cmake && cmake --build out/linux-clang-tsan -j"$(nproc)"
-ICCDEV_MSAN_LIBCXX_DIR="$PWD/out/msan-runtime" cmake --preset linux-clang-msan -S Build/Cmake && cmake --build out/linux-clang-msan -j"$(nproc)"
-cmake --preset linux-clang-valgrind -S Build/Cmake && cmake --build out/linux-clang-valgrind -j"$(nproc)"
-cmake --preset linux-clang-coverage -S Build/Cmake -B out/linux-clang-coverage
-cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
-cmake --preset macos-clang-sanitizers -S Build/Cmake -B out/macos-clang-sanitizers
-cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+(cd Build/Cmake && cmake --preset linux-clang-sanitizers) && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-ubsan-int-float) && cmake --build out/linux-clang-ubsan-int-float --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-valgrind) && cmake --build out/linux-clang-valgrind --parallel "$(nproc)"
+(cd Build/Cmake && cmake --preset linux-clang-coverage -B ../../out/linux-clang-coverage)
+(cd Build/Cmake && cmake --preset linux-clang-profiling -B ../../out/linux-clang-profiling)
+(cd Build/Cmake && cmake --preset macos-clang-sanitizers) && cmake --build out/macos-clang-sanitizers --parallel "$(sysctl -n hw.ncpu)"
+(cd Build/Cmake && cmake --preset macos-clang-guard-malloc) && cmake --build out/macos-clang-guard-malloc --parallel "$(sysctl -n hw.ncpu)"
 ```
 
 Bootstrap `out/msan-runtime` with `iccdev-build-msan-libcxx.sh` before using
@@ -1078,6 +1117,15 @@ libc++ tier explicitly, pass
 non-libc++ toolchains reject non-`none` values at configure time. Use only
 `_LIBCPP_HARDENING_MODE`; current Xcode libc++ has removed
 `_LIBCPP_ENABLE_ASSERTIONS`.
+
+The full macOS `check` target includes the spectral TIFF preview regression.
+Bootstrap its pinned Python environment once, then name that interpreter when
+running the sanitizer suite:
+
+```bash
+python3 -m venv out/spectral-preview-venv && out/spectral-preview-venv/bin/python -m pip install --upgrade pip --quiet && IMAGECODECS_ONLY=imcd out/spectral-preview-venv/bin/python -m pip install --no-binary=pillow,imagecodecs --no-cache-dir -r .github/ci/requirements/docker-spectral-preview.txt
+ICCDEV_SPECTRAL_PREVIEW_PYTHON="$PWD/out/spectral-preview-venv/bin/python" ASAN_OPTIONS='halt_on_error=1:abort_on_error=1:detect_leaks=0' UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' cmake --build out/macos-clang-sanitizers --target check --parallel "$(sysctl -n hw.ncpu)"
+```
 
 ## Maintainer Dockerfiles
 

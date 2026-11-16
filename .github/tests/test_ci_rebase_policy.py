@@ -378,7 +378,7 @@ gh() {
             "ci-mcp-server.yml",
             "ci-preflight-safety.yml",
             "ci-matlab.yml",
-            "ci-risk-analysis-gate.yml",
+            "ci-pr-risk-security-analysis.yml",
         ):
             with self.subTest(workflow=name):
                 workflow = load_workflow(name)

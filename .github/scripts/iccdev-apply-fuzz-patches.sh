@@ -85,7 +85,10 @@ if [ ! -d "$patch_dir" ]; then
   exit 0
 fi
 
-mapfile -t patches < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
+patches=()
+while IFS= read -r patch_file; do
+  patches+=("$patch_file")
+done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
 if [ "${#patches[@]}" -eq 0 ]; then
   if [ "$strict" -eq 1 ]; then
     echo "ERROR: no $mode fuzz patches found in $patch_dir" >&2

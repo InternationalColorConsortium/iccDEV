@@ -28,9 +28,12 @@ or workflow.
    report n, mean, median, sample SD, CV, min, max, spread, and p95.
 5. Identify duplicated work, masked failures, missing instrumentation, stale
    artifacts, coarse timing, unstable parallelism, and misleading comparisons.
-6. Make authorized corrections, align canonical docs and repository guidance,
+6. Distinguish the broad tool/profile aggregate from the complete-CTest
+   core-library aggregate. Verify CTest discovery and do not compare their
+   percentages as though they share a denominator.
+7. Make authorized corrections, align canonical docs and repository guidance,
    and preserve partial failure evidence.
-7. Validate the focused report helper and repository preflight. Record exact
+8. Validate the focused report helper and repository preflight. Record exact
    commands and distinguish local proof from hosted-CI proof.
 
 Return findings ordered by impact, the implemented changes, the local timing

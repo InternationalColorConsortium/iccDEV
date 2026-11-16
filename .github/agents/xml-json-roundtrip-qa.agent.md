@@ -20,3 +20,8 @@ Use `docs/xml-json-roundtrip-qa.md` and
    from `.command.json` before filing or updating an issue. Preserve `run.json`
    tool hashes and completion state. Do not interpret exit zero as conformance,
    failed validation as diagnostic parity, or positive native 255 as a signal.
+6. For authored document symmetry, keep XML as the reference and translate JSON
+   by hand. Never use XML to ICC to JSON as the tracked fixture generator.
+   Parse both independently and compare validation, inventories, and exact
+   behavior on shared inputs. Returned documents are secondary evidence because
+   calculator source is flattened in the blob.

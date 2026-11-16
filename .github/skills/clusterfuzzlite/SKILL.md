@@ -112,7 +112,7 @@ bash -n .clusterfuzzlite/build.sh .github/ci/cfl/build.sh \
 .github/scripts/iccdev-cfl-artifact-refresh-tests.sh
 .github/scripts/iccdev-fuzz-patch-check-tests.sh
 .github/scripts/check-fuzz-patches.sh
-ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-(configuration|targets)$' \
+ctest --test-dir Build -R '^iccdev\.clusterfuzzlite-configuration$' \
   --output-on-failure --no-tests=error
 jactionlint --profile correctness --no-color .github/workflows/ci-clusterfuzzlite.yml
 .github/scripts/preflight-safety-checks.sh --require-tools

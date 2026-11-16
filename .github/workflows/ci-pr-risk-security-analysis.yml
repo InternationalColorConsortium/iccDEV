@@ -1,7 +1,7 @@
 ###############################################################
 # Copyright (c) 2026 International Color Consortium
 #
-# Intent: PR Risk & Security Analysis
+# Intent: Manual and reusable risk and security analysis
 #
 # Last Updated: 2026-04-05 23:46:16 UTC by David Hoyt
 #
@@ -58,6 +58,7 @@ on:
         description: 'What to analyze'
         required: true
         type: choice
+        default: 'Current branch workflows'
         options:
           - 'Current branch workflows'
           - 'Specific PR number'
@@ -82,12 +83,12 @@ on:
           - 'MEDIUM'
           - 'HIGH'
           - 'CRITICAL'
-        default: 'INFO'
+        default: 'HIGH'
       fail_on_findings:
         description: 'Fail on blocking governance findings'
         required: false
         type: boolean
-        default: false
+        default: true
       run_windows_audit:
         description: 'Run the PowerShell-specific workflow audit'
         required: false
@@ -99,7 +100,7 @@ concurrency:
     pr-risk-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{
     inputs.analysis_target || 'Current branch workflows' }}-${{
     inputs.pr_number || 'none' }}-${{ inputs.git_ref || 'none' }}-${{
-    inputs.severity_threshold || 'INFO' }}
+    inputs.severity_threshold || 'HIGH' }}
   cancel-in-progress: true
 
 env:
@@ -120,7 +121,7 @@ jobs:
     env:
       ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
-      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.git_ref || github.ref }}
+      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold || 'HIGH' }}
       FAIL_ON_FINDINGS: ${{ github.event_name == 'pull_request' && 'true' || inputs.fail_on_findings && 'true' || 'false' }}
@@ -144,7 +145,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.sha }}
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -2652,7 +2653,7 @@ jobs:
     env:
       ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
-      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.git_ref || github.ref }}
+      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.sha }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold || 'HIGH' }}
       FAIL_ON_FINDINGS: ${{ github.event_name == 'pull_request' && 'true' || inputs.fail_on_findings && 'true' || 'false' }}
       SCAN_ROOT: ${{ github.workspace }}/target
@@ -2677,7 +2678,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.sha }}
           path: target
           fetch-depth: 0
           persist-credentials: false
