@@ -42,6 +42,7 @@
 #include "IccIoJson.h"
 #include "IccUtil.h"
 #include "IccUtilJson.h"
+#include "IccFileUtil.h"
 #include "IccConvertUTF.h"
 #include "IccSparseMatrix.h"
 #include "IccProfileJson.h"
@@ -2577,20 +2578,6 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
       delete pCLUT; return nullptr;
     }
 
-    // Same gate as CIccMpeJsonCalculator::ParseImport: file-based loads
-    // are opt-in. In library/service/WASM contexts, JSON input is
-    // attacker-controlled and arbitrary file paths must be refused.
-    if (!g_IccJsonAllowFileImports) {
-      parseStr += "File loaders disabled; ignored CLUT file '" + filename + "'\n";
-      delete pCLUT; return nullptr;
-    }
-    if (filename.find('/')  != std::string::npos ||
-        filename.find('\\') != std::string::npos ||
-        filename.find("..") != std::string::npos) {
-      parseStr += "Unsafe CLUT file path '" + filename + "'\n";
-      delete pCLUT; return nullptr;
-    }
-
     std::string format   = "text";
     std::string encoding;
     std::string endian   = "big";
@@ -2604,16 +2591,15 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
     else if (encoding == "int16") fileType = icConvert16Bit;
     else if (encoding == "float") fileType = icConvertFloat;
 
-    CIccIO *file = IccJsonOpenFileIO(filename.c_str(), "rb");
+    CIccIO *file = IccJsonOpenImportFile(filename, "CLUT", parseStr);
     if (!file) {
-      parseStr += "Error! - File '" + filename + "' not found.\n";
       delete pCLUT; return nullptr;
     }
 
     // Size cap so a multi-GB file doesn't OOM the library.
     static const size_t kMaxClutFileBytes = 64ULL * 1024 * 1024;
     if (file->GetLength() > kMaxClutFileBytes) {
-      parseStr += "CLUT file '" + filename + "' exceeds 64 MB limit\n";
+      parseStr += "CLUT file '" + icSanitizeConsoleText(filename) + "' exceeds 64 MB limit\n";
       delete file; delete pCLUT; return nullptr;
     }
 
