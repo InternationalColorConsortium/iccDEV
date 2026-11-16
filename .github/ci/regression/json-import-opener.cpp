@@ -236,6 +236,15 @@ IccJson imports(const std::vector<std::string> &names)
   return j;
 }
 
+class CalculatorBudgetProbe : public CIccMpeJsonCalculator
+{
+public:
+  bool ParseWithBudget(const IccJson &j, size_t &remaining, std::string &err)
+  {
+    return ParseImportWithBudget(j, "*", err, remaining);
+  }
+};
+
 void checkNames()
 {
   static NameRecorder recorder;
@@ -298,20 +307,38 @@ void checkBudgets()
         err.find("byte budget exceeded") != std::string::npos,
         "nested imports share their parent's byte budget");
 
-  const size_t half = limit / 2 + 1;
-  opener.files["stream-a.json"] = { "{}", half, 0 };
+  // Exercise the public API's real configured limit without spending most of
+  // the CTest timeout parsing a successful 64 MiB whitespace document. The
+  // second file fits the per-file limit, but exceeds the remaining tree budget.
+  opener.files["small.json"] = { "{}", 2, 2 };
+  opener.files["stream.json"] = { "{}", limit, 0 };
   err.clear();
-  check(!calc.ParseImport(imports({ "stream-a.json", "stream-a.json" }), "*", err) &&
+  check(!calc.ParseImport(imports({ "small.json", "stream.json" }), "*", err) &&
         err.find("byte budget exceeded") != std::string::npos &&
-        opener.files["stream-a.json"].bytesRead > half &&
-        opener.files["stream-a.json"].closed,
+        opener.files["small.json"].bytesRead == 2 &&
+        opener.files["stream.json"].bytesRead == limit &&
+        opener.files["stream.json"].closed,
+        "unknown-length sibling stream exceeds the actual configured tree budget");
+
+  // The same production helper can check equality and repeated-read accounting
+  // with tiny budgets. These paths do not need a 128 MiB successful JSON parse.
+  CalculatorBudgetProbe probe;
+  opener.files["repeat.json"] = { "{}", 2, 0 };
+  size_t remaining = 3;
+  err.clear();
+  check(!probe.ParseWithBudget(imports({ "repeat.json", "repeat.json" }), remaining, err) &&
+        err.find("byte budget exceeded") != std::string::npos &&
+        opener.files["repeat.json"].bytesRead == 4 && remaining == 1 &&
+        opener.files["repeat.json"].closed,
         "unknown-length repeated siblings count every actual read toward the budget");
 
-  opener.files["half-a.json"] = { "{}", limit / 2, limit / 2 };
-  opener.files["half-b.json"] = { "{}", limit - limit / 2, limit - limit / 2 };
+  opener.files["first.json"] = { "{}", 2, 2 };
+  opener.files["second.json"] = { "{}", 2, 2 };
+  remaining = 4;
   err.clear();
-  check(calc.ParseImport(imports({ "half-a.json", "half-b.json" }), "*", err) &&
-        opener.files["half-a.json"].bytesRead + opener.files["half-b.json"].bytesRead == limit,
+  check(probe.ParseWithBudget(imports({ "first.json", "second.json" }), remaining, err) &&
+        opener.files["first.json"].bytesRead + opener.files["second.json"].bytesRead == 4 &&
+        remaining == 0,
         "sibling imports accept exactly the cumulative byte boundary");
 
   err.clear();
