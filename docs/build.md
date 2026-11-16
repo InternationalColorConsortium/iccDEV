@@ -1097,8 +1097,8 @@ from `Build/Cmake`, where `CMakePresets.json` resides:
 (cd Build/Cmake && cmake --preset linux-clang-sanitizers) && cmake --build out/linux-clang-sanitizers --parallel "$(nproc)"
 (cd Build/Cmake && cmake --preset linux-clang-ubsan-int-float) && cmake --build out/linux-clang-ubsan-int-float --parallel "$(nproc)"
 (cd Build/Cmake && cmake --preset linux-clang-valgrind) && cmake --build out/linux-clang-valgrind --parallel "$(nproc)"
-(cd Build/Cmake && cmake --preset linux-clang-coverage)
-(cd Build/Cmake && cmake --preset linux-clang-profiling)
+(cd Build/Cmake && cmake --preset linux-clang-coverage -B ../../out/linux-clang-coverage)
+(cd Build/Cmake && cmake --preset linux-clang-profiling -B ../../out/linux-clang-profiling)
 (cd Build/Cmake && cmake --preset macos-clang-sanitizers) && cmake --build out/macos-clang-sanitizers --parallel "$(sysctl -n hw.ncpu)"
 (cd Build/Cmake && cmake --preset macos-clang-guard-malloc) && cmake --build out/macos-clang-guard-malloc --parallel "$(sysctl -n hw.ncpu)"
 ```

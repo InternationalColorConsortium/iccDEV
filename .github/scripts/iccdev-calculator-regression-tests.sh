@@ -261,6 +261,45 @@ run_reject_profile() {
   pass_case "$name"
 }
 
+capture_validation_inventory() {
+  local name="$1"
+  local logfile="$2"
+  local inventory="$3"
+
+  if ! grep -Eq '^Profile is valid( for version [^[:space:]]+)?$' "$logfile"; then
+    fail_case "$name" "iccDumpProfile did not report a clean-valid verdict"
+    sed -n '/^Validation Report$/,$p' "$logfile" | sed -n '1,20p'
+    return 1
+  fi
+
+  awk '
+    /^(Data Color Space|PCS Color Space|Profile Class|Version):/ ||
+    /^Profile Tags \([0-9]+\)$/ ||
+    /^Contents of .* tag \(.+\)$/ ||
+    /^Type: / ||
+    /^[[:space:]]*=== MPE Element Chain:/ ||
+    /^[[:space:]]*\[[0-9]+\].*[0-9]+->[0-9]+/ ||
+    /^Profile is / {
+      line = $0
+      gsub(/[[:space:]]+/, " ", line)
+      sub(/^ /, "", line)
+      sub(/ $/, "", line)
+      print line
+    }
+  ' "$logfile" > "$inventory"
+
+  if ! grep -q '^Profile Tags (' "$inventory" ||
+     ! grep -q '^Contents of ' "$inventory" ||
+     ! grep -q '^Type: ' "$inventory" ||
+     ! grep -q 'MPE Element Chain:' "$inventory"; then
+    fail_case "$name" "iccDumpProfile inventory evidence is incomplete"
+    sed -n '1,40p' "$inventory"
+    return 1
+  fi
+
+  return 0
+}
+
 # ICC.2:2023 Table 102 'noop', 'scnt' and 'vxor' (#2086). Before the fix
 # iccFromXml rejected these fixtures with Invalid Operator "..." and wrote no
 # profile, so the conversion alone is the red/green check for acceptance.
@@ -282,6 +321,7 @@ run_table102_operator_fixture() {
   local built_icc="$OUTDIR/${fixture}-${format}.icc"
   local parse_log="$OUTDIR/${fixture}-${format}-parse.log"
   local validate_log="$OUTDIR/${fixture}-${format}-validate.log"
+  local inventory="$OUTDIR/${fixture}-${format}-inventory.txt"
   local apply_log="$OUTDIR/${fixture}-${format}-apply.log"
   local parser="$FROMXML"
   local parser_label="iccFromXml"
@@ -290,7 +330,7 @@ run_table102_operator_fixture() {
   local row
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$built_icc" "$parse_log" "$validate_log" "$apply_log"
+  rm -f "$built_icc" "$parse_log" "$validate_log" "$inventory" "$apply_log"
 
   if [ "$format" = json ]; then
     parser="$FROMJSON"
@@ -313,7 +353,7 @@ run_table102_operator_fixture() {
   fi
 
   exit_code=0
-  timeout 30 "$DUMP" -v "$built_icc" > "$validate_log" 2>&1 || exit_code=$?
+  timeout 30 "$DUMP" -v "$built_icc" ALL > "$validate_log" 2>&1 || exit_code=$?
   if ! check_log "$name/$format/validate" "$validate_log"; then
     return
   fi
@@ -321,6 +361,17 @@ run_table102_operator_fixture() {
     fail_case "$name/$format" "iccDumpProfile validation failed with exit=$exit_code"
     sed -n '1,20p' "$validate_log"
     return
+  fi
+  if ! capture_validation_inventory "$name/$format" "$validate_log" "$inventory"; then
+    return
+  fi
+  if [ "$format" = json ]; then
+    local xml_inventory="$OUTDIR/${fixture}-xml-inventory.txt"
+    if ! cmp -s "$xml_inventory" "$inventory"; then
+      fail_case "$name/$format" "validation and profile inventories differ from XML"
+      diff -u "$xml_inventory" "$inventory" | sed -n '1,80p' || true
+      return
+    fi
   fi
 
   exit_code=0
@@ -388,6 +439,7 @@ run_structured_calculator_fixture() {
   local built_icc="$OUTDIR/calculator-structure-symmetry-${format}.icc"
   local parse_log="$OUTDIR/calculator-structure-symmetry-${format}-parse.log"
   local validate_log="$OUTDIR/calculator-structure-symmetry-${format}-validate.log"
+  local inventory="$OUTDIR/calculator-structure-symmetry-${format}-inventory.txt"
   local apply_log="$OUTDIR/calculator-structure-symmetry-${format}-apply.log"
   local parser="$FROMXML"
   local exit_code=0
@@ -395,7 +447,7 @@ run_structured_calculator_fixture() {
   local result source_sample
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$built_icc" "$parse_log" "$validate_log" "$apply_log"
+  rm -f "$built_icc" "$parse_log" "$validate_log" "$inventory" "$apply_log"
 
   if [ "$format" = json ]; then
     parser="$FROMJSON"
@@ -416,7 +468,7 @@ run_structured_calculator_fixture() {
   fi
 
   exit_code=0
-  timeout 30 "$DUMP" -v "$built_icc" > "$validate_log" 2>&1 || exit_code=$?
+  timeout 30 "$DUMP" -v "$built_icc" ALL > "$validate_log" 2>&1 || exit_code=$?
   if ! check_log "$name/validate" "$validate_log"; then
     return
   fi
@@ -424,6 +476,17 @@ run_structured_calculator_fixture() {
     fail_case "$name" "iccDumpProfile validation failed with exit=$exit_code"
     sed -n '1,20p' "$validate_log"
     return
+  fi
+  if ! capture_validation_inventory "$name" "$validate_log" "$inventory"; then
+    return
+  fi
+  if [ "$format" = json ]; then
+    local xml_inventory="$OUTDIR/calculator-structure-symmetry-xml-inventory.txt"
+    if ! cmp -s "$xml_inventory" "$inventory"; then
+      fail_case "$name" "validation and profile inventories differ from XML"
+      diff -u "$xml_inventory" "$inventory" | sed -n '1,80p' || true
+      return
+    fi
   fi
 
   exit_code=0

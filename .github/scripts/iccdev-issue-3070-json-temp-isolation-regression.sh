@@ -23,7 +23,8 @@ WORKDIR="$(mktemp -d "$OUTDIR/work.XXXXXX")"
 
 cleanup() {
   rm -f -- "$WORKDIR/RunJsonTests.sh" \
-    "$WORKDIR/sRGB_v4_ICC_preference.icc"
+    "$WORKDIR/sRGB_v4_ICC_preference.icc" \
+    "$WORKDIR"/run-*.log
   rmdir -- "$WORKDIR" 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -40,15 +41,27 @@ fi
 cp -- "$RUNNER" "$FIXTURE" "$WORKDIR/"
 
 pids=()
-for _ in 1 2 3 4 5 6 7 8; do
-  "$WORKDIR/RunJsonTests.sh" "$TOOLS_DIR" >/dev/null &
+logs=()
+for index in 1 2 3 4 5 6 7 8; do
+  log="$WORKDIR/run-$index.log"
+  "$WORKDIR/RunJsonTests.sh" "$TOOLS_DIR" >"$log" 2>&1 &
   pids+=("$!")
+  logs+=("$log")
 done
 
 failed=0
 for index in "${!pids[@]}"; do
   if wait "${pids[$index]}"; then
-    :
+    log="${logs[$index]}"
+    if ! grep -Eq '^Total:[[:space:]]+1$' "$log" ||
+       ! grep -Eq '^Pass:[[:space:]]+1$' "$log" ||
+       ! grep -Eq '^Fail:[[:space:]]+0 ' "$log" ||
+       ! grep -Eq '^Skip:[[:space:]]+0$' "$log" ||
+       ! grep -Eq '^XFail:[[:space:]]+0$' "$log"; then
+      echo "[FAIL] concurrent run $((index + 1)) did not exercise exactly one profile" >&2
+      sed -n '/^=== Summary ===$/,$p' "$log" >&2
+      failed=$((failed + 1))
+    fi
   else
     status=$?
     echo "[FAIL] concurrent run $((index + 1)) exited $status" >&2

@@ -43,14 +43,16 @@ timings in the developer artifact. Its primary percentage is a broad
 module-matched aggregate from legacy profile generation, the focused hybrid
 CTest, and tool/profile exercises. It is not a full-CTest percentage.
 
-The workflow also builds `build-test-binaries`, runs the complete discovered
-CTest inventory, and publishes a separate core-library report. That report
-selects only the four build-tree IccProfLib, IccXML, IccJSON, and IccConnect
-signatures identified by the already validated broad mapping. This keeps
-instrumented helper executables and nested package rebuilds from changing the
-denominator while retaining all full-suite contributions to the four core
-libraries. The workflow reports both denominators; do not combine or compare
-their percentages as though they were the same population.
+The workflow also builds `build-test-binaries`, discovers the complete CTest
+inventory, runs its granular tests while excluding `standalone-aggregate`, and
+publishes a separate core-library report. That report selects only the four
+build-tree IccProfLib, IccXML, IccJSON, and IccConnect signatures identified by
+the already validated broad mapping. The earlier focused hybrid run writes to
+`profraw/` and contributes only to the broad report; it is not merged into the
+full-CTest phase's `profraw-full-ctest/` profiles. This keeps instrumented helper
+executables, nested package rebuilds, and intentionally separate focused runs
+from changing the denominator. The workflow reports both denominators; do not
+combine or compare their percentages as though they were the same population.
 
 Required profile-generation scripts, both CTest gates, coverage
 instrumentation, signature selection, and report construction fail the job.
