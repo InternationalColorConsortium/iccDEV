@@ -78,6 +78,31 @@ void IccJsonSetOpenFileIO(IIccJsonOpenFileIO *pOpenIO)
   g_pIccJsonFileIO = pOpenIO;
 }
 
+static bool IsImportDeviceName(const std::string &filename)
+{
+  // Win32 resolves DOS device names even with an extension or trailing spaces.
+  // Apply the same rule on every host, before a custom opener sees the name.
+  std::string stem = filename.substr(0, filename.find('.'));
+  while (!stem.empty() && stem.back() == ' ')
+    stem.pop_back();
+  for (char &c : stem) {
+    if (c >= 'a' && c <= 'z')
+      c = (char)(c - 'a' + 'A');
+  }
+  if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" ||
+      stem == "CONIN$" || stem == "CONOUT$")
+    return true;
+  if (stem.compare(0, 3, "COM") && stem.compare(0, 3, "LPT"))
+    return false;
+
+  std::string digit = stem.substr(3);
+  // Windows also treats ISO-8859-1 superscript 1, 2 and 3 as device digits.
+  // Accept both narrow-code-page and UTF-8 spellings for this rejection.
+  return (digit.size() == 1 && digit[0] >= '1' && digit[0] <= '9') ||
+         digit == "\xB9" || digit == "\xB2" || digit == "\xB3" ||
+         digit == "\xC2\xB9" || digit == "\xC2\xB2" || digit == "\xC2\xB3";
+}
+
 CIccIO *IccJsonOpenImportFile(const std::string &filename, const char *szWhat,
                               std::string &parseStr)
 {
@@ -94,7 +119,9 @@ CIccIO *IccJsonOpenImportFile(const std::string &filename, const char *szWhat,
       filename.find('/')  != std::string::npos ||
       filename.find('\\') != std::string::npos ||
       filename.find(':')  != std::string::npos ||
-      filename.find("..") != std::string::npos) {
+      filename.find('\0') != std::string::npos ||
+      filename.find("..") != std::string::npos ||
+      IsImportDeviceName(filename)) {
     parseStr += std::string("Unsafe ") + szWhat + " file path '" +
                 icSanitizeConsoleText(filename) + "'\n";
     return nullptr;

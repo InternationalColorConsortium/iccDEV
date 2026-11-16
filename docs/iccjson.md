@@ -17,6 +17,12 @@ iccFromJson src_profile.json dest_profile.icc [-noid] [-allow-file-imports]
   are disabled by default. `-no-file-imports` explicitly enforces that default
   for applications invoking the CLI.
 
+Imported calculator definitions, CLUT data and tint-array data must use bare
+filenames in the working directory. Paths, drive or stream names, embedded NULs
+and Windows device names such as `CON`, `NUL.txt` and `COM1` are refused on every
+platform, before calling a host-provided file opener. A refused import fails
+the conversion.
+
 ## Input Size Limit
 
 `iccFromJson` and the JSON configuration readers bound the raw file before
@@ -28,6 +34,11 @@ Builds that need a different bounded limit can configure
 `-DICC_JSON_MAX_FILE_MB=<positive MiB value>`; values above 1024 are rejected
 at CMake configuration time, and the compiled-in value is what the diagnostic
 reports.
+
+The same bound applies to each sidecar file. Each calculator's import tree also
+shares one cumulative byte budget across sibling and nested imports; repeated
+reads of the same file count again. The budget counts actual bytes read, even
+when a host-provided stream reports no length, and resets for the next parse.
 
 Note that `iccToJson` can still emit documents larger than the bound, because
 its output grows roughly linearly with `-indent`. Measured on the profile built

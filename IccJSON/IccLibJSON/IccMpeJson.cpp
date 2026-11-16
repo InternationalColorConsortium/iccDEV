@@ -2079,6 +2079,15 @@ bool CIccMpeJsonCalculator::UpdateLocals(std::string &func, std::string sFunc,
 bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath,
                                          std::string &parseStr)
 {
+  // Share one budget across the whole import tree, including sibling reads.
+  // Keep it local to this parse so a subsequent parse starts with a full budget.
+  size_t remainingImportBytes = IccJsonMaxImportBytes();
+  return ParseImportWithBudget(j, importPath, parseStr, remainingImportBytes);
+}
+
+bool CIccMpeJsonCalculator::ParseImportWithBudget(const IccJson &j, std::string importPath,
+                                      std::string &parseStr, size_t &remainingImportBytes)
+{
   // Process imports (nested JSON files)
   if (j.contains("imports") && j["imports"].is_array()) {
     for (const IccJson &imp : j["imports"]) {
@@ -2099,6 +2108,12 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
       CIccIO *pIO = IccJsonOpenImportFile(file, "Calculator", parseStr);
       if (!pIO)
         return false;
+      if ((icUInt64Number)pIO->GetLength() > (icUInt64Number)remainingImportBytes) {
+        delete pIO;
+        parseStr += "Calculator import byte budget exceeded by file '" +
+                    icSanitizeConsoleText(file) + "'\n";
+        return false;
+      }
       // Read to the end in chunks rather than trusting GetLength(), which is
       // 0 for a stream a host's IccJsonSetOpenFileIO() hook may return.
       std::string text;
@@ -2106,15 +2121,17 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
       size_t nRead;
       bool bTooLarge = false;
       while ((nRead = pIO->Read8(chunk, sizeof(chunk))) > 0) {
-        if (text.size() + nRead > IccJsonMaxImportBytes()) {
+        if (nRead > remainingImportBytes) {
           bTooLarge = true;
           break;
         }
+        remainingImportBytes -= nRead;
         text.append(chunk, nRead);
       }
       delete pIO;
       if (bTooLarge) {
-        parseStr += "Calculator import file '" + icSanitizeConsoleText(file) + "' is too large\n";
+        parseStr += "Calculator import byte budget exceeded by file '" +
+                    icSanitizeConsoleText(file) + "'\n";
         return false;
       }
       IccJson jImport;
@@ -2126,7 +2143,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         return false;
       }
 
-      if (!ParseImport(jImport, importPath + file + "*", parseStr))
+      if (!ParseImportWithBudget(jImport, importPath + file + "*", parseStr, remainingImportBytes))
         return false;
     }
   }
