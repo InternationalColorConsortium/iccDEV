@@ -4,7 +4,8 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-## Intent: Pre-flight safety, security, and sanity checks
+## Intent: Automatic PR/master workflow and hook checks with local-preflight
+##         parity, static tools, CodeQL and documentation validation.
 #
 ###############################################################
 
@@ -197,6 +198,8 @@ jobs:
             .github/tests/test_downstream_oidc_workflow.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_python_release_wheels.py \
+            .github/tests/test_ci_rebase_policy.py \
+            .github/tests/test_tool_ctest_workflow.py \
             .github/tests/test_wasm_workflow.py \
             .github/tests/test_workflow_action_pins.py \
             -q

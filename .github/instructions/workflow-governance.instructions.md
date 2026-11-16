@@ -248,35 +248,29 @@ write-back automation to modify assertions on Dependabot branches.
 
 ## Automated Scanner
 
-`ci-pr-risk-security-analysis.yml` checks workflow governance, including action
-pinning, dangerous triggers, credential hygiene, shell hardening, matrix
-expression injection, output sanitization, permissions, Dockerfile security, and
-supply-chain risk.
-It is the read-only hosted scanner for workflow and container risk. Dispatch it
-directly with `workflow_dispatch` or reuse it with `workflow_call`; do not add a
-wrapper that fixes inputs the direct dispatch already exposes. Its manual
-defaults run the Linux and Windows audits at HIGH severity and fail on blocking
-findings.
+`ci-preflight-safety.yml` runs automatically on path-scoped same-repository PR
+open/reopen/ready events and `master` pushes; it also supports manual dispatch.
+It runs the trusted-base `.github/scripts/preflight-safety-checks.sh` and the
+applicable jactionlint, yamllint, ShellCheck, zizmor, CodeQL Actions/Python,
+permissions, and container checks. Workflow changes scan the full workflow
+set, including unchanged callees. The local script owns deterministic policy,
+including output-write sanitization annotations; run it locally before pushing
+maintainer-owned infrastructure changes. Its `--workflow-risk-only` mode gives
+the risk workflow the same policy result without copying the detector.
 
-`ci-preflight-safety.yml` runs the local pre-flight script on workflow and hook
-changes. When any workflow changes, workflow scanners run against the full
-`.github/workflows/` set so changed reusable callers cannot hide risk in
-unchanged callees. It installs and runs jactionlint, yamllint, shellcheck, zizmor,
-CodeQL Actions analysis, and CodeQL query resolution, then delegates repository-specific checks to
-`.github/scripts/preflight-safety-checks.sh`. Dockerfile changes are checked
-with hadolint and Trivy config scanning when those tools or Docker are available.
-Use that script locally before pushing maintainer-owned infrastructure changes.
-The local script intentionally runs only the deterministic subset of
-`ci-pr-risk-security-analysis.yml`: changed-workflow YAML parsing, jactionlint,
-yamllint, zizmor, SHA pin checks, dangerous-trigger checks, run-block expression
-injection checks, checkout credential checks, shellcheck for changed scripts,
-cache/artifact publish-boundary canaries, CodeQL Actions analysis for workflow
-changes, CodeQL Python analysis for changed Python scripts, CodeQL query
-resolution, and the workflow permission audit. Shell scripts have no CodeQL
-extractor; keep ShellCheck as the required standalone shell-script SAST while
-CodeQL Actions covers inline workflow `run:` blocks. Leave the full
-owner-visible report, broad repository scan, DAST/runtime review, and any
-GitHub-context-specific classification to the Actions workflow.
+`ci-pr-risk-security-analysis.yml` is an optional manual or reusable, read-only
+full-repository risk inventory. It adds a Linux and native Windows view of
+workflow, Dockerfile, supply-chain, and ref-name risks with an owner-visible
+report. Its Linux job reuses the preflight policy result; the Windows
+`Out-File` audit adds PowerShell-specific visibility. A shared policy failure
+is reported separately from security severity. Manual dispatch defaults to
+`fail_on_findings=true` and both platforms; `workflow_call` defaults to false.
+`severity_threshold` is display-only (HIGH by default for manual dispatch),
+not a finding filter. Dispatch the workflow directly when that broader view is
+needed; it is not an automatic or required merge gate.
+
+Shell scripts have no CodeQL extractor; keep ShellCheck for standalone shell
+scripts while CodeQL Actions covers inline workflow `run:` blocks.
 
 Use tiered CodeQL coverage. Workflow and Python script changes must run the
 pre-flight CodeQL Actions/Python analysis. C/C++/CMake/query/config changes use

@@ -7,36 +7,28 @@ These workflows and gates are maintainer-owned infrastructure. General
 contributors should not edit `.github/**`, CTest registration, sanitizer helper
 scripts, CPack or release packaging, workflow policy, or security automation
 unless an iccDEV maintainer explicitly requests that work. Contributors should
-describe needed coverage in the issue or pull request so maintainers can decide
-where it belongs.
-
-Before the first review of a cross-cutting change, attach a `base...HEAD`
-contract matrix identifying each changed surface's producer, consumer,
-build/runtime behavior, platform or toolchain boundary, CI trigger, dependency
-owner, and local evidence. Re-review the complete matrix after a repair; any
-new blocker returns the branch to branch-only grooming before another review.
+coordinate needed coverage with a maintainer.
 
 ## Screening Sequence
 
-1. In the local development environment, complete the applicable pre-commit,
-   preflight, focused build/test, and security checks. The maintainer image
-   supplies zizmor, Trivy, CodeQL, fuzzers, Valgrind, and other tools for the
-   affected surface.
-2. On the pre-PR branch, run `ci-qa-pr` with `ctest-mode=full` and
-   `ctest-recent-limit=0` for the comprehensive build and CTest matrix. Run
-   `ci-codeql-security` against the same head. Investigate failures and repeat
-   the affected checks after any changes.
+1. Run directly applicable local checks for the changed behavior. Confirm
+   that positive and negative cases exercise the intended path.
+2. When the maintainer authorizes hosted pre-PR screening, run `ci-qa-pr` with
+   `ctest-mode=full` and `ctest-recent-limit=0`, plus
+   `ci-codeql-security` on the same head. Investigate failures and repeat the
+   affected checks after changes.
 3. Once screening succeeds and the user authorizes publication, open the PR.
-4. Run `ci-pr-action` on the PR head as the final cross-platform build, profile
-   generation, and representative CTest sounding board for merge readiness.
-   Its `pr-extended` exclusion and path-scoped lanes mean it does not replace
-   the local checks, preflight, or the pre-PR `ci-qa-pr` matrix. Record exact
-   head SHAs and run IDs in the readiness evidence.
+4. On initial PR actions, `ci-pr-action` runs the selected Debug ASAN/UBSAN
+   lane. Run its full scope on the current PR head for final cross-platform
+   builds, profile generation, and representative CTest coverage. Its
+   `pr-extended` exclusion and path-scoped lanes mean it does not replace
+   directly applicable local checks or authorized pre-PR screening. Verify
+   the exact head and terminal results.
 
-The comprehensive matrix still follows each workflow's declared scope: for
+Each workflow still follows its declared scope: for
 example, `ci-infrastructure` CTests require direct selection or a dedicated
-workflow. Keep the appropriate specialized security, sanitizer, and packaging
-gates in the screening record when their contracts apply.
+workflow. Run specialized security and packaging gates when their contracts
+apply.
 
 ## Canonical Locations
 
@@ -45,8 +37,8 @@ gates in the screening record when their contracts apply.
 | Focused reusable regression scripts | `.github/scripts/` | Scripted checks shared by one or more workflows. |
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Reusable/manual core or ASAN/UBSAN regression coverage. |
-| Sanitizer regression gate | `.github/workflows/ci-sanitizer-regression.yml` | Standalone path-scoped ASAN/UBSAN caller for initial PR validation and explicit final dispatches. |
-| Risk analysis | `.github/workflows/ci-pr-risk-security-analysis.yml` | Direct manual and reusable Linux and Windows workflow-security audits. |
+| PR Debug sanitizer gate | `.github/workflows/ci-pr-action.yml` | Path-scoped Debug ASAN/UBSAN tool suite on initial PR validation; manual `ci-qa-pr` full/0 covers later heads. |
+| Risk analysis | `.github/workflows/ci-pr-risk-security-analysis.yml` | Optional manual/reusable full-repository Linux and Windows risk inventory; shares preflight workflow policy. |
 | Rebase safety gate | `.github/workflows/ci-rebase-safety.yml` | Lightweight ancestry validation for same-repository PR synchronize events. |
 | PR CI label dispatcher | `.github/workflows/ci-maintainer-pr-dispatch.yml` | Maintainer-label requests dispatched from the trusted `master` workflow with exact PR head input. |
 | PR status labeler | `.github/workflows/update-labels.yml` | API-only current-head validation on PR events and trusted workflow completions. |
@@ -97,7 +89,7 @@ selected or when MCP package, Dockerfile, or MCP workflow files change. It
 checks out the exact PR head selected by the caller and contributes to the
 protected `PR Summary` result. Its `mcp-server-` concurrency group is distinct
 from the caller's `ci-pr-` group, so a called job cannot cancel its caller.
-The reusable tool suite passes `instrumentation=core` and always excludes
+The core reusable tool suite passes `instrumentation=core` and always excludes
 `ci-infrastructure` and `clusterfuzzlite` CTests.
 The macOS Clang Release/LTO and Debug jobs run a representative native CTest
 selection after profile generation. They exclude `slow`, `clusterfuzzlite`,
@@ -112,12 +104,13 @@ spectral-preview CTest and skips that dependency setup.
 Windows PR jobs report CTest helper compilation and CTest execution as separate
 steps. The MinGW helper build uses bounded two-way parallelism; MSVC and
 ClangCL keep serial staging for vcpkg runtime DLLs.
-The standalone sanitizer caller runs the reusable tool workflow independently
-for native source, build, testing, or regression-fixture changes; the reusable
-workflow also remains manually dispatchable. Pre-flight is a standalone
-path-scoped PR workflow, while risk analysis is an explicit final security
-workflow, so scanner or infrastructure failures cannot be mistaken for core
-build failures. Dynamic-analysis tooling and ClusterFuzzLite remain manual or
+On initial PR opening, reopening, or ready-for-review, `ci-pr-action` selects
+its Debug ASAN/UBSAN tool-suite job when the sanitizer path classifier matches
+native source, build, testing, regression data, scripts, or relevant workflows.
+The reusable tool workflow remains manually dispatchable. Pre-flight is a
+standalone path-scoped PR workflow, while risk analysis is an explicit final
+security workflow, so scanner or infrastructure failures cannot be mistaken
+for core build failures. Dynamic-analysis tooling and ClusterFuzzLite remain manual or
 scheduled lanes.
 
 ## Rebase and Final Validation
@@ -130,16 +123,21 @@ exact-head `PR Summary` result; the trusted status labeler refreshes after
 validation completes. Check that result, the current head, labels, draft
 state, and merge state before reporting `Merge Ready`.
 
+The Debug ASAN/UBSAN job runs only on initial PR actions; `synchronize` and
+manual full-scope dispatches do not rerun it.
+
 If automatic validation is absent on an open same-repository PR targeting
 `master`, dispatch `ci-pr-action` from the trusted `master` workflow with
 the PR number and exact expected head SHA, then manually refresh
 `update-labels.yml` if its completion-triggered refresh is absent. See
 `label-system.md` for commands and the non-`master`-base stacked PR limit.
-This iterative fast lane does not replace the final full-scope lanes below.
+This automatic fast lane does not replace the final full-scope lanes below.
 
 Before merging a rebased source PR, explicitly dispatch the applicable final
 lanes on the PR head. Use the full core matrix for source, build, or test
-changes; dispatch the sanitizer, JSON, and MATLAB workflows only when their
+changes; run manual `ci-qa-pr` with `ctest-mode=full` and
+`ctest-recent-limit=0` for comprehensive same-head sanitizer coverage when its
+contract applies. Dispatch JSON and MATLAB workflows only when their
 documented paths or contracts apply. `ci-pr-action` includes MCP validation
 for full core runs; `ci-mcp-server` remains available for an isolated rerun.
 
@@ -147,7 +145,8 @@ for full core runs; `ci-mcp-server` remains available for an isolated rerun.
 gh workflow run ci-pr-action.yml --ref master -f ci_scope=full \
   -f pr_number=<open-master-target-pr-number> \
   -f expected_head_sha=<40-character-head-sha>
-gh workflow run ci-sanitizer-regression.yml --ref <head-branch>
+gh workflow run longbuildctest.yml --ref <head-branch> \
+  -f ctest-mode=full -f ctest-recent-limit=0
 gh workflow run ci-json-roundtrip.yml --ref <head-branch>
 gh workflow run ci-mcp-server.yml --ref <head-branch>
 gh workflow run ci-matlab.yml --ref <head-branch>
@@ -155,33 +154,24 @@ gh workflow run ci-pr-risk-security-analysis.yml --ref <head-branch>
 ```
 
 `Rebase Safety` proves ancestry only; it does not satisfy the protected
-`PR Summary` context. A maintainer records both the automatic fast-lane and
-final full-scope evidence for the current PR head before merge. Rebases and
+`PR Summary` context. Check the automatic fast lane and final full-scope
+results on the current PR head before merge. Rebases and
 ordinary pushes both emit `synchronize`; neither automatically restarts the
 full matrix. Manual risk analysis checks every workflow's Bash prologue,
 even when the target and audit base SHA coincide.
 
 ## When to Add a Script
 
-Add a `.github/scripts/*.sh` regression when:
-
-- The check is reused in more than one workflow.
-- The logic parses binary/profile structure or generated output.
-- The check needs a stable local command for maintainers.
-- The workflow block would become hard to review inline.
-
-Keep inline workflow checks only when they are short, single-purpose, and not
-expected to be reused.
+Extend an existing regression script when practical. Add a new
+`.github/scripts/*.sh` check only when it needs reuse across workflows, parses
+generated or binary output, or makes an otherwise long workflow step easier to
+review. Short, single-purpose checks can stay inline.
 
 ## Regression Gate Requirements
 
-Every new regression gate should state:
-
-1. The issue or PR number.
-2. The affected component.
-3. The reproducer or invariant.
-4. The expected pass condition.
-5. The expected failure signal.
+Every new regression gate must exercise a known defect or named invariant.
+Verify that it performs the intended work and fails when the invariant breaks.
+Follow `AGENTS.md` for CTest selection and coverage requirements.
 
 Prefer deterministic invariants over broad diffs. For generated ICC profiles,
 normalize only documented volatile fields when comparing whole files; otherwise
@@ -219,6 +209,9 @@ Every edited workflow `run:` block must keep these properties:
 - Sanitized writes to `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT`.
 - No unbounded glob or `xargs` batching into repeated writes to one fixed report
   output; use an input list or unique staged outputs.
+- Validate exact commit SHA inputs and reject malformed workflow inputs rather
+  than silently coercing them. Bound runtime maxima against job timeouts,
+  including setup and repeated targets.
 - Least-privilege permissions.
 - `pull_request_target` and `workflow_run` status automation must use trusted
   default-branch definitions and API metadata only. It must never checkout or
@@ -243,135 +236,33 @@ Every edited workflow `run:` block must keep these properties:
   rerun, record cache size and hit status, and remove a cache that adds service
   churn without a material elapsed-time reduction.
 
-For hosted governance coverage, dispatch or reuse
-`.github/workflows/ci-pr-risk-security-analysis.yml` instead of wrapping or
-copying it in another workflow. Its direct manual dispatch defaults to the
-selected branch's exact event SHA, HIGH severity, blocking findings, and both
-Linux and Windows audits. Informational scans can override those inputs.
+`ci-preflight-safety.yml` is the path-scoped automatic check for same-repository
+PR open/reopen/ready events and `master` pushes; it can also be dispatched
+manually. It runs the trusted-base preflight script and the applicable workflow
+and script tools. The script's `--workflow-risk-only` mode owns the shared
+deterministic policy check, including output-write annotations.
 
-Maintainer-owned workflow, release, packaging, Docker, MCP, and security
-automation changes should use a conservative review loop. Run the applicable
-local security tools, patch confirmed findings, retest, and document accepted
-scanner noise with a clear rationale.
+For an optional full-repository Linux and native Windows risk inventory,
+dispatch `ci-pr-risk-security-analysis.yml` directly or reuse it. The Linux
+job reports shared policy failures in its existing risk report; they block
+when `fail_on_findings=true` and are advisory when false. The Windows
+`Out-File` audit adds PowerShell-specific output coverage. Manual dispatch
+defaults to both platforms and `fail_on_findings=true`; `workflow_call`
+defaults to false. `severity_threshold=HIGH` is display-only, not a finding
+filter. Risk analysis is not an automatic or required merge gate.
 
-## Pull Request Review Convergence
+For maintainer-owned workflow, release, packaging, Docker, MCP, and security
+automation changes, run directly applicable local security tools, patch
+confirmed findings, and retest the affected path. Explain material accepted
+scanner noise.
 
-Maintainer-owned infrastructure reviews must converge instead of repeatedly
-expanding scope. Before requesting review, freeze the head and pass the
-readiness gate in `docs/governance/UPSTREAM_PR_READINESS.md`. Review the
-complete pull request and cumulative diff, not incremental slices. A requested
-change returns the branch to branch-only grooming: repair the findings, renew
-the readiness evidence, then request one complete re-review when a maintainer
-needs it. If that re-review identifies any new blocker, including one in the
-repair, stop serial automated review and require maintainer direction before
-continuing.
+## Hosted Result Checks
 
-Recent maintainer PRs show the same avoidable review findings recurring. Before
-requesting review, check the PR against this list:
-
-- Keep the PR scope narrow. Split unrelated registry QA, Docker, CodeQL, and
-  C/C++ hardening work unless one failing gate requires the combination.
-- For every new executable script, include the ICC copyright, an
-  SPDX BSD-3-Clause identifier, and a reference to `LICENSE.md` as required by
-  `CONTRIBUTING.md`; run ShellCheck and verify ASCII.
-- Keep push, pull-request, reusable, and manual-dispatch validation paths
-  equivalent for the changed surface. If a workflow tests a helper on push,
-  the PR fast lane should test the same helper or document why it cannot.
-- Keep manual-dispatch refs and publish conditions aligned. `ci-docker` is
-  manual-only and publishes the canonical image only when dispatched from
-  `master`, `ci-qa-pr-docker-testing`, `ci-publish-colourbill-ctrl`, or a
-  release tag; do not add branch-specific or variant image tags.
-- Keep Docker and regression-container docs reproducible from a fresh checkout
-  or clean container. Fetch branch refs explicitly and avoid relying on local
-  remote-tracking state, generated files, or preexisting host permissions.
-- Let maintainers select a supported container tag at dispatch time, resolve
-  it to a digest before starting the container job, and record both that digest
-  and the image source revision. Do not hardcode one full-SHA tag as a durable
-  workflow default.
-- Validate trusted-base helper boundaries in PR workflows. PR-controlled
-  checkouts must not provide sanitizer, summary, release, or package helpers
-  unless the step is a reviewed test-only exception.
-- Validate exact SHAs where documentation promises exact SHAs. Do not let
-  branch or tag names pass through a field described as an exact commit.
-- Reject invalid workflow inputs instead of silently coercing them. This is
-  especially important for `patch_mode`, timeout, duration, target lists, and
-  numeric strings with leading zeroes.
-- Keep bounded jobs actually bounded. Runtime maxima must fit the job timeout
-  after multiplying by target count and build/setup time.
-- Keep checksum-pinned WASM dependency downloads bounded and diagnosable:
-  follow redirects, show transfer errors, retry transient failures, and retain
-  connect and total timeouts before verifying the pinned SHA-256.
-- End PowerShell expected-failure probes with `exit 0` after all assertions
-  pass. A handled native failure leaves `$LASTEXITCODE` nonzero and otherwise
-  makes the workflow step fail after printing a success message.
-- Do not leave temporary clones, generated profiles, crash artifacts, or other
-  local proof material behind unless the PR intentionally adds test fixtures.
-- For AFL/CFL and Docker changes, probe both the advertised user path and the
-  CI path: wrapper compile probes, patch-stack checks, dry-run patch
-  application, `iccdev-fuzz-env`, and container healthcheck semantics.
-
-For every `Dockerfile` change, validate the one canonical image locally and
-through a manual `ci-docker` dispatch on `master`. Keep its `latest`, immutable
-full-SHA, and release-tag behavior consistent; do not restore variant
-Dockerfiles or branch-specific image publication.
-
-Branch protection should require stable aggregate contexts, not conditional
-lane job names. `PR Summary` must aggregate only the deterministic core
-orchestration prerequisites and selected full, fast-lane, auto, governance,
-docs, and path-gated core jobs. Do not
-require removed lane names or initialization jobs as branch contexts. Record
-standalone preflight, manual risk-analysis, and WASM evidence separately when
-applicable; do not make a manual risk-analysis job name a protected branch
-context. See `docs/label-system.md` for the current required context list.
-
-When `image_definition_changed` is true, `ci-pr-action` selects
-workflow-security gates only. It does not run a Docker Clang verification job,
-a full PR matrix, or aggregate a `docker-ci` result. Dockerfile, Docker
-dependency, packaged MCP, and Docker-workflow changes require the local
-canonical-image build and smoke in `docs/regression-container.md`; only
-`ci-docker` publishes images.
-
-Local review should include YAML parsing, `jactionlint`, `yamllint`, direct
-`${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
-checks when container files are in scope, CodeQL Actions analysis, and CodeQL
-query-pack resolution when CodeQL workflows or queries are touched.
-
-See `.github/instructions/workflow-governance.instructions.md` for the full
-checklist and `docs/workflow-security-trust-boundaries.md` for the visual trust
-boundary model.
-
-## Full Log Audit Requirements
-
-When reviewing a GitHub Actions run, inspect the complete log archive even if
-the run conclusion is `success`. Green runs can still hide missing coverage,
-cache failures, package-manager annotations, and non-fatal install/uninstall
-diagnostics.
-
-Use this pattern:
-
-```bash
-RUN_ID=<run-id>
-REPO=InternationalColorConsortium/iccDEV
-OUT="/tmp/iccdev-run-${RUN_ID}-logs.zip"
-DIR="/tmp/iccdev-run-${RUN_ID}-logs"
-rm -rf "$DIR" "$OUT"
-gh api "/repos/${REPO}/actions/runs/${RUN_ID}/logs" > "$OUT"
-mkdir -p "$DIR"
-unzip -q "$OUT" -d "$DIR"
-rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does not exist|Cannot open: Permission denied|post-build check|DEP0005|digest-mismatch' "$DIR" | grep -v $'\033\[36;1m'
-```
-
-For install and packaging workflows, also check:
-
-- Duplicate entries in `install_manifest.txt`.
-- Install and uninstall logs containing `File ".+" does not exist`.
-- Duplicate generated version-header installs.
-- vcpkg root mismatch warnings.
-- vcpkg CRT linkage warnings for static triplets.
-- Build-type matrix entries whose smoke tests are skipped.
-
-Fixes should add a gate for the defect class, not only silence the observed log
-line.
+Inspect the affected jobs and steps, including skipped checks and non-fatal
+warnings. Confirm that the gate performed its intended work and produced the
+expected output. For install or packaging changes, check relevant logs for
+duplicate manifest entries, missing files, vcpkg mismatches, and skipped
+smoke tests.
 
 ## Script Pattern
 
@@ -456,7 +347,7 @@ git diff --check
 file .github/scripts/<regression-script>.sh
 ```
 
-Run the focused regression and capture the command plus result in the handoff.
+Run the focused regression and report its command and result.
 For workflow edits, also inspect the changed `run:` blocks for the governance
 rules above.
 Run `.github/scripts/check-workflow-fixed-output-batching.py` for any workflow
@@ -466,13 +357,5 @@ the captured logs for missing-file diagnostics. If the change touches CMake or
 C++ code, run `.github/scripts/run-codeql-local.sh --custom-only`; CodeQL is not
 a substitute for YAML linting.
 
-## Handoff
-
-Report:
-
-- Branch and commit.
-- Files changed.
-- Focused local commands and exit status.
-- Workflow names and sub-test labels to trigger.
-- Any known skips, warnings, or sanitizer suppressions.
-- Any green-run diagnostics that were converted into hard gates.
+Report changed files, focused results, and any unverified coverage to the
+maintainer. A separate report artifact is unnecessary.

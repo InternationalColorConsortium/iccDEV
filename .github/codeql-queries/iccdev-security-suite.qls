@@ -1,5 +1,5 @@
 ---
-- description: "iccDEV C/C++ security query suite (excludes JSON/Connect and MCP Python queries)"
+- description: "iccDEV C/C++ security query suite (excludes JSON-specific and MCP Python queries)"
 - queries: .
 - exclude:
     query path:

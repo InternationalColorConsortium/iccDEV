@@ -31,19 +31,42 @@ fi
 python3 - "$@" << 'PYTHON_SCRIPT'
 import json
 import sys
-import os
 from collections import defaultdict
 
 def parse_sarif(path):
     """Parse a SARIF file and return structured results."""
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        print("ERROR: Failed to parse %s: %s" % (path, e), file=sys.stderr)
-        return []
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict) or data.get("version") != "2.1.0":
+        raise ValueError("expected a SARIF 2.1.0 object")
+    runs = data.get("runs")
+    if not isinstance(runs, list) or not runs:
+        raise ValueError("expected a non-empty SARIF runs array")
     results = []
-    for run in data.get("runs", []):
+    for run in runs:
+        if not isinstance(run, dict):
+            raise ValueError("each SARIF run must be an object")
+        tool = run.get("tool")
+        driver = tool.get("driver") if isinstance(tool, dict) else None
+        if (
+            not isinstance(driver, dict)
+            or not isinstance(driver.get("name"), str)
+            or not driver["name"].strip()
+        ):
+            raise ValueError("each SARIF run must identify its tool driver")
+        invocations = run.get("invocations", [])
+        if not isinstance(invocations, list):
+            raise ValueError("SARIF invocations must be an array")
+        for invocation in invocations:
+            if not isinstance(invocation, dict):
+                raise ValueError("each SARIF invocation must be an object")
+            if "executionSuccessful" in invocation and not isinstance(invocation["executionSuccessful"], bool):
+                raise ValueError("SARIF invocation success must be a boolean")
+            if invocation.get("executionSuccessful") is False:
+                raise ValueError("SARIF records an unsuccessful analysis invocation")
+        run_results = run.get("results", [])
+        if not isinstance(run_results, list):
+            raise ValueError("SARIF results must be an array")
         # Build rule lookup
         rules = {}
         tool = run.get("tool", {}).get("driver", {})
@@ -54,7 +77,9 @@ def parse_sarif(path):
         for rule in tool.get("rules", []):
             rules[rule["id"]] = rule
 
-        for result in run.get("results", []):
+        for result in run_results:
+            if not isinstance(result, dict):
+                raise ValueError("each SARIF result must be an object")
             rule_id = result.get("ruleId", "unknown")
             level = result.get("level", "warning")
             msg = result.get("message", {}).get("text", "")
@@ -100,10 +125,11 @@ def main():
     all_results = []
 
     for path in sarif_files:
-        if not os.path.isfile(path):
-            print("WARNING: {} not found, skipping".format(path), file=sys.stderr)
-            continue
-        results = parse_sarif(path)
+        try:
+            results = parse_sarif(path)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+            print("ERROR: Failed to parse {}: {}".format(path, error), file=sys.stderr)
+            return 1
         all_results.extend(results)
 
     # Header
@@ -117,7 +143,7 @@ def main():
 
     if not all_results:
         print("[OK] No findings detected.")
-        return
+        return 0
 
     # Summary by severity
     by_level = defaultdict(int)
@@ -212,7 +238,8 @@ def main():
         by_level.get("note", 0),
     ))
     print("=" * 72)
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
 PYTHON_SCRIPT

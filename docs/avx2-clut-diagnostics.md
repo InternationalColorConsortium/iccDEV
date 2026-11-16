@@ -242,10 +242,5 @@ Record the following with each optimization attempt:
 | Measurement | Release command, workload, iteration count, and results |
 | Decision | Accepted change, rejected experiment, or pending investigation |
 
-The reference Windows investigation is recorded in
-`avx2-clut-windows-performance.md`.
-The initial Linux profiling baseline is recorded in
-`avx2-clut-linux-performance.md`.
-
 Use `.github/prompts/avx2-clut-diagnostics.prompt.md` for one-off work and
 `.github/skills/avx2-clut-diagnostics/SKILL.md` for the repeatable workflow.

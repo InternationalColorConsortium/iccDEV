@@ -42,7 +42,7 @@ if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
-HOOK_DIR="$(git -C "$REPO_ROOT" rev-parse --git-path hooks)"
+HOOK_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path hooks)"
 mkdir -p "$HOOK_DIR"
 
 for hook_name in "${HOOK_NAMES[@]}"; do
@@ -52,6 +52,12 @@ for hook_name in "${HOOK_NAMES[@]}"; do
   if [ ! -f "$hook_src" ]; then
     echo "[FAIL] Hook source not found: $hook_src" >&2
     exit 1
+  fi
+
+  if [ "$hook_src" -ef "$hook_dst" ]; then
+    chmod 0755 "$hook_dst"
+    echo "[OK] $hook_name hook is already active at $hook_dst"
+    continue
   fi
 
   if [ -e "$hook_dst" ] && ! cmp -s "$hook_src" "$hook_dst"; then

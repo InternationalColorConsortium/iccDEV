@@ -3863,8 +3863,7 @@ icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const
  *  This is the spectral counterpart of the XYZ media-white adjustment
  *  CIccPcsXform pushes on a colorimetric PCS port, and it replaces that
  *  adjustment at a spectral port entirely -- see
- *  CIccXform::NeedsSrcPcsAdjust() and
- *  docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
+ *  CIccXform::NeedsSrcPcsAdjust().
  *
  * Args:
  *  pXform       = the xform owning the port being converted.

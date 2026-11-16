@@ -311,6 +311,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           REPORT_TITLE: ${{ inputs['report-title'] }}
+          INCLUDE_WINDOWS: ${{ inputs['include-windows'] && 'true' || 'false' }}
           STANDARD_RESULT: ${{ needs.standard-builds.result }}
           SANITIZER_RESULT: ${{ needs.sanitizer-builds.result }}
           OPTION_RESULT: ${{ needs.option-matrix.result }}
@@ -325,12 +326,16 @@ jobs:
           unset GITHUB_TOKEN || true
           source .trusted-workflow/.github/scripts/sanitize-sed.sh
           write_summary_line() {
-            sanitize_print "$1" >> "$GITHUB_STEP_SUMMARY"
+            {
+              sanitize_print "$1"
+              printf "\n"
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           }
           write_summary_line "# ${REPORT_TITLE}"
           write_summary_line ""
           write_summary_line "| Lane | Result |"
           write_summary_line "|---|---|"
+          summary_failed=false
           for result in \
             "Standard builds:${STANDARD_RESULT}" \
             "Sanitizer builds:${SANITIZER_RESULT}" \
@@ -343,4 +348,13 @@ jobs:
             lane="${result%%:*}"
             status="${result#*:}"
             write_summary_line "| ${lane} | ${status} |"
+            case "${lane}:${status}:${INCLUDE_WINDOWS}" in
+              *:success:*) ;;
+              "Windows toolchains:skipped:false"|"Windows full CTest:skipped:false") ;;
+              *) summary_failed=true ;;
+            esac
           done
+          if [ "$summary_failed" = true ]; then
+            echo "One or more required build matrix lanes did not succeed" >&2
+            exit 1
+          fi

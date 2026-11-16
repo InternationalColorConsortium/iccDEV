@@ -62,9 +62,7 @@
 // builds a CIccPcsStepSrcSparseMatrix for any sparse-matrix spectral PCS source, and
 // CIccCmm::Begin() succeeds -- the chain is complete and the step holds the real
 // range-mapped illuminant.  But the named-colour lookup that would feed it an encoded
-// matrix failed three steps earlier, so the step's Apply() was unreachable end to end and
-// had never executed: instrumenting BeginStep() across the whole benchmark suite in
-// docs/superpowers/results/2026-08-20-tier-c-results.md counted zero sparse PCS steps.
+// matrix failed three steps earlier, so the step's Apply() was unreachable end to end.
 //
 // Levels:
 //   1. CIccPcsStepSrcSparseMatrix::Apply() against a hand-multiplied expected vector.

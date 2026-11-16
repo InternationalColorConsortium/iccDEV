@@ -10,12 +10,19 @@
 ###############################################################
 set -euo pipefail
 
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
 REMOTE_NAME="${1:-origin}"
 REMOTE_URL="${2:-}"
 NULL_SHA="0000000000000000000000000000000000000000"
 
 WARNINGS=()
-REQUIRES_PREFLIGHT=0
+PREFLIGHT_BASES=()
+preflight_paths=(
+  .github .githooks AGENTS.md README.md docs
+  Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*'
+)
 
 warn() {
   WARNINGS+=("$1")
@@ -66,6 +73,17 @@ if [ -n "$current_branch" ] && upstream="$(git rev-parse --abbrev-ref --symbolic
   fi
 fi
 
+changed_paths() {
+  local base="$1"
+  local commit="$2"
+  shift 2
+  if [ -n "$base" ]; then
+    git diff --name-only "$base" "$commit" -- "$@"
+  else
+    git ls-tree -r --name-only "$commit" -- "$@"
+  fi
+}
+
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -n "${local_ref:-}" ] || continue
 
@@ -78,86 +96,91 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ "$local_sha" = "$NULL_SHA" ]; then
     continue
   fi
+  if ! local_commit="$(git rev-parse --verify "$local_sha^{commit}" 2>/dev/null)"; then
+    case "$local_ref" in
+      refs/tags/*) continue ;; # A non-commit tag has no source tree to scan.
+      *) echo "[FAIL] Cannot inspect pushed commit $local_sha." >&2; exit 1 ;;
+    esac
+  fi
 
+  review_base=""
   if [ "$remote_sha" != "$NULL_SHA" ]; then
-    review_range="$remote_sha..$local_sha"
+    if ! review_base="$(git rev-parse --verify "$remote_sha^{commit}" 2>/dev/null)"; then
+      echo "[FAIL] Remote commit $remote_sha is unavailable; fetch $REMOTE_NAME $remote_ref before pushing." >&2
+      exit 1
+    fi
+    review_range="$review_base..$local_commit"
     range_label="$remote_ref"
   else
     base_ref="$(new_branch_base)"
     if [ -n "$base_ref" ]; then
-      merge_base="$(git merge-base "$base_ref" "$local_sha" 2>/dev/null || true)"
-      if [ -n "$merge_base" ]; then
-        review_range="$merge_base..$local_sha"
-        range_label="$remote_ref against $base_ref"
-      else
-        review_range="$local_sha"
-        range_label="$remote_ref"
-        warn "Push creates new branch $remote_ref; no merge-base with $base_ref was found."
-      fi
+      review_base="$(git merge-base "$base_ref" "$local_commit" 2>/dev/null || true)"
+    fi
+    if [ -n "$review_base" ]; then
+      review_range="$review_base..$local_commit"
+      range_label="$remote_ref against $base_ref"
     else
-      review_range="$local_sha"
+      review_range="$local_commit"
       range_label="$remote_ref"
-      warn "Push creates new branch $remote_ref; default branch not found, inspecting pushed commit only."
+      warn "Push creates new branch $remote_ref; no base was found, inspecting the pushed commit and requiring a full preflight for infrastructure."
     fi
   fi
 
-  commit_count="$(git rev-list --count "$review_range" 2>/dev/null || echo 0)"
+  if [ -n "$review_base" ]; then
+    commit_count="$(git rev-list --count "$review_range")"
+    git diff --check "$review_base" "$local_commit"
+  else
+    commit_count=1
+    git diff-tree --root -r -m --check "$local_commit"
+  fi
   if [ "$commit_count" -gt 1 ]; then
     warn "Push updates $range_label with $commit_count commits; confirm this is intentional."
   fi
 
-  if [[ "$review_range" == *..* ]]; then
-    maintainer_changes="$(git diff --name-only "$review_range" -- \
-      '.github/**' \
-      '.githooks/**' \
-      'Build/Cmake/**' \
-      'Testing/**' \
-      'Dockerfile*' \
-      'Dockerfile.*' \
-      '.trivyignore*' \
-      'docs/**' 2>/dev/null || true)"
-  else
-    maintainer_changes="$(git diff-tree --no-commit-id --name-only -r "$local_sha" -- \
-      '.github/**' \
-      '.githooks/**' \
-      'Build/Cmake/**' \
-      'Testing/**' \
-      'Dockerfile*' \
-      'Dockerfile.*' \
-      '.trivyignore*' \
-      'docs/**' 2>/dev/null || true)"
-  fi
+  maintainer_changes="$(changed_paths "$review_base" "$local_commit" \
+    .github .githooks Build/Cmake Testing 'Dockerfile*' .dockerignore '.trivyignore*' docs)"
   if [ -n "$maintainer_changes" ]; then
     warn "Push changes maintainer-owned infrastructure paths; confirm reviewer coverage."
   fi
 
-  if git diff --quiet "$review_range" -- \
-    '.github/workflows/**' \
-    '.github/scripts/**' \
-    '.githooks/**' \
-    '.github/ci/doxygen/**' \
-    '.github/copilot-instructions.md' \
-    '.github/prompts/**' \
-    '.github/skills/**' \
-    'AGENTS.md' \
-    'README.md' \
-    'docs/**' \
-    'Dockerfile' \
-    'Dockerfile.*' \
-    '.trivyignore*'; then
-    :
-  else
-    REQUIRES_PREFLIGHT=1
+  preflight_changes="$(changed_paths "$review_base" "$local_commit" "${preflight_paths[@]}")"
+  if [ -z "$preflight_changes" ]; then
+    continue
+  fi
+
+  # Preflight reads HEAD and working files, so refuse to check another tree
+  # or let staged/unstaged corrections conceal a defect in the pushed commit.
+  if [ "$local_commit" != "$(git rev-parse --verify HEAD)" ]; then
+    echo "[FAIL] Infrastructure push targets a different commit; check out $local_ref and validate it before pushing." >&2
+    exit 1
+  fi
+  if ! git diff --quiet -- "${preflight_paths[@]}" ||
+     ! git diff --cached --quiet -- "${preflight_paths[@]}"; then
+    echo "[FAIL] Infrastructure has staged or unstaged changes; commit or stash them before pushing." >&2
+    exit 1
+  fi
+
+  # An unavailable base deliberately selects preflight's all-files fallback.
+  preflight_base="${review_base:-$NULL_SHA}"
+  base_seen=0
+  for checked_base in "${PREFLIGHT_BASES[@]}"; do
+    if [ "$checked_base" = "$preflight_base" ]; then
+      base_seen=1
+      break
+    fi
+  done
+  if [ "$base_seen" -eq 0 ]; then
+    PREFLIGHT_BASES+=("$preflight_base")
   fi
 done
 
-if [ "$REQUIRES_PREFLIGHT" -eq 1 ]; then
-  echo "Running required pre-push security gate for workflow, hook, script, or container changes." >&2
-  if ! .github/scripts/preflight-safety-checks.sh --require-tools; then
+for preflight_base in "${PREFLIGHT_BASES[@]}"; do
+  echo "Running required pre-push security gate for the outgoing commit." >&2
+  if ! PREFLIGHT_BASE_REF="$preflight_base" .github/scripts/preflight-safety-checks.sh --require-tools </dev/null; then
     echo "[FAIL] Pre-push security gate failed." >&2
     exit 1
   fi
-fi
+done
 
 if [ "${#WARNINGS[@]}" -eq 0 ]; then
   exit 0

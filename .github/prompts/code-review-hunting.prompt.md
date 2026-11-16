@@ -17,16 +17,9 @@ condition, impact, and smallest safe remediation. Read `AGENTS.md`,
 `.github/copilot-instructions.md`, matching path instructions, and
 `.github/skills/code-review/SKILL.md` before reviewing.
 
-Review only a frozen head that has passed
-`docs/governance/UPSTREAM_PR_READINESS.md`. Review the complete PR surface and
-cumulative diff, not incremental slices. Before reviewing, record a
-`base...HEAD` contract matrix mapping each changed cross-cutting surface to its
-producer, consumer, build/runtime behavior, platform or toolchain boundary, CI
-trigger, dependency owner, and local evidence. A request for changes returns
-the branch to branch-only grooming; re-review only after readiness evidence and
-the complete contract matrix are renewed. If a re-review finds any new blocker,
-including in the repair, stop serial automated review and require maintainer
-direction. Prefer no comment to low-value review volume.
+Review the complete cumulative diff at the current head and inspect directly
+affected consumers. Follow `AGENTS.md` for scope and review limits. Prefer no
+comment to low-value review volume.
 
 For every new or relocated ICC-owned C/C++ source or header, verify the
 complete BSD-3-Clause notice derived from `LICENSE.md` with

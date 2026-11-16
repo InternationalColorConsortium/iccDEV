@@ -4,8 +4,9 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-## Intent: CodeQL security analysis with custom iccDEV queries
-##         Uploads standard and custom iccDEV SARIF
+## Intent: Maintainer-triggered, master-push and scheduled product C++ analysis.
+##         Uploads standard, core-custom and JSON-custom SARIF; query fixtures
+##         are tested separately by ci-codeql-query-tests.
 #
 ## Last Updated: 2026-04-09 by David Hoyt
 #
@@ -279,7 +280,7 @@ jobs:
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \
             codeql-results/iccdev-jsonlib-security.sarif \
-            > codeql-results/report.txt
+            | tee codeql-results/report.txt
 
       - name: Upload standard CodeQL SARIF
         if: always()

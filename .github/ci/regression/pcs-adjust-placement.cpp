@@ -995,10 +995,8 @@ static bool buildV5SpectralInputProfile(CIccProfile &p)
 // left the rest alone. AdjustPCS() treated DstPixel[0..2] as X, Y and Z; the
 // first three samples of a reflectance spectrum are not X, Y and Z, so that was
 // a defect, not a behaviour to preserve. The repository owner ruled that the
-// correct conversion is element-wise against the spectral white point, and
-// requirement S5 of
-// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
-// authorises stopping the XYZ path at a spectral port.
+// correct conversion is element-wise against the spectral white point,
+// replacing the XYZ path at a spectral port.
 //
 // This fixture carries no icSigSpectralWhitePointTag, and that is now the whole
 // reason all six samples come through the pipeline untouched. Both chain-edge
@@ -1097,8 +1095,6 @@ static void spectralTrailingEdgeIsCleanAtRelativeIntent()
 }
 
 // --- spectral PCS white point conversion (S1-S8) --------------------------
-//
-// Spec: docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md
 //
 // The conversion is element-wise against icSigSpectralWhitePointTag,
 //   relative = absolute / white,   absolute = relative * white

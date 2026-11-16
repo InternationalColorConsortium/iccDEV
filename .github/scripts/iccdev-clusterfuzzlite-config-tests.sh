@@ -16,7 +16,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 workflow="$repo_root/.github/workflows/ci-clusterfuzzlite.yml"
 afl_workflow="$repo_root/.github/workflows/ci-afl-smoke.yml"
-cfl_workflow="$repo_root/.github/workflows/ci-cfl-smoke.yml"
+local_build="$repo_root/.github/ci/cfl/build.sh"
 adapter="$repo_root/.clusterfuzzlite/build.sh"
 project="$repo_root/.clusterfuzzlite/project.yaml"
 dockerfile="$repo_root/.clusterfuzzlite/Dockerfile"
@@ -57,7 +57,7 @@ source_digest="$repo_root/.github/scripts/iccdev-cfl-source-digest.sh"
 readme="$repo_root/.github/ci/cfl/README.md"
 skill="$repo_root/.github/skills/clusterfuzzlite/SKILL.md"
 
-for required in "$workflow" "$afl_workflow" "$cfl_workflow" \
+for required in "$workflow" "$afl_workflow" "$local_build" \
   "$adapter" "$project" "$dockerfile" \
   "$msan_builder" "$issue_2687_fixture" "$patch_mode_file" \
   "$target_group_file" "$patch_readme" "$patch_test" "$target_test" \
@@ -71,7 +71,7 @@ for required in "$workflow" "$afl_workflow" "$cfl_workflow" \
 done
 
 bash -n "$adapter"
-bash -n "$repo_root/.github/ci/cfl/build.sh"
+bash -n "$local_build"
 bash -n "$repo_root/.github/ci/docker/iccdev-fuzz-env.sh"
 bash -n "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 bash -n "$msan_builder"
@@ -258,12 +258,12 @@ grep -Fq 'xmlSetGenericErrorFunc(nullptr, discardXmlDiagnostic)' \
   "$repo_root/.github/ci/cfl/icc_xmlparse_fuzzer.cpp"
 grep -Fq 'xmlSetStructuredErrorFunc(nullptr, discardXmlStructuredDiagnostic)' \
   "$repo_root/.github/ci/cfl/icc_xmlparse_fuzzer.cpp"
-grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$repo_root/.github/ci/cfl/build.sh"
-grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq 'ICCDEV_CFL_CXX_LINK_FLAGS' "$local_build"
+grep -Fq 'ICCDEV_CFL_LIBXML2_PREFIX' "$local_build"
 grep -Fq 'toxml|fromxml|xmlparse) needs_xml=1' \
-  "$repo_root/.github/ci/cfl/build.sh"
+  "$local_build"
 grep -Fq 'tojson|fromjson|jsonparse|connectconfig) needs_json=1' \
-  "$repo_root/.github/ci/cfl/build.sh"
+  "$local_build"
 grep -Fq -- '--skip-libxml2' < <("$msan_builder" --help)
 grep -Fq 'cmake_generator="Unix Makefiles"' "$msan_builder"
 grep -Fq 'extensions.partialClone origin' "$msan_builder"
@@ -277,33 +277,27 @@ test "$issue_2687_sha" = \
 # shellcheck disable=SC2016 # The adapter must retain this literal template.
 fuzzer_template='  fuzzer="icc_${target}_fuzzer"'
 grep -Fqx "$fuzzer_template" "$adapter"
-grep -Fq '21:21|22:22)' "$repo_root/.github/ci/cfl/build.sh"
+grep -Fq '21:21|22:22)' "$local_build"
 grep -Fq '21:21|22:22)' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 grep -Fq 'afl_testcache_min_mb=128' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 grep -Fq 'AFL_TESTCACHE_SIZE=0' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 grep -Fq 'export AFL_TESTCACHE_SIZE' "$repo_root/.github/scripts/iccdev-afl-smoke.sh"
 
-for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
-  grep -q '^  workflow_dispatch:$' "$smoke_workflow"
-  grep -q '^  workflow_call:$' "$smoke_workflow"
-  grep -q '^      target_ref:$' "$smoke_workflow"
-  grep -q '^      target_sha:$' "$smoke_workflow"
-  grep -q '^      patch_mode:$' "$smoke_workflow"
-  if grep -Eq '^  (push|pull_request|schedule):$' "$smoke_workflow"; then
-    echo "[FAIL] Fuzz smoke workflows must remain manual or reusable" >&2
-    exit 1
-  fi
-done
+grep -q '^  workflow_dispatch:$' "$afl_workflow"
+grep -q '^  workflow_call:$' "$afl_workflow"
+grep -q '^      target_ref:$' "$afl_workflow"
+grep -q '^      target_sha:$' "$afl_workflow"
+grep -q '^      patch_mode:$' "$afl_workflow"
+if grep -Eq '^  (push|pull_request|schedule):$' "$afl_workflow"; then
+  echo "[FAIL] AFL smoke workflow must remain manual or reusable" >&2
+  exit 1
+fi
 
 afl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
 test "$(grep -Fc "        default: $afl_targets" "$afl_workflow")" -eq 2
-cfl_targets='dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize'
-test "$(grep -Fc "        default: $cfl_targets" "$cfl_workflow")" -eq 2
-for smoke_workflow in "$afl_workflow" "$cfl_workflow"; do
-  grep -Fq \
-    'ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh' \
-    "$smoke_workflow"
-done
+grep -Fq \
+  'ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh' \
+  "$afl_workflow"
 
 afl_pin='2400206be6fe0d93681c8a5c1535209366602eb1'
 grep -Fq "      AFLPLUSPLUS_REF: $afl_pin" "$afl_workflow"
@@ -339,7 +333,7 @@ validate_action_reference() {
   [[ "$action_ref" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[^@[:space:]]+)?@[0-9a-f]{40}$ ]]
 }
 
-for action_workflow in "$workflow" "$afl_workflow" "$cfl_workflow"; do
+for action_workflow in "$workflow" "$afl_workflow"; do
   while IFS= read -r action_ref; do
     if ! validate_action_reference "$action_ref"; then
       echo "[FAIL] Mutable or invalid action reference: $action_ref" >&2

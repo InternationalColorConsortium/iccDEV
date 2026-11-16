@@ -49,8 +49,5 @@ main chain. See \ref md_docs_2iccapply_2apply-profile-processing
 
 The current transform writers open the final destination path before all
 decoding completes. A late failure can truncate or remove a pre-existing
-destination. A staged-output change and its failure regressions are described
-in \ref md_docs_2analysis_2image-tool-tiff-qa-2026-11-01
-"the image-tool audit and implementation plan". Use a fresh destination for
-current QA runs.
+destination. Use a fresh destination for current QA runs.
 */

@@ -114,6 +114,8 @@ Build/Cmake/Tools/**/wxProfileDump
 # Generated ICC profiles in subdirectories
 Testing/**/*.icc
 docs/generated/
+docs/analysis/
+docs/superpowers/
 build-test/
 
 # Python

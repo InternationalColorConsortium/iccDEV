@@ -537,8 +537,7 @@ public:
   /// XYZ media-white one, which treats the first three samples of the pixel
   /// as X, Y and Z -- which the first three samples of a spectral vector are
   /// not. A spectral port takes CIccPcsXform's spectral white point
-  /// conversion instead; see
-  /// docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md.
+  /// conversion instead.
   ///
   /// Reads m_bSrcSpectralPCS rather than calling the virtual GetSrcSpace()
   /// itself: GetSrcSpace() walks into the profile header, and this predicate

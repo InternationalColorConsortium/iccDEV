@@ -1,21 +1,20 @@
 # AFL++ Smoke Fuzzing
 
-iccDEV has maintainer-owned AFL++ and CFL smoke workflows for short, manual
-checks of command-line tool and library fuzzability.
+iccDEV has a maintainer-owned AFL++ smoke workflow, a local CFL smoke runner,
+and a separate official ClusterFuzzLite workflow.
 
 ## CI Status
 
-The `ci-afl-smoke` and `ci-cfl-smoke` definitions are manual or reusable
-maintainer tools. They are not pull-request, push, or scheduled CI gates.
+`ci-afl-smoke` is manual or reusable. The local CFL runner is not a hosted gate;
+`ci-clusterfuzzlite` runs manually and nightly for eight in-process targets.
+Neither workflow is a pull-request or push gate.
 
 ## Review Scope
 
-The AFL and CFL files in this area are experimental maintainer scaffolding.
-They register manual/reusable workflows, helper scripts, seed handling, and
-documentation so maintainers can run bounded fuzzing off `master` or an
-integration branch such as `ci-afl-cfl`. They are not intended to make fuzzing a
-required merge gate, replace CTest or sanitizer regression tests, or assert that
-the current fuzz target set is complete.
+The AFL smoke and local CFL runner are bounded maintainer tools. They are not
+required merge gates, replacements for CTest or sanitizer regression tests, or
+evidence that the current fuzz target set is complete. The official
+ClusterFuzzLite target and schedule details are in `.github/ci/cfl/README.md`.
 
 The patch stacks under `.github/ci/fuzz-patches/afl` and
 `.github/ci/fuzz-patches/cfl` are local validation aids. Reviewers should treat
@@ -110,10 +109,10 @@ positive value below 128 to `0`, with a warning, so stale local environment
 settings cannot abort before the forkserver starts. It rejects non-numeric
 values as configuration errors.
 
-The AFL and CFL smoke workflows default to applying their maintainer-local
-patch stacks before building. This branch therefore tests local fuzzing fixes
-before a developer promotes them to normal source PRs. Apply maintainer-local
-AFL patches locally before configuring iccDEV with:
+The AFL smoke workflow defaults to `patch_mode=none`. The local CFL builder
+runs unpatched unless given `--patches`; the official `ci-clusterfuzzlite`
+workflow defaults to patched mode. Apply maintainer-local AFL patches locally
+before configuring iccDEV with:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh --patches --seconds 60 --targets dump
@@ -127,11 +126,11 @@ clone.
 Both stacks are local validation aids; stable source fixes should still land as
 normal source changes.
 
-Manual AFL and CFL workflow dispatches accept `target_ref`, optional
-`target_sha`, and `patch_mode`. Use `target_ref` for branch or tag validation,
-`target_sha` when a replay must pin a full 40-character exact commit,
-`patch_mode=all` for the maintainer patch stack, and `patch_mode=none` for raw
-branch comparison.
+Manual AFL workflow dispatch accepts `target_ref`, optional `target_sha`, and
+`patch_mode`. Use `target_ref` for branch or tag validation, `target_sha` to pin
+a full 40-character commit, `patch_mode=all` for the local patch stack, and
+`patch_mode=none` for raw branch comparison. Official ClusterFuzzLite uses
+`run_mode`, `fuzz_minutes`, and `known_bug_patch_mode` instead.
 
 When AFL saves crashes or hangs, the smoke workflow replays them with iccDEV
 command-line tools. The uploaded findings artifact includes raw inputs,
@@ -140,7 +139,7 @@ per-finding `.cmd` replay files, replay logs, and
 
 ## Sanitizer Noise Suppression
 
-AFL and CFL smoke jobs can expose sanitizer reports from three places:
+AFL and local CFL smoke runs can expose sanitizer reports from three places:
 
 - iccDEV project code, such as `IccProfLib`, `IccConnect`, `Tools`, `cfl`, or
   workflow helper code. Treat these as actionable until triage proves otherwise.
@@ -248,10 +247,8 @@ AFL_PATH="$afl_src" AFL_CC=clang-22 AFL_CXX=clang++-22 "$afl_src/afl-clang-fast+
 
 Manual options:
 
-- `duration_seconds`: seconds per selected target, validated as `1` through
-  `3600`. CFL workflow dispatch also requires `duration_seconds` multiplied by
-  selected target count to stay at or below `5400` seconds so the job can finish
-  inside its hosted runner timeout.
+- `duration_seconds`: seconds per selected AFL target, validated as `1` through
+  `3600`.
 - `afl_targets`: comma-separated allow-list entries
 - `exec_timeout_ms`: AFL per-exec timeout, validated as `20` through `30000`
   and defaulted to `30000` to avoid false saved-hang artifacts in longer smoke
@@ -281,30 +278,34 @@ The workflow follows the repository workflow-governance model:
 - crash and hang testcase upload through the `afl-smoke-findings-<run-id>`
   artifact
 
-## CFL Core Smoke
+## CFL Local Smoke and Hosted Fuzzing
 
-The matching CFL smoke entry point is `.github/ci/cfl/build.sh` and the manual
-`ci-cfl-smoke` workflow:
+The local `.github/ci/cfl/build.sh` runner defaults to all 14 targets: six
+command-line wrappers and eight in-process harnesses. Run a short local smoke
+or dispatch the separate official workflow for hosted in-process fuzzing:
 
 ```bash
 .github/ci/cfl/build.sh --seconds 30
 
-gh workflow run ci-cfl-smoke.yml \
-  -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip,profilevisualize,writerserialize \
-  -f duration_seconds=30
+gh workflow run ci-clusterfuzzlite.yml --ref <branch> -f run_mode=smoke
+gh workflow run ci-clusterfuzzlite.yml --ref <branch> -f run_mode=full
 ```
 
 The six command-line CFL harnesses are conservative CLI-fidelity wrappers:
 libFuzzer writes each input to a temporary file and replays the matching
-sanitized iccDEV tool. `profilevisualize` and `writerserialize` are in-process
-harnesses. Both parse the input from memory and consume only public headers,
+sanitized iccDEV tool. The official workflow runs only the eight in-process
+targets across `address`, `undefined`, and `memory` sanitizer builds in full
+mode. Two of those targets, `profilevisualize` and `writerserialize`, parse the
+input from memory and consume only public headers,
 with the engine sources compiled as separate translation units:
 `profilevisualize` stops at the `IccVizModel.hpp` data API, and
 `writerserialize` carries the rendered result on into `Mini{PDF,SVG,TIFF}`,
 which is where the byte-level layout and offset arithmetic live (#2116).
 
-Both need a CLUT-bearing seed to reach the raster path at all, and the seed
-caps remove the only one at their defaults -- see #2120.
+Both need a CLUT-bearing seed to reach the raster path. The local defaults
+(`ICCDEV_CFL_MAX_SEED_BYTES=262144` and `-max_len=262144`) admit the 61,015-byte
+seed; an oversized committed seed fails instead of being silently dropped
+(#2120).
 
 CFL smoke duration is wall-clock seconds per selected target, implemented with
 LibFuzzer `-max_total_time`. It is not an iteration or execution count.

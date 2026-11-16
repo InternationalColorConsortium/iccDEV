@@ -2,8 +2,8 @@
 
 Use this maintainer workflow before opening or finalizing a PR that touches
 C/C++, CMake, CI, release packaging, sanitizer settings, or security automation.
-The goal is a short repeatable loop: code, validate, fix, and only then hand off
-the smallest useful evidence.
+Use the agent scope and review rule in
+[AGENTS.md](https://github.com/InternationalColorConsortium/iccDEV/blob/master/AGENTS.md).
 
 ## Validation Stages
 
@@ -16,7 +16,7 @@ the smallest useful evidence.
    Wait for terminal results and record the run IDs, head SHA, failures, and
    skips. Repair failures on the branch and repeat affected checks on its
    new head before requesting review.
-3. Open the PR only after the readiness gate passes and the user explicitly
+3. Open the PR only after the applicable checks pass and the user explicitly
    authorizes PR creation. A push or workflow dispatch does not authorize it.
 4. On the PR head, use `ci-pr-action` with `ci_scope=full` for final
    cross-platform builds, profile checks, and representative CTest coverage.
@@ -29,7 +29,7 @@ the smallest useful evidence.
    SHA, then refresh the labeler manually; see `label-system.md` for commands
    and the stacked-PR limitation.
 
-## Loop
+## Focused Checks
 
 1. Scope the smallest change and keep unrelated cleanups out of the branch.
    For maintainer branch grooming, apply the repository-local Git defaults in
@@ -58,23 +58,16 @@ the smallest useful evidence.
    - CTest profile gates for generated profile behavior;
    - release, Docker runtime/image-scan, WASM, or vcpkg smoke tests for
      packaging changes.
-5. Fix every confirmed issue and repeat the relevant checks until the same
-   command set is clean.
-6. Complete the pre-PR hosted screening described above on the same pushed
-   head, then freeze it and record the readiness evidence in
-   `docs/governance/UPSTREAM_PR_READINESS.md`, and request one complete review
-   of the cumulative diff. Verify no merge commits exist in the final
-   `base..HEAD` range. Resolve requested changes branch-only and renew the
-   evidence before a complete re-review. If that re-review finds an issue in
-   unchanged code, stop serial automated review and return to branch-only
-   grooming until a maintainer directs otherwise.
-7. Produce a golfed handoff: branch, commit, changed surface, command results,
+5. Fix confirmed issues within the requested scope and rerun the affected checks.
+6. Review the complete diff before pushing. Use existing results for the exact
+   head when the applicable hosted screening has already completed.
+7. Report the branch, commit, changed surface, command results,
    hosted run IDs, known skips or deferred items, and merge-readiness signal.
 
 ## Stacked PR and Fast-Lane Handoff
 
-For related changes that require multiple PRs within a rolling 24-hour period,
-use `.github/skills/stacked-pr-fast-lane/SKILL.md`. Keep each layer focused,
+Use `.github/skills/stacked-pr-fast-lane/SKILL.md` only when the maintainer
+explicitly requests a stack. Keep each layer focused,
 synchronize the stack before handoff, and report the stack order with each PR's
 head SHA. Fast lane is a maintainer-only, same-repository PR accelerator; it
 does not replace the required PR gates or permit fork validation.
@@ -145,7 +138,6 @@ the defect or the proof.
 - `workflow-security-trust-boundaries.md`
 - `regression-workflow-governance.md`
 - `.github/skills/pre-pr-security-cycle/SKILL.md`
-- `.github/prompts/pre-pr-security-cycle.prompt.md`
 - `.github/prompts/audit-workflow-governance.prompt.md`
 - `.github/prompts/build-and-test.prompt.md`
 - `.github/prompts/code-review-hunting.prompt.md`

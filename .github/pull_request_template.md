@@ -11,9 +11,6 @@
 - [ ] Updated documentation for user-visible behavior changes
 - [ ] Ran sanitizer coverage for memory-safety or parser changes
 - [ ] Added or updated regression coverage for behavior changes
-- [ ] Attached a `base...HEAD` contract matrix for cross-cutting changes:
-      producer, consumer, build/runtime behavior, platform/toolchain boundary,
-      CI trigger, dependency owner, and local evidence
 - [ ] Reviewed active and suppressed automated findings from review threads and summaries
 - [ ] For Python package changes, followed `docs/python-packaging-release.md` for PR and merge requirements
 - [ ] Did not change maintainer-owned workflow, CTest, CPack, sanitizer, release, or security infrastructure unless requested by an iccDEV maintainer

@@ -20,6 +20,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ci-iccdev-tool-tests.yml"
+MATRIX_WORKFLOW = ROOT / ".github/workflows/_build-matrix.yml"
 
 
 def tool_step(name):
@@ -134,6 +135,85 @@ def test_hybrid_timing_summary_matches_produced_tsv(tmp_path):
         ["cmykw", "4", "debug-export", "0", "10.5", "3.4", "1.2",
          "123456", "789", "9", "10"],
     ]
+
+
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None,
+                    reason="Bash summary probe requires Unix execution")
+def test_build_matrix_summary_fails_closed_after_rendering_all_rows(tmp_path):
+    workflow = yaml.safe_load(MATRIX_WORKFLOW.read_text(encoding="ascii"))
+    job = workflow["jobs"]["final-summary"]
+    step = next(item for item in job["steps"]
+                if item.get("name") == "Write sanitized result summary")
+    assert job["if"] == "always()"
+    assert step["env"]["INCLUDE_WINDOWS"] == (
+        "${{ inputs['include-windows'] && 'true' || 'false' }}"
+    )
+
+    trusted = tmp_path / ".trusted-workflow/.github/scripts"
+    trusted.mkdir(parents=True)
+    shutil.copy2(ROOT / ".github/scripts/sanitize-sed.sh",
+                 trusted / "sanitize-sed.sh")
+    summary = tmp_path / "summary.md"
+    script = (
+        "git() {\n"
+        '  [[ "$#" -eq 4 && "$1" == config && "$2" == --global &&\n'
+        '     "$3" == credential.helper && "$4" == "" ]]\n'
+        "}\n"
+        + step["run"]
+    )
+    rows = (
+        ("STANDARD_RESULT", "Standard builds"),
+        ("SANITIZER_RESULT", "Sanitizer builds"),
+        ("OPTION_RESULT", "Option matrix"),
+        ("WINDOWS_TOOLCHAINS_RESULT", "Windows toolchains"),
+        ("WINDOWS_CTEST_RESULT", "Windows full CTest"),
+        ("CTEST_RESULT", "CTest tool gate"),
+        ("VERSION_RESULT", "Version headers"),
+        ("CLEAN_RESULT", "Clean rebuild"),
+    )
+    cases = [
+        ("all-success", "true", {}, 0),
+        ("windows-disabled", "false", {
+            "WINDOWS_TOOLCHAINS_RESULT": "skipped",
+            "WINDOWS_CTEST_RESULT": "skipped",
+        }, 0),
+        ("empty-required", "true", {"STANDARD_RESULT": ""}, 1),
+        ("failed-required", "true", {"STANDARD_RESULT": "failure"}, 1),
+        ("cancelled-required", "true", {"STANDARD_RESULT": "cancelled"}, 1),
+        ("failed-disabled-windows", "false",
+         {"WINDOWS_CTEST_RESULT": "failure"}, 1),
+    ]
+    cases.extend(
+        (f"skipped-{key}", "true", {key: "skipped"}, 1)
+        for key, _ in rows
+    )
+    for name, include_windows, overrides, expected_exit in cases:
+        summary.unlink(missing_ok=True)
+        env = dict(os.environ, BASH_ENV="/dev/null",
+                   GITHUB_STEP_SUMMARY=str(summary),
+                   REPORT_TITLE="Build <matrix>",
+                   INCLUDE_WINDOWS=include_windows,
+                   **{key: "success" for key, _ in rows})
+        env.update(overrides)
+        result = subprocess.run(
+            ["bash", "--noprofile", "--norc", "-c", script],
+            cwd=tmp_path, env=env, capture_output=True, text=True,
+        )
+        assert result.returncode == expected_exit, (
+            name, result.stdout, result.stderr
+        )
+        lines = summary.read_text(encoding="utf-8").splitlines()
+        assert lines[:4] == [
+            "# Build &lt;matrix&gt;",
+            "",
+            "| Lane | Result |",
+            "|---|---|",
+        ], name
+        assert lines[4:] == [
+            f"| {label} | {env[key]} |" for key, label in rows
+        ], name
+        if expected_exit:
+            assert "required build matrix lanes did not succeed" in result.stderr
 
 
 def test_image_reuse_keeps_pinned_requirements_and_brotli_checks():

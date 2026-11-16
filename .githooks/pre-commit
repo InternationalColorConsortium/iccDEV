@@ -10,12 +10,21 @@
 ###############################################################
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-if git diff --cached --quiet -- .github .githooks Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*'; then
+gate_paths=(.github .githooks Dockerfile 'Dockerfile.*' .dockerignore '.trivyignore*')
+git diff --cached --check
+
+if git diff --cached --quiet -- "${gate_paths[@]}"; then
   exit 0
+fi
+
+# Preflight reads working files. Refuse partial staging so it checks the
+# same gated content that Git will commit.
+if ! git diff --quiet -- "${gate_paths[@]}"; then
+  echo "[FAIL] Staged infrastructure has unstaged changes; stage or stash those changes before committing." >&2
+  exit 1
 fi
 
 echo "iccDEV pre-commit security gate"

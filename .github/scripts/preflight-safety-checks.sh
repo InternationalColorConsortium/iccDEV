@@ -13,22 +13,30 @@ set -euo pipefail
 REQUIRE_TOOLS=0
 FAST_LANE=0
 FAST_SCOPE=""
+WORKFLOW_RISK_ONLY=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --require-tools) REQUIRE_TOOLS=1; shift ;;
+    --workflow-risk-only) WORKFLOW_RISK_ONLY=1; shift ;;
     --fast-lane) FAST_LANE=1; shift ;;
     --fast-lane=matlab) FAST_LANE=1; FAST_SCOPE="matlab"; shift ;;
     --help|-h)
-      echo "Usage: preflight-safety-checks.sh [--fast-lane[=matlab]] [--require-tools]"
+      echo "Usage: preflight-safety-checks.sh [--fast-lane[=matlab]] [--require-tools] [--workflow-risk-only]"
       echo ""
       echo "  --fast-lane         Scan changed workflow/script surfaces and skip CodeQL."
       echo "  --fast-lane=matlab  Limit the fast lane to MATLAB workflow infrastructure."
+      echo "  --workflow-risk-only  Run the shared whole-workflow policy check only."
       echo "  --require-tools  Fail instead of skipping unavailable optional tools."
       exit 0
       ;;
     *) echo "[FAIL] Unknown option: $1" >&2; exit 1 ;;
   esac
 done
+
+if [ "$WORKFLOW_RISK_ONLY" -eq 1 ]; then
+  FAST_LANE=0
+  FAST_SCOPE=""
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${PREFLIGHT_SCAN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -1054,6 +1062,15 @@ for file in "${unique_changed_files[@]}"; do
       ;;
   esac
 done
+
+if [ "$WORKFLOW_RISK_ONLY" -eq 1 ]; then
+  if [ "${#workflow_files[@]}" -eq 0 ]; then
+    echo "[FAIL] No workflows found for the shared workflow policy check" >&2
+    exit 1
+  fi
+  run_workflow_risk_subset
+  exit
+fi
 
 if [ "${#workflow_files[@]}" -gt 0 ]; then
   run_check "YAML parse" python3 - "${workflow_files[@]}" <<'PY'

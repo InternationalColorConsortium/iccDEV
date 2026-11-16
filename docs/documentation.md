@@ -13,4 +13,3 @@
 - [Documentation maintenance](documentation-maintenance.md)
 - [Maintainer label system](label-system.md)
 - [Label inventory audit](label-inventory-audit.md)
-- [Upstream pull request readiness](governance/UPSTREAM_PR_READINESS.md)

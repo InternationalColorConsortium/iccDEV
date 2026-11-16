@@ -6,18 +6,11 @@
 #
 ## Intent: Run the CodeQL query unit tests under .github/codeql-queries/test
 ##
-## Why this is a separate workflow rather than a job in
-## ci-codeql-security.yml: that workflow's pull_request trigger is
-## types:[labeled] and its analyze job additionally requires the
-## 'codeql-ready' label, because it builds the whole tree to make a
-## database.  These tests need no database and no build -- the qltest
-## extractor compiles the fixture itself -- so they can and should run on
-## every PR that edits a query.  Adding them there would have meant
-## widening that workflow's triggers for every PR.
-##
-## NOTE: CODEQL_VER/CODEQL_SHA256 below are one of the three workflow pin sites
-## for the CodeQL bundle. Keep them synchronized with ci-codeql-security.yml,
-## ci-preflight-safety.yml, and the Dockerfile; see docs/codeql.md.
+## The automatic, read-only fixture gate verifies C++ query behavior on query
+## PRs. The separate ci-codeql-security workflow builds the product database
+## for maintainer-triggered analysis and publishes SARIF.
+## Keep the bundle pins aligned with security, preflight, and Dockerfile;
+## check-codeql-bundle-pin-parity.py verifies all four locations.
 #
 ###############################################################
 
@@ -77,10 +70,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Unlike the sibling workflows this does NOT fall back to a codeql
-          # already on PATH.  Query-test output carries extractor line/column
-          # locations that .expected files assert exactly, so an unpinned CLI
-          # could flip these tests PASS/FAIL for reasons unrelated to the diff.
+          # Pin extractor behavior because .expected files assert exact locations.
           # CODEQL_SHA256 is the release asset digest for this exact bundle. Keep
           # this pin synchronized with the other workflow pins and Dockerfile:
           #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
@@ -117,14 +107,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Both installs, as .github/codeql-queries/README.md prescribes.
-          # With the pinned bundle above these mostly resolve from the bundle's
-          # own qlpacks (it rewrites the lock files to an empty dependency set
-          # in the process -- harmless here, but do not commit that churn).
-          # They matter for a standalone CLI, where the query pack's lock
-          # supplies codeql/cpp-all 8.0.3 and the test pack pins that same
-          # version; the second install is what keeps the two in step if the
-          # query pack's lock is ever regenerated against a newer cpp-all.
+          # Install both packs against the pinned bundle used for extraction.
           codeql pack install .github/codeql-queries
           codeql pack install .github/codeql-queries/test \
             --additional-packs=.github/codeql-queries
@@ -138,19 +121,18 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          # A qltest whose sources the extractor cannot see still reports
-          # PASSED, against an empty database -- the argv-unchecked-index
-          # fixture did exactly that twice while it was being written, once
-          # printing "found nothing to extract".  The cpp extractor does not
-          # descend into subdirectories, so require a source file beside every
-          # .qlref.  This checks the necessary condition only: it says the
-          # extractor has something to compile, not that compiling it produced
-          # a non-empty database.  A suite with a non-empty .expected already
-          # proves that itself; this is the backstop for all-negative suites,
-          # which cannot.
+          # A passing qltest needs source extraction and a positive expected
+          # result. CodeQL otherwise accepts an empty test inventory or a
+          # fixture that never reports anything.
           missing=0
+          fixture_count=0
           while IFS= read -r ref; do
+            fixture_count=$((fixture_count + 1))
             d="$(dirname "$ref")"
+            if ! grep -Eq '^[[:space:]]*\|.*[^[:space:]|].*\|[[:space:]]*$' "${ref%.qlref}.expected"; then
+              echo "[FAIL] $ref needs an .expected result row with a positive control" >&2
+              missing=1
+            fi
             # find, not `ls a b c`: ls exits non-zero when *any* glob is
             # unmatched, so absent .cc/.cxx would fail a directory that has a
             # perfectly good .cpp.
@@ -161,7 +143,12 @@ jobs:
               missing=1
             fi
           done < <(find .github/codeql-queries/test -name '*.qlref' -print)
+          if [ "$fixture_count" -eq 0 ]; then
+            echo "[FAIL] No CodeQL query fixtures found" >&2
+            exit 1
+          fi
           [ "$missing" -eq 0 ] || exit 1
+          printf 'CodeQL query fixtures selected: %s\n' "$fixture_count"
 
           codeql test run .github/codeql-queries/test \
             --additional-packs=.github/codeql-queries \

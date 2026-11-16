@@ -54,4 +54,3 @@ python .github/scripts/test_jpegdump_inspection.py --tool /path/to/iccJpegDump
 - [CLI tool reference](../../../docs/tools-cli-reference.md)
 - [IccPngDump](../IccPngDump/Readme.md)
 - [IccTiffDump](../IccTiffDump/Readme.md)
-- [Image-tool QA review](../../../docs/analysis/image-tool-tiff-qa-2026-11-01.md)

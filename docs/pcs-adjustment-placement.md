@@ -19,9 +19,6 @@ interior loop and both chain-edge blocks all test that same predicate.
 | spectral PCS | not the XYZ adjustment at all -- `NeedsSrcPcsAdjust()`/`NeedsDstPcsAdjust()` answer false, and `CIccPcsXform` pushes an element-wise spectral white point conversion instead. Interior connections and both chain edges via `Connect()`/`ConnectFirst()`/`ConnectLast()` |
 | MCS | nothing (see "Known gaps") |
 
-See `docs/superpowers/plans/2026-08-26-spectral-pcs-white-point-conversion.md`
-for the spectral conversion.
-
 ## Where each adjustment lands
 
 | Chain shape | Owner |

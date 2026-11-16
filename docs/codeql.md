@@ -1,7 +1,7 @@
 # CodeQL Security Analysis
 
 iccDEV ships custom CodeQL queries for ICC-specific security patterns. These
-queries are maintainer-local training and triage tools because recent custom
+queries are maintainer-curated training and triage tools because recent custom
 query rounds produced both useful findings and noisy false positives. The
 canonical query reference lives with the queries:
 
@@ -10,15 +10,19 @@ canonical query reference lives with the queries:
 The targeted JSON query suite covers both `IccJSON` and `IccConnect` JSON
 configuration code. Keep `.github/codeql-config.yml` and the local runner help
 text in sync when that scope changes.
-`iccdev-security-suite.qls` excludes JSON-derived queries, including
+`iccdev-security-suite.qls` excludes JSON-specific queries, including
 `json-size-to-narrow-setsize.ql`; the JSON suite is their sole reporting
-surface.
+surface. The cross-format `localized-text-unsafe-serialization.ql` query runs
+only in the core suite.
 
 Run local analysis with:
 
 ```bash
 .github/scripts/run-codeql-local.sh
 ```
+
+The runner reports only SARIF selected by the current invocation and fails if
+an expected result is missing or invalid.
 
 The local runner prefers a `codeql` executable on `PATH` and falls back to the
 GitHub CLI `gh codeql` extension. The unified container includes the pinned
@@ -52,7 +56,8 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 The bootstrap paths in `ci-codeql-security.yml`, `ci-preflight-safety.yml`,
 `ci-codeql-query-tests.yml`, and the Dockerfile are pinned to CodeQL bundle
-2.27.4 and verify the official Linux release-asset SHA-256 before extraction.
+2.27.4. All three workflows verify the official Linux release-asset SHA-256
+before extraction.
 Update the version and digest together in all four locations, then run:
 
 ```bash
@@ -63,20 +68,23 @@ The preflight gate runs this parity check for every invocation, so a partial
 bump fails before the separate checksum checks can succeed independently.
 
 `ci-codeql-query-tests.yml` runs the checked-in query unit tests under
-`.github/codeql-queries/test` on any PR touching `.github/codeql-queries/**`.
-It builds no database. Unlike the other two it never falls back to a `codeql`
-already on the runner's PATH, because `.expected` files assert extractor
-line/column locations exactly and an unpinned CLI can flip them.
+`.github/codeql-queries/test` on same-repository PRs and `master` pushes
+changing the queries or this workflow, or by manual dispatch.
+It does not build the product database or upload SARIF; `codeql test run`
+extracts each fixture into a temporary database. The pinned bundle keeps the
+extractor line/column locations asserted by `.expected` files stable.
 Each query fixture must include a reported vulnerable case and an unreported
 guarded case, so a passing query test proves both detection and its intended
 scope.
 
-The GitHub Actions CodeQL workflow uploads three SARIF categories:
+`ci-codeql-security.yml` builds the product C/C++ database and uploads three
+SARIF categories:
 `iccdev-standard-cpp-security-and-quality`, `iccdev-custom-security` and
-`iccdev-jsonlib-security`. Custom-query alerts still need maintainer triage
-before they are cited in issues or PRs.
-This includes the division-by-zero profile query, which has produced useful
-fixes but also guard-sensitive false positives.
+`iccdev-jsonlib-security`. The standard category excludes
+`cpp/path-injection`; the two custom categories run disjoint query suites.
+Custom-query alerts still need maintainer triage before they are cited in
+issues or PRs. Labeled PR scans use trusted-base queries; the read-only query
+tests exercise proposed query changes.
 For `unbounded-profile-loop`, trace the full profile-to-tool path before
 synthesizing a PoC. A guard in `Begin()` may establish an Apply-path invariant;
 alerts #999, #1000, and #1647 are the reference case. If every tool path
@@ -88,9 +96,6 @@ Similarly, do not classify internal scheduler state or an allocation-sized
 derived count as profile-controlled solely because its member name contains
 `count`. Alerts #2360 and #881 are the narrow reference exclusions; retain the
 type-and-field scope when maintaining them.
-The XML narrowing query is scoped to high-signal channel and spectral-step
-attributes; broader enum, reserved, storage-type, and explicit-cast cases are
-left for separate local experiments.
 
 `fixed-buffer-loop-bound` covers the #2608 stack-buffer-overflow shape: a
 fixed-size aggregate position table indexed by a loop whose member-count bound
