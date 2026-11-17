@@ -67,6 +67,11 @@
 #include <cstdio>
 #include <cstring>
 
+#if (defined(ICC_BYTE_ORDER_LITTLE_ENDIAN) && defined(ICC_BYTE_ORDER_BIG_ENDIAN)) || \
+    (!defined(ICC_BYTE_ORDER_LITTLE_ENDIAN) && !defined(ICC_BYTE_ORDER_BIG_ENDIAN))
+  #error Exactly one ICC byte-order macro must be defined
+#endif
+
 // CIccSegmentedCurve::Write() emits, in order: the curve signature (4 bytes),
 // a reserved word (4), the segment count (2), a second reserved word (2), then
 // one big-endian float breakpoint for every segment after the first.  With
@@ -80,8 +85,61 @@ static icUInt32Number beU32(const icUInt8Number *p)
          ((icUInt32Number)p[2] << 8) | (icUInt32Number)p[3];
 }
 
+static bool checkByteOrderIO()
+{
+  const icUInt16Number marker = 0x0102u;
+  icUInt8Number nativeBytes[sizeof(marker)];
+  std::memcpy(nativeBytes, &marker, sizeof(marker));
+  const bool nativeLittle = nativeBytes[0] == 0x02;
+#ifdef ICC_BYTE_ORDER_LITTLE_ENDIAN
+  if (!nativeLittle) {
+#else
+  if (nativeLittle) {
+#endif
+    std::printf("FAIL: ICC byte-order macro disagrees with native byte order\n");
+    return false;
+  }
+
+  icUInt8Number expected[] = {
+    0x12, 0x34,
+    0x01, 0x23, 0x45, 0x67,
+    0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
+  };
+  icUInt16Number value16 = 0x1234u;
+  icUInt32Number value32 = 0x01234567u;
+  icUInt64Number value64 = 0x0123456789abcdefULL;
+
+  CIccMemIO writer;
+  if (!writer.Alloc(sizeof(expected), true) ||
+      writer.Write16(&value16) != 1 || writer.Write32(&value32) != 1 ||
+      writer.Write64(&value64) != 1 ||
+      writer.GetLength() != sizeof(expected) ||
+      std::memcmp(writer.GetData(), expected, sizeof(expected)) != 0) {
+    std::printf("FAIL: 16/32/64-bit writers did not produce ICC byte order\n");
+    return false;
+  }
+
+  value16 = 0;
+  value32 = 0;
+  value64 = 0;
+  CIccMemIO reader;
+  if (!reader.Attach(expected, sizeof(expected)) ||
+      reader.Read16(&value16) != 1 || reader.Read32(&value32) != 1 ||
+      reader.Read64(&value64) != 1 ||
+      value16 != 0x1234u || value32 != 0x01234567u ||
+      value64 != 0x0123456789abcdefULL) {
+    std::printf("FAIL: 16/32/64-bit readers did not decode ICC byte order\n");
+    return false;
+  }
+
+  return true;
+}
+
 int main()
 {
+  if (!checkByteOrderIO())
+    return 1;
+
   // The shape taken from Testing/Calc/RGBWProjector.xml, the fixture that
   // exposed this: a formula segment covering everything below 0.0, a sampled
   // segment across the unit interval, and a formula segment above 1.0.  The
