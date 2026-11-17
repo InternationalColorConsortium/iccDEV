@@ -6835,6 +6835,47 @@ function(iccdev_add_fileio_seek_tell_test)
   endif()
 endfunction()
 
+# icICubeth() tested the pre-2016 SAMPLEICC_NOCLIPLABTOXYZ name while
+# IccProfLibConf.h defines REFICCMAX_NOCLIPLABTOXYZ, so Lab -> XYZ clamped
+# negative components to zero despite the config asking it not to. Exits 77
+# (skip) when a build removes the define and opts into clipping.
+function(iccdev_add_lab_to_xyz_noclip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccLabToXyzNoClipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/lab-to-xyz-noclip.cpp"
+  )
+  target_link_libraries(iccLabToXyzNoClipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccLabToXyzNoClipTest)
+
+  add_test(
+    NAME iccdev.lab-to-xyz-noclip
+    COMMAND
+      "$<TARGET_FILE:iccLabToXyzNoClipTest>"
+  )
+  set_tests_properties(iccdev.lab-to-xyz-noclip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    SKIP_RETURN_CODE 77
+    LABELS "iccdev;pcs;lab;regression"
+  )
+  if(WIN32)
+    set(_labxyz_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccLabToXyzNoClipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _labxyz_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.lab-to-xyz-noclip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_labxyz_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the reopen half of #1940. CIccFileIO::Open fclose()s the stream it is
 # already holding without nulling m_fFile, which only stayed safe while the
 # fopen() assignment was the next statement. #1204 put the POSIX regular-file
@@ -13786,6 +13827,7 @@ if(WIN32)
   iccdev_add_profile_write_failure_test()
   iccdev_add_same_file_identity_test()
   iccdev_add_fileio_seek_tell_test()
+  iccdev_add_lab_to_xyz_noclip_test()
   iccdev_add_fileio_reopen_nonregular_test()
   iccdev_add_iccio_write_float_aliasing_test()
   iccdev_add_tagdata_zlib_roundtrip_test()
@@ -14396,6 +14438,7 @@ iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_same_file_identity_test()
 iccdev_add_fileio_seek_tell_test()
+iccdev_add_lab_to_xyz_noclip_test()
 iccdev_add_fileio_reopen_nonregular_test()
 iccdev_add_iccio_write_float_aliasing_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
