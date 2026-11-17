@@ -58,6 +58,14 @@
   #include <string.h>
 #endif
 
+// Solaris Studio does not provide the GCC/Clang byte-order macros. Its system
+// header defines the processor's byte order, and must be included outside the
+// optional iccDEV namespace.
+#if (defined(__sun) || defined(__sun__)) && \
+    !(defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && defined(__ORDER_BIG_ENDIAN__))
+  #include <sys/isa_defs.h>
+#endif
+
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
@@ -167,19 +175,26 @@ namespace iccDEV {
 
   #define ICHALFFLOATTYPE uint16_t
 
-  #if defined(__APPLE__)
-    #if  defined(__LITTLE_ENDIAN__)
+  // ICC data is big-endian; the swap paths need the target CPU's byte order,
+  // not an assumption based on the operating system.
+  #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && defined(__ORDER_BIG_ENDIAN__)
+    #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
       #define ICC_BYTE_ORDER_LITTLE_ENDIAN
-    #else
-      #define ICC_BYTE_ORDER_BIG_ENDIAN
-    #endif
-
-  #else // Sun Solaris or Linux
-    #if defined(__sun__)
+    #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
       #define ICC_BYTE_ORDER_BIG_ENDIAN
     #else
-      #define ICC_BYTE_ORDER_LITTLE_ENDIAN
+      #error Unsupported target byte order
     #endif
+  #elif defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)
+    #define ICC_BYTE_ORDER_LITTLE_ENDIAN
+  #elif defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)
+    #define ICC_BYTE_ORDER_BIG_ENDIAN
+  #elif defined(__LITTLE_ENDIAN__) && !defined(__BIG_ENDIAN__)
+    #define ICC_BYTE_ORDER_LITTLE_ENDIAN
+  #elif defined(__BIG_ENDIAN__) && !defined(__LITTLE_ENDIAN__)
+    #define ICC_BYTE_ORDER_BIG_ENDIAN
+  #else
+    #error Unable to determine target byte order
   #endif
 
   #if defined(ICCPROFLIBDLL_EXPORTS)
