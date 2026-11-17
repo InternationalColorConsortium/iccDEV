@@ -848,12 +848,12 @@ icFloatNumber icICubeth(icFloatNumber v)
 {
   if (v > 0.20689303448275862068965517241379)
     return v*v*v;
-  else 
-#ifndef SAMPLEICC_NOCLIPLABTOXYZ
+  else
+#ifndef REFICCMAX_NOCLIPLABTOXYZ
   if (v>16.0/116.0)
 #endif
     return (icFloatNumber)((v - 16.0 / 116.0) / 7.787037037037037037037037037037);
-#ifndef SAMPLEICC_NOCLIPLABTOXYZ
+#ifndef REFICCMAX_NOCLIPLABTOXYZ
   else
     return 0.0;
 #endif
