@@ -1,0 +1,28 @@
+{
+  "imageFiles": {
+    "srcImageFile": "Testing/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif",
+    "dstImageFile": "output.tif",
+    "srcIfd": 0,
+    "dstEncoding": "16Bit",
+    "dstCompression": "sameAsSource",
+    "dstPlanar": "sameAsSource",
+    "dstEmbedIcc": false,
+    "dstTileWidth": 16,
+    "dstTileHeight": 16,
+    "dstBigTiff": false
+  },
+  "connect": {
+    "threads": 2,
+    "useSearch": false
+  },
+  "profileSequence": [
+    {
+      "iccFile": "Testing/sRGB_v4_ICC_preference.icc",
+      "intent": "relative",
+      "transform": "default",
+      "interpolation": "linear",
+      "useBPC": true,
+      "useHToS": false
+    }
+  ]
+}
