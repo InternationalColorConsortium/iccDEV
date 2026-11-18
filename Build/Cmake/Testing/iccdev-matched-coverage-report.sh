@@ -37,12 +37,67 @@ if ! printf '' | "$SORT" -z >/dev/null; then
   exit 1
 fi
 
-mkdir -p \
-  "$REPORT_DIR/html" \
-  "$REPORT_DIR/lcov" \
-  "$REPORT_DIR/matched" \
-  "$REPORT_DIR/profdata" \
-  "$REPORT_DIR/probes"
+if [ -z "$REPORT_DIR" ] || [ -L "$REPORT_DIR" ]; then
+  echo "unsafe report directory: $REPORT_DIR" >&2
+  exit 1
+fi
+mkdir -p "$REPORT_DIR"
+report_abs="$(cd "$REPORT_DIR" && pwd -P)"
+build_abs="$(cd "$BUILD_DIR" && pwd -P)"
+profraw_abs="$(cd "$PROFRAW_DIR" && pwd -P)"
+case "$report_abs" in
+  /|"${HOME:-}"|"$(pwd -P)"|"$build_abs"|"$profraw_abs")
+    echo "refusing to use unsafe report directory: $report_abs" >&2
+    exit 1
+    ;;
+esac
+
+marker="$REPORT_DIR/.iccdev-matched-coverage-report"
+if [ -L "$marker" ] || { [ -e "$marker" ] &&
+  ! grep -qx 'iccdev-matched-coverage-report v1' "$marker"; }; then
+  echo "report directory has an invalid ownership marker: $REPORT_DIR" >&2
+  exit 1
+fi
+
+# Reports from older helper versions have no marker. Recognize a completed
+# legacy report by its own mapping and metadata before replacing its outputs.
+legacy_report=false
+if [ ! -e "$marker" ] &&
+   [ -f "$REPORT_DIR/matched-objects.tsv" ] &&
+   [ -f "$REPORT_DIR/coverage-summary.txt" ] &&
+   [ -f "$REPORT_DIR/coverage-env.txt" ]; then
+  map_header=""
+  IFS= read -r map_header < "$REPORT_DIR/matched-objects.tsv" || true
+  if [ "$map_header" = $'signature\tobject\tprofraw_files\tcovered_score' ] &&
+     grep -Eq '^matched_object_count=[1-9][0-9]*$' "$REPORT_DIR/coverage-env.txt" &&
+     grep -Eq '^profile_signature_count=[1-9][0-9]*$' "$REPORT_DIR/coverage-env.txt"; then
+    legacy_report=true
+  fi
+fi
+
+# Only these subdirectories belong to this helper. A marker or a completed
+# legacy report protects unrelated caller data from removal.
+owned_dirs=(html lcov matched profdata probes)
+for subdir in "${owned_dirs[@]}"; do
+  path="$REPORT_DIR/$subdir"
+  if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
+    echo "report output is not a directory: $path" >&2
+    exit 1
+  fi
+  if [ -d "$path" ] && [ ! -e "$marker" ] &&
+     [ "$legacy_report" != true ] &&
+     [ -n "$("$FIND" "$path" -mindepth 1 -print -quit)" ]; then
+    echo "refusing to clear unmarked report output: $path" >&2
+    exit 1
+  fi
+done
+
+printf 'iccdev-matched-coverage-report v1\n' > "$marker"
+for subdir in "${owned_dirs[@]}"; do
+  path="$REPORT_DIR/$subdir"
+  mkdir -p "$path"
+  "$FIND" "$path" -mindepth 1 -depth -delete
+done
 
 candidates_file="$REPORT_DIR/candidate-objects.txt"
 signatures_file="$REPORT_DIR/profile-signatures.txt"
