@@ -45,12 +45,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Checkout trusted sanitizer helpers"
+      - name: "Checkout trusted coverage helpers"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
           path: trusted
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/ci/qa-detection-matrix.json
           fetch-depth: 1
           persist-credentials: false
 
@@ -186,6 +188,19 @@ jobs:
             printf 'code_stats_languages=%s\n' "$code_stats_languages"
             printf 'code_stats_total=%s\n' "$code_stats_total"
           } >> "$GITHUB_ENV"
+
+      - name: "Generate QA detector ownership report"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          python3 "${TRUSTED_SCRIPTS}/qa-detection-matrix.py" \
+            --input trusted/.github/ci/qa-detection-matrix.json \
+            --repo-root "$WORKSPACE_DIR" \
+            --markdown coverage-report/qa-detection-matrix.md \
+            --json coverage-report/qa-detection-matrix.json
 
       - name: "Build with coverage instrumentation"
         env:
@@ -1089,6 +1104,12 @@ jobs:
           summary_line "Coverage HTML, lcov, CTest data, code stats, review data, and failure logs"
           summary_line "are packaged in the sanitized developer report artifact, including partial failure evidence."
           summary_line ""
+          if [ -f coverage-report/qa-detection-matrix.md ]; then
+            while IFS= read -r line; do
+              summary_line "$line"
+            done < coverage-report/qa-detection-matrix.md
+            summary_line ""
+          fi
           summary_line "### llvm-cov Text Report"
           printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           if [ -f coverage-report/coverage-summary.txt ]; then

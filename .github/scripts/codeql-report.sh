@@ -98,7 +98,13 @@ def parse_sarif(path):
             # Get rule metadata
             rule_meta = rules.get(rule_id, {})
             severity = rule_meta.get("properties", {}).get("problem.severity", level)
-            tags = rule_meta.get("properties", {}).get("tags", [])
+            properties = rule_meta.get("properties", {})
+            if not isinstance(properties, dict):
+                properties = {}
+            tags = properties.get("tags", [])
+            if not isinstance(tags, list):
+                tags = []
+            tags = [tag for tag in tags if isinstance(tag, str)]
             cwe_tags = [t for t in tags if t.startswith("external/cwe/")]
             cwe_str = ", ".join(t.replace("external/cwe/", "").upper() for t in cwe_tags)
 
@@ -112,6 +118,9 @@ def parse_sarif(path):
                 "line": line,
                 "cwe": cwe_str,
                 "tool": tool_name,
+                "sarif": path,
+                "tags": tags,
+                "security_severity": properties.get("security-severity", ""),
             })
     return results
 
@@ -139,6 +148,14 @@ def main():
     print()
     print("SARIF files analyzed: {}".format(len(sarif_files)))
     print("Total findings: {}".format(len(all_results)))
+    print()
+
+    by_sarif = defaultdict(int)
+    for result in all_results:
+        by_sarif[result["sarif"]] += 1
+    print("--- Findings by SARIF Input ---")
+    for path, count in sorted(by_sarif.items()):
+        print("  {:60s} {:>5d}".format(path, count))
     print()
 
     if not all_results:
@@ -212,6 +229,35 @@ def main():
         print("--- Findings by CWE ---")
         for cwe, count in sorted(by_cwe.items(), key=lambda x: -x[1]):
             print("  {:60s} {:>5d}".format(cwe, count))
+        print()
+
+    # The standard suite reports many quality recommendations at warning level,
+    # and custom iccDEV security queries also use warning for medium-precision
+    # review findings. The previous report printed details only for error-level
+    # results, so a successful run with hundreds of warnings exposed no finding
+    # locations in its text artifact. Surface the security-tagged and custom
+    # subset explicitly while retaining the complete SARIF as the source of truth.
+    high_signal = [
+        r for r in all_results
+        if r["rule_id"].startswith("iccdev/")
+        or "security" in r["tags"]
+        or bool(r["security_severity"])
+    ]
+    if high_signal:
+        print("=" * 72)
+        print("SECURITY AND ICCDEV FINDINGS (review required)")
+        print("=" * 72)
+        print("Showing {} security-tagged or custom findings.".format(len(high_signal)))
+        for r in sorted(high_signal, key=lambda x: (x["rule_id"], x["file"], x["line"])):
+            print()
+            print("  Rule: {}".format(r["rule_id"]))
+            print("  Level: {}".format(r["level"]))
+            print("  Location: {}".format(r["location"] or "n/a"))
+            if r["cwe"]:
+                print("  CWE: {}".format(r["cwe"]))
+            if r["security_severity"]:
+                print("  Security severity: {}".format(r["security_severity"]))
+            print("  {}".format(r["message"][:400]))
         print()
 
     # Detailed error-level findings

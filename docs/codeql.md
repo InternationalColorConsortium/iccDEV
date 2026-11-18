@@ -85,6 +85,30 @@ SARIF categories:
 Custom-query alerts still need maintainer triage before they are cited in
 issues or PRs. Labeled PR scans use trusted-base queries; the read-only query
 tests exercise proposed query changes.
+
+The workflow also publishes `iccdev-codeql-review-report`, including the complete
+text report and the QA detector ownership matrix. The report expands all
+`iccdev/*` custom-query results and findings tagged `security`, even when SARIF
+classifies them as warnings. This avoids hiding actionable locations behind an
+error-only report summary. The matrix at `.github/ci/qa-detection-matrix.json`
+is the canonical map from recent QA issues to their primary detector and local
+evidence, tracked by
+[#3094](https://github.com/InternationalColorConsortium/iccDEV/issues/3094).
+Validate or render it with:
+
+```bash
+python3 .github/scripts/qa-detection-matrix.py \
+  --input .github/ci/qa-detection-matrix.json \
+  --repo-root . --markdown /tmp/qa-detection-matrix.md
+```
+
+CodeQL is not expected to report every runtime defect. A missing CodeQL alert
+is actionable only when a query models the defect's source-to-sink or structural
+pattern. Sanitizer, parser-regression, format round-trip, numerical-oracle, and
+CLI-contract tests remain the primary detectors for behavior that static
+analysis does not model. Coverage confirms that those detectors exercised code;
+it does not establish that they asserted the required behavior.
+
 For `unbounded-profile-loop`, trace the full profile-to-tool path before
 synthesizing a PoC. A guard in `Begin()` may establish an Apply-path invariant;
 alerts #999, #1000, and #1647 are the reference case. If every tool path
@@ -121,6 +145,12 @@ their medium-precision alerts require manual verification, not removal of a
 valid guard. The forwarded-capacity fixture pins this conservative limitation.
 Arithmetic expressions involving the destination count are also outside the
 recognized capacity contract.
+
+`recursive-parse-no-depth-limit` covers recursive `Read`, `Parse`,
+`ParseImport`, `Apply`, and composite `Validate` dispatch. Its query fixture
+keeps vulnerable and depth-guarded controls for both direct recursion and
+nested composite validation. Treat the latter as a structural signal for the
+#3086 family, not proof that every reported composite is profile reachable.
 
 `counted-buffer-off-by-one` covers the nearby counted-buffer family. Review the allocation count, loop count, and
 serialization count as one contract. In particular, `index > count` does not

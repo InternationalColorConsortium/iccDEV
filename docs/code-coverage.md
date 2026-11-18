@@ -54,6 +54,14 @@ executables, nested package rebuilds, and intentionally separate focused runs
 from changing the denominator. The workflow reports both denominators; do not
 combine or compare their percentages as though they were the same population.
 
+The developer artifact includes a rendered copy of the recent-issue detector
+matrix from `.github/ci/qa-detection-matrix.json`. Use its `coverage_role`
+field to distinguish reachability evidence from a defect oracle. A covered line
+can still contain a missed boundary, malformed-input, ownership, or numerical
+defect when the executing test has no assertion for that behavior. Do not use a
+coverage percentage, including 100 percent line coverage, as evidence that
+CodeQL or a runtime gate should have reported a particular issue.
+
 Required profile-generation scripts, both CTest gates, coverage
 instrumentation, signature selection, and report construction fail the job.
 Expected capability exits from `iccFromXml` and `iccRoundTrip` remain
