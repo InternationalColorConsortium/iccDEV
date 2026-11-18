@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Authored XML reference for sequence metadata coverage. The adjacent JSON is
+  independently maintained. The pair exercises profileSequenceDescType and
+  profileSequenceIdentifierType with two nested records each.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-18T12:34:56</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective"
+                      GlossyOrMatte="glossy"
+                      MediaPolarity="positive"
+                      MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag>
+      <multiLocalizedUnicodeType>
+        <LocalizedText LanguageCountry="enUS">Authored sequence metadata coverage</LocalizedText>
+      </multiLocalizedUnicodeType>
+    </profileDescriptionTag>
+    <copyrightTag>
+      <multiLocalizedUnicodeType>
+        <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+      </multiLocalizedUnicodeType>
+    </copyrightTag>
+    <mediaWhitePointTag>
+      <XYZArrayType>
+        <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+      </XYZArrayType>
+    </mediaWhitePointTag>
+    <redColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+      </XYZArrayType>
+    </redColorantTag>
+    <greenColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+      </XYZArrayType>
+    </greenColorantTag>
+    <blueColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+      </XYZArrayType>
+    </blueColorantTag>
+    <redTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </redTRCTag>
+    <greenTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </greenTRCTag>
+    <blueTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </blueTRCTag>
+    <profileSequenceDescTag>
+      <profileSequenceDescType>
+        <ProfileSequence>
+          <ProfileDesc>
+            <DeviceManufacturerSignature>ICC </DeviceManufacturerSignature>
+            <DeviceModelSignature>MOD1</DeviceModelSignature>
+            <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy"
+                              MediaPolarity="positive" MediaColour="colour"/>
+            <Technology>dcam</Technology>
+            <DeviceManufacturer>
+              <multiLocalizedUnicodeType>
+                <LocalizedText LanguageCountry="enUS">ICC sequence maker</LocalizedText>
+              </multiLocalizedUnicodeType>
+            </DeviceManufacturer>
+            <DeviceModel>
+              <multiLocalizedUnicodeType>
+                <LocalizedText LanguageCountry="enUS">Model one!</LocalizedText>
+              </multiLocalizedUnicodeType>
+            </DeviceModel>
+          </ProfileDesc>
+          <ProfileDesc>
+            <DeviceManufacturerSignature></DeviceManufacturerSignature>
+            <DeviceModelSignature></DeviceModelSignature>
+            <DeviceAttributes ReflectiveOrTransparency="transparency" GlossyOrMatte="matte"
+                              MediaPolarity="negative" MediaColour="blackAndWhite"/>
+            <Technology></Technology>
+            <DeviceManufacturer>
+              <multiLocalizedUnicodeType>
+                <LocalizedText LanguageCountry="frFR">Fabricant deux</LocalizedText>
+              </multiLocalizedUnicodeType>
+            </DeviceManufacturer>
+            <DeviceModel>
+              <multiLocalizedUnicodeType>
+                <LocalizedText LanguageCountry="frFR">Modele deux!</LocalizedText>
+              </multiLocalizedUnicodeType>
+            </DeviceModel>
+          </ProfileDesc>
+        </ProfileSequence>
+      </profileSequenceDescType>
+    </profileSequenceDescTag>
+    <profileSequenceIdentifierTag>
+      <profileSequenceIdentifierType>
+        <ProfileSequenceId>
+          <ProfileIdDesc id="00112233445566778899AABBCCDDEEFF">
+            <LocalizedText LanguageCountry="enUS">Input device</LocalizedText>
+            <LocalizedText LanguageCountry="frFR">Peripherique d entree</LocalizedText>
+          </ProfileIdDesc>
+          <ProfileIdDesc id="FFEEDDCCBBAA99887766554433221100">
+            <LocalizedText LanguageCountry="enUS">Output device</LocalizedText>
+          </ProfileIdDesc>
+        </ProfileSequenceId>
+      </profileSequenceIdentifierType>
+    </profileSequenceIdentifierTag>
+  </Tags>
+</IccProfile>

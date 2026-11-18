@@ -1,0 +1,199 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileFileSignature": "acsp",
+      "PrimaryPlatform": "",
+      "ProfileVersion": "4.40",
+      "ProfileDeviceClass": "mntr",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-17T12:34:56",
+      "RenderingIntent": "Relative",
+      "PCSIlluminant": [
+        0.9642,
+        1.0,
+        0.8249
+      ],
+      "ProfileCreator": "ICC "
+    },
+    "Tags": [
+      {
+        "profileDescriptionTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Dictionary localization coverage",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "copyrightTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Copyright 2026 International Color Consortium",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "mediaWhitePointTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.9642,
+                1.0,
+                0.8249
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.43606567,
+                0.2224884,
+                0.01391602
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "greenColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.38514709,
+                0.71687317,
+                0.09707642
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "blueColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.14306641,
+                0.06060791,
+                0.71409607
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "greenTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "blueTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "PrivateTag_5": {
+          "sig": "dct1",
+          "data": {
+            "type": "dictType",
+            "entries": [
+              {
+                "name": "Author",
+                "value": "Coverage",
+                "localizedNames": [
+                  {
+                    "text": "Author label",
+                    "language": "en",
+                    "country": "US"
+                  }
+                ],
+                "localizedValues": [
+                  {
+                    "text": "Coverage label",
+                    "language": "en",
+                    "country": "US"
+                  }
+                ]
+              },
+              {
+                "name": "Revision",
+                "localizedNames": [
+                  {
+                    "text": "Revision francaise",
+                    "language": "fr",
+                    "country": "FR"
+                  }
+                ]
+              },
+              {
+                "name": "State",
+                "value": ""
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
