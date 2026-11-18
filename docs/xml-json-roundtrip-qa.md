@@ -125,8 +125,20 @@ each pair:
 one existing aggregate CTest rather than an additional scheduling unit.
 
 `Testing/Format/` contains hand-authored, hand-translated XML/JSON pairs for
-format-level parser and writer paths. `iccdev.json-parser-regressions` parses
-both sources, compares their ICC payloads, writes and reparses both formats,
-and compares the returned payloads. Keep its generated output external and
-measure additions with the same compiler, test selection, matched objects, and
-denominator.
+format-level parser and writer paths. The standalone
+`.github/scripts/iccdev-json-parser-regression-tests.sh` driver parses both
+sources, compares their ICC payloads, writes and reparses both formats, and
+compares the returned payloads. It is invoked directly by the JSON round-trip
+and code-coverage workflows; it is not a registered CTest.
+
+`metadata-numeric-coverage.{xml,json}` is the issue #3092 regression. Its
+`u16Fixed16ArrayType` values above 32767 require the XML factory to return a tag
+with a `CIccTagXml` extension, require the unsigned fixed-number writer to emit
+a matching opening `Array` element, and distinguish unsigned conversion from
+the signed path. The same pair keeps a `uInt64ArrayType` value above 32 bits so
+the integer writer cannot silently take its 32-bit formatting branch.
+
+Keep generated output external and measure fixture additions with the same
+compiler, test selection, matched objects, and denominator. When a standalone
+driver owns the existing setup and oracle, extend that driver rather than
+describing or adding a CTest that does not exist.

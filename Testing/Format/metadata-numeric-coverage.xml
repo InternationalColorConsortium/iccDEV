@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Authored reference; metadata-numeric-coverage.json is maintained by hand. -->
+<!--
+  Authored reference; metadata-numeric-coverage.json is maintained by hand.
+  The u16Fixed16ArrayType is the issue #3092 regression: its values above
+  32767 require the unsigned XML wrapper and its Array writer branch.
+-->
 <IccProfile>
   <Header>
     <PreferredCMMType></PreferredCMMType>

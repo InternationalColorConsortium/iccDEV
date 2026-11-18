@@ -270,6 +270,8 @@ public:
 };
 
 typedef CIccTagXmlFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType> CIccTagXmlS15Fixed16;
+// #3092: keep the unsigned alias on the XML wrapper.  The IccProfLib base has
+// no CIccTagXml extension, so the XML factory cannot parse or emit the tag.
 typedef CIccTagXmlFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagXmlU16Fixed16;
 
 
