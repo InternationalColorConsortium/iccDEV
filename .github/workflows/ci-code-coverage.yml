@@ -260,7 +260,8 @@ jobs:
             library_path_dirs="${dir}:${library_path_dirs}"
           done < <(find "$BUILD_DIR" -name 'lib*.so' -type f -exec dirname {} \; | sort -u)
 
-          tool_count="$(find "$BUILD_DIR" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui | wc -l)"
+          tool_count="$(find "$BUILD_DIR" -path '*/Tools/*' -type f -executable \
+            ! -name iccDumpProfileGui ! -name iccDescribeSinkTest | wc -l)"
           proflib_kb="$(( $(stat -c%s "$(readlink -f "$proflib")" 2>/dev/null || printf 0) / 1024 ))"
           xmllib_kb="$(( $(stat -c%s "$(readlink -f "$xmllib")" 2>/dev/null || printf 0) / 1024 ))"
 
@@ -506,7 +507,10 @@ jobs:
               -name 'ctest-*.profraw' -size +0c -print | wc -l | tr -d ' '
           )"
 
-          ctest_total_line="$(grep -E 'tests failed out of [0-9]+|No tests were found' "$ctest_log" | tail -1 || true)"
+          ctest_total_line="$(
+            grep -E 'tests (failed|passed) out of [0-9]+|No tests were found' \
+              "$ctest_log" | tail -1 || true
+          )"
           ctest_time_line="$(grep -E '^Total Test time' "$ctest_log" | tail -1 || true)"
           large_profile_line="$(grep -E 'iccdev\.hybrid-pipeline' "$ctest_log" | tail -1 || true)"
           large_profile_seconds="n/a"
@@ -996,7 +1000,8 @@ jobs:
           tool_inventory="coverage-report/tool-inventory"
           mkdir -p "$tool_inventory"
           find "$build_dir" -path '*/Tools/*' -type f -executable \
-            ! -name iccDumpProfileGui -printf '%f\n' \
+            ! -name iccDumpProfileGui ! -name iccDescribeSinkTest \
+            -printf '%f\n' \
             | LC_ALL=C sort -u > "$tool_inventory/built.txt"
           awk -F '\t' '
             NR > 1 && $2 ~ /\/Tools\// {
@@ -1027,6 +1032,9 @@ jobs:
             printf 'Built CLI tools outside broad matched report: %s\n' "$broad_unmatched_tool_count"
             printf '\nUnmatched tool basenames:\n'
             cat "$tool_inventory/unmatched.txt"
+            printf '\niccBenchApply is a diagnostic benchmark. Its executable coverage\n'
+            printf 'is distinct from shared apply-library coverage.\n'
+            printf 'Optional tools not built on this runner are outside this inventory.\n'
           } > coverage-report/tool-coverage-inventory.txt
           {
             printf 'broad_matched_tool_count=%s\n' "$broad_matched_tool_count"
@@ -1116,7 +1124,7 @@ jobs:
           )"
 
           full_ctest_total_line="$(
-            grep -E 'tests failed out of [0-9]+|No tests were found' \
+            grep -E 'tests (failed|passed) out of [0-9]+|No tests were found' \
               "$full_ctest_log" | tail -1 || true
           )"
           full_ctest_time_line="$(grep -E '^Total Test time' "$full_ctest_log" | tail -1 || true)"
@@ -1293,6 +1301,8 @@ jobs:
           unmatched_row="Built CLIs outside the broad report "
           unmatched_row+="(${broad_unmatched_tool_count:-n/a}): ${broad_unmatched_tools:-n/a}."
           summary_line "$unmatched_row"
+          summary_line "The inventory covers built command-line binaries; optional unbuilt tools are excluded."
+          summary_line "iccBenchApply is a diagnostic benchmark; its executable has separate coverage."
           summary_line ""
           summary_line "### Full CTest core-library coverage"
           summary_line "| Metric | Coverage |"
@@ -1416,8 +1426,10 @@ jobs:
             printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
             printf 'Open developer-report/index.html for the presentation view.\n'
             printf 'Broad coverage HTML is under html/ and the full CTest core-library '
-            printf 'report is under full-ctest-core/. Supporting data is in ctest/, '
-            printf 'ctest-full/, code-stats/, matched/, profdata/, and timing/.\n'
+            printf 'report is under full-ctest-core/. Authored ICCs are under '
+            printf 'authored-profiles/; the built-tool inventory is under '
+            printf 'tool-inventory/. Supporting data is in ctest/, ctest-full/, '
+            printf 'code-stats/, matched/, profdata/, and timing/.\n'
           } > "${report_dir}/README.txt"
 
           html="${report_dir}/index.html"
