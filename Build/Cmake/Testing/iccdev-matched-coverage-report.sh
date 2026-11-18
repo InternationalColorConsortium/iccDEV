@@ -37,42 +37,80 @@ if ! printf '' | "$SORT" -z >/dev/null; then
   exit 1
 fi
 
-mkdir -p \
-  "$REPORT_DIR/html" \
-  "$REPORT_DIR/lcov" \
-  "$REPORT_DIR/matched" \
-  "$REPORT_DIR/profdata"
+if [ -z "$REPORT_DIR" ] || [ -L "$REPORT_DIR" ]; then
+  echo "unsafe report directory: $REPORT_DIR" >&2
+  exit 1
+fi
+mkdir -p "$REPORT_DIR"
+report_abs="$(cd "$REPORT_DIR" && pwd -P)"
+build_abs="$(cd "$BUILD_DIR" && pwd -P)"
+profraw_abs="$(cd "$PROFRAW_DIR" && pwd -P)"
+case "$report_abs" in
+  /|"${HOME:-}"|"$(pwd -P)"|"$build_abs"|"$profraw_abs")
+    echo "refusing to use unsafe report directory: $report_abs" >&2
+    exit 1
+    ;;
+esac
+
+marker="$REPORT_DIR/.iccdev-matched-coverage-report"
+if [ -L "$marker" ] || { [ -e "$marker" ] &&
+  ! grep -qx 'iccdev-matched-coverage-report v1' "$marker"; }; then
+  echo "report directory has an invalid ownership marker: $REPORT_DIR" >&2
+  exit 1
+fi
+
+# Reports from older helper versions have no marker. Recognize a completed
+# legacy report by its own mapping and metadata before replacing its outputs.
+legacy_report=false
+if [ ! -e "$marker" ] &&
+   [ -f "$REPORT_DIR/matched-objects.tsv" ] &&
+   [ -f "$REPORT_DIR/coverage-summary.txt" ] &&
+   [ -f "$REPORT_DIR/coverage-env.txt" ]; then
+  map_header=""
+  IFS= read -r map_header < "$REPORT_DIR/matched-objects.tsv" || true
+  if [ "$map_header" = $'signature\tobject\tprofraw_files\tcovered_score' ] &&
+     grep -Eq '^matched_object_count=[1-9][0-9]*$' "$REPORT_DIR/coverage-env.txt" &&
+     grep -Eq '^profile_signature_count=[1-9][0-9]*$' "$REPORT_DIR/coverage-env.txt"; then
+    legacy_report=true
+  fi
+fi
+
+# Only these subdirectories belong to this helper. A marker or a completed
+# legacy report protects unrelated caller data from removal.
+owned_dirs=(html lcov matched profdata probes)
+for subdir in "${owned_dirs[@]}"; do
+  path="$REPORT_DIR/$subdir"
+  if [ -L "$path" ] || { [ -e "$path" ] && [ ! -d "$path" ]; }; then
+    echo "report output is not a directory: $path" >&2
+    exit 1
+  fi
+  if [ -d "$path" ] && [ ! -e "$marker" ] &&
+     [ "$legacy_report" != true ] &&
+     [ -n "$("$FIND" "$path" -mindepth 1 -print -quit)" ]; then
+    echo "refusing to clear unmarked report output: $path" >&2
+    exit 1
+  fi
+done
+
+printf 'iccdev-matched-coverage-report v1\n' > "$marker"
+for subdir in "${owned_dirs[@]}"; do
+  path="$REPORT_DIR/$subdir"
+  mkdir -p "$path"
+  "$FIND" "$path" -mindepth 1 -depth -delete
+done
 
 candidates_file="$REPORT_DIR/candidate-objects.txt"
 signatures_file="$REPORT_DIR/profile-signatures.txt"
 mapping_file="$REPORT_DIR/matched-objects.tsv"
-probe_file="$REPORT_DIR/probe-candidates.tsv"
-probe_failure_file="$REPORT_DIR/probe-command-failures.txt"
 summary_file="$REPORT_DIR/coverage-summary.txt"
 env_file="$REPORT_DIR/coverage-env.txt"
 lcov_file="$REPORT_DIR/lcov.info"
-probe_tmp_dir="$(mktemp -d "$REPORT_DIR/.probe-tmp.XXXXXX")"
-
-cleanup()
-{
-  rm -rf -- "$probe_tmp_dir"
-}
-trap cleanup EXIT
 
 : > "$candidates_file"
 : > "$mapping_file"
-: > "$probe_file"
-: > "$probe_failure_file"
 : > "$summary_file"
 : > "$env_file"
 : > "$lcov_file"
-
-printf 'signature\tobject\tresult\tllvm_cov_exit\tmismatch_functions\tcovered_score\tselected\n' \
-  > "$probe_file"
-{
-  printf 'llvm-cov command failures from candidate probing.\n'
-  printf 'Expected mismatched-data rejections are recorded in probe-candidates.tsv.\n'
-} > "$probe_failure_file"
 
 "$FIND" "$BUILD_DIR" -path '*/Tools/*' -type f -executable \
   ! -name iccDumpProfileGui -print >> "$candidates_file"
@@ -164,12 +202,6 @@ unmatched_count=0
 max_html_mismatch=0
 html_failure_count=0
 lcov_failure_count=0
-probe_candidate_count=0
-probe_mismatch_count=0
-probe_mismatched_function_count=0
-probe_command_failure_count=0
-probe_zero_coverage_count=0
-probe_compatible_count=0
 
 printf 'signature\tobject\tprofraw_files\tcovered_score\n' > "$mapping_file"
 
@@ -198,13 +230,11 @@ while IFS= read -r signature; do
   best_report=""
   best_error=""
   best_score=0
-  signature_probe_rows="$probe_tmp_dir/${signature}.tsv"
-  : > "$signature_probe_rows"
 
   while IFS= read -r object; do
-    probe_report="$probe_tmp_dir/probe-report.txt"
-    probe_error="$probe_tmp_dir/probe-error.txt"
-    probe_candidate_count=$((probe_candidate_count + 1))
+    object_safe="$(safe_name "$object")"
+    probe_report="$REPORT_DIR/probes/${signature}-${object_safe}.txt"
+    probe_error="$REPORT_DIR/probes/${signature}-${object_safe}.err"
 
     set +e
     "$LLVM_COV" report "$object" \
@@ -214,68 +244,21 @@ while IFS= read -r signature; do
     cov_rc="$?"
     set -e
 
-    mismatch_functions="$(
-      sed -nE \
-        's/.*warning: ([0-9]+) functions have mismatched data.*/\1/p' \
-        "$probe_error" \
-        | awk '{sum += $1} END {print sum + 0}'
-    )"
-    if [ "$mismatch_functions" -ne 0 ]; then
-      probe_mismatch_count=$((probe_mismatch_count + 1))
-      probe_mismatched_function_count=$((
-        probe_mismatched_function_count + mismatch_functions
-      ))
-    fi
-
     if [ "$cov_rc" -ne 0 ]; then
-      probe_command_failure_count=$((probe_command_failure_count + 1))
-      printf '%s\t%s\tllvm-cov-error\t%s\t%s\t-\n' \
-        "$signature" "$object" "$cov_rc" "$mismatch_functions" \
-        >> "$signature_probe_rows"
-      {
-        printf '\nsignature=%s object=%s exit=%s\n' \
-          "$signature" "$object" "$cov_rc"
-        cat "$probe_error"
-      } >> "$probe_failure_file"
       continue
     fi
-    if [ "$mismatch_functions" -ne 0 ]; then
-      printf '%s\t%s\tmismatched-data\t0\t%s\t-\n' \
-        "$signature" "$object" "$mismatch_functions" \
-        >> "$signature_probe_rows"
+    if grep -qE '[0-9]+ functions have mismatched data' "$probe_error"; then
       continue
     fi
 
     score="$(total_score "$probe_report")"
-    if [ "$score" -eq 0 ]; then
-      probe_zero_coverage_count=$((probe_zero_coverage_count + 1))
-      printf '%s\t%s\tzero-coverage\t0\t0\t0\n' \
-        "$signature" "$object" >> "$signature_probe_rows"
-      continue
-    fi
-
-    probe_compatible_count=$((probe_compatible_count + 1))
-    printf '%s\t%s\tcompatible\t0\t0\t%s\n' \
-      "$signature" "$object" "$score" >> "$signature_probe_rows"
     if [ "$score" -gt "$best_score" ]; then
       best_score="$score"
       best_object="$object"
-      best_report="$probe_tmp_dir/${signature}-best-report.txt"
-      best_error="$probe_tmp_dir/${signature}-best-error.txt"
-      cp "$probe_report" "$best_report"
-      cp "$probe_error" "$best_error"
+      best_report="$probe_report"
+      best_error="$probe_error"
     fi
   done < "$candidates_file"
-
-  awk -F '\t' -v OFS='\t' -v selected="$best_object" '
-    {
-      if (selected != "" && $2 == selected) {
-        print $0, "yes"
-      } else {
-        print $0, "no"
-      }
-    }
-  ' "$signature_probe_rows" >> "$probe_file"
 
   if [ -z "$best_object" ] || [ "$best_score" -eq 0 ]; then
     echo "no aligned coverage object found for signature $signature" >&2
@@ -384,19 +367,6 @@ branch_pct="$(percent_covered "$sum_branches" "$sum_missed_branches")"
   printf '\nMatched coverage objects\n'
   printf '========================\n\n'
   cat "$mapping_file"
-  printf '\nCandidate probe classification\n'
-  printf '==============================\n\n'
-  printf 'Each signature is tested against every candidate object.\n'
-  printf 'Mismatched-data rows are rejected candidates, not accepted coverage.\n'
-  printf 'Candidate object probes: %s\n' "$probe_candidate_count"
-  printf 'Candidates with mismatch diagnostics: %s\n' "$probe_mismatch_count"
-  printf 'Mismatched function records in rejected probes: %s\n' \
-    "$probe_mismatched_function_count"
-  printf 'llvm-cov command failures: %s\n' "$probe_command_failure_count"
-  printf 'Zero-coverage candidates: %s\n' "$probe_zero_coverage_count"
-  printf 'Compatible candidates: %s\n' "$probe_compatible_count"
-  printf 'Selected coverage mismatches: 0\n'
-  printf 'Detailed classification: probe-candidates.tsv\n'
   printf '\nPer-object llvm-cov reports\n'
   printf '===========================\n'
   for report in "$REPORT_DIR"/matched/*.txt; do
@@ -427,13 +397,6 @@ fi
 {
   printf 'mismatch_count=0\n'
   printf 'html_mismatch_count=0\n'
-  printf 'probe_candidate_count=%s\n' "$probe_candidate_count"
-  printf 'probe_mismatch_count=%s\n' "$probe_mismatch_count"
-  printf 'probe_mismatched_function_count=%s\n' \
-    "$probe_mismatched_function_count"
-  printf 'probe_command_failure_count=%s\n' "$probe_command_failure_count"
-  printf 'probe_zero_coverage_count=%s\n' "$probe_zero_coverage_count"
-  printf 'probe_compatible_count=%s\n' "$probe_compatible_count"
   printf 'matched_object_count=%s\n' "$matched_count"
   printf 'profile_signature_count=%s\n' "$(wc -l < "$signatures_file")"
   printf 'html_count=%s\n' "$html_count"
