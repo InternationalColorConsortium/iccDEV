@@ -25,8 +25,9 @@ Use `docs/xml-json-roundtrip-qa.md` and
    Parse both independently and compare validation, inventories, and exact
    behavior on shared inputs. Returned documents are secondary evidence because
    calculator source is flattened in the blob.
-7. Keep format-level pairs under `Testing/Format/`, extend the existing parser
-   regression driver, and do not describe a standalone script as a CTest.
+7. Keep format-level pairs under `Testing/Format/` and extend the existing
+   `iccdev.json-parser-regressions` CTest driver, which also runs directly in
+   `ci-json-roundtrip`.
 8. For numeric aliases, use values that distinguish signedness and width and
    verify that the factory object carries the required format extension. Use
    same-compiler, same-test, same-object coverage comparisons.

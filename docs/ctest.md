@@ -276,10 +276,13 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.issue-3070-json-temp-isolation` | `.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh`; eight concurrent `RunJsonTests.sh` copies must keep JSON and ICC temporary files private to each invocation |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
+| `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
 | `iccdev.json-import-opener` | `.github/ci/regression/json-import-opener.cpp`; calculator imports, CLUT data and tint array data share one opener: refused with imports off, bare names only, read through `IccJsonSetOpenFileIO()` (#3073) |
 | `iccdev.json-reader-strictness` | `.github/ci/regression/json-reader-strictness.cpp`; malformed spectral ranges, tag entries, MPE elements, and failed CICP reparses are fail-closed, including cleared reused-tag state for issue #3092 |
+| `iccdev.stdobserver-regressions` | `.github/scripts/iccdev-stdobserver-regression-tests.sh` |
 | `iccdev.mluc-setter-regressions` | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` |
 | `iccdev.mluc-read-utf16-regressions` | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` |
+| `iccdev.mluc-iso-code-regressions` | `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh` |
 | `iccdev.pcc-zero-illuminant-regressions` | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` |
 | `iccdev.iccconnect-search-cost-regressions` | `.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh` |
 | `iccdev.iccconnect-htos-selector` | `.github/ci/regression/iccconnect-htos-selector.cpp`; the IccConnect `useHToS` control is on unless a configuration sets it false (ICC.2:2023 K.2.9), and false stops the HDR-to-SDR transform in standard and search chains (#2981) |
@@ -316,10 +319,10 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
 | `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
 
-### Standalone JSON regression drivers
+### JSON regression drivers in CI
 
-The following drivers are invoked directly by `ci-json-roundtrip` and are not
-registered CTests:
+The following registered CTest drivers are also invoked directly by
+`ci-json-roundtrip`:
 
 - `.github/scripts/iccdev-json-parser-regression-tests.sh`
 - `.github/scripts/iccdev-stdobserver-regression-tests.sh`
