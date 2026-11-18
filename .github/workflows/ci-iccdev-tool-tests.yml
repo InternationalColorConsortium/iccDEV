@@ -935,6 +935,8 @@ jobs:
             echo ""
             echo "### Manual Reproduction"
             echo ""
+            echo "Tracking: [issue #3093](https://github.com/InternationalColorConsortium/iccDEV/issues/3093)"
+            echo ""
             echo '```bash'
             echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
@@ -943,8 +945,15 @@ jobs:
             echo "  -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
             echo "  -DICC_USE_ZLIB=ON -DICCDEV_ENABLE_QA_FLAGS=ON \\"
-            echo "  -DICCDEV_ENABLE_STRICT_WARNINGS=ON"
+            echo "  -DICCDEV_ENABLE_TELEMETRY=ON -DICCDEV_ENABLE_STRICT_WARNINGS=ON \\"
+            echo "  -Wno-dev"
             echo "cmake --build build --parallel \"\$(nproc)\""
+            if [ "$CTEST_MODE" != "skip" ]; then
+              echo "cmake --build build --target build-test-binaries --parallel \"\$(nproc)\""
+              echo "export ASAN_OPTIONS='halt_on_error=0,detect_leaks=0'"
+              echo "export UBSAN_OPTIONS='halt_on_error=0,print_stacktrace=1'"
+              echo "export LLVM_PROFILE_FILE='/dev/null'"
+            fi
             case "$CTEST_MODE" in
               fast)
                 if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
