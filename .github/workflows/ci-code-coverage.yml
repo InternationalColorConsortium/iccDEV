@@ -374,7 +374,7 @@ jobs:
             printf 'profile_count=%s\n' "$profile_count"
           } >> "$GITHUB_ENV"
 
-          echo "::notice title=Test profiles::Created ${profile_count} ICC profiles"
+          echo "::notice title=Test profiles::Testing ICC snapshot after stubs: ${profile_count} files"
           echo "::group::ci-inside-stub summary"
           while IFS= read -r line; do
             sanitize_line "$line"
@@ -386,6 +386,79 @@ jobs:
             echo "::error title=ci-inside-stub::${stub_fail} required script(s) exited non-zero"
             exit 1
           fi
+
+      - name: "Stage authored ICC profiles for coverage"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/authored-stage-%4m.profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          authored_stage_start_ns="$(date +%s%N)"
+
+          # Convert each new authored pair once. The parser regression below
+          # checks that its independent JSON source produces the same ICC.
+          authored_profile_dir="${WORKSPACE_DIR}/coverage-report/authored-profiles"
+          mkdir -p "$authored_profile_dir"
+          authored_from_xml="$(
+            find "$build_dir" -path '*/Tools/IccFromXml/iccFromXml' \
+              -type f -executable -print -quit
+          )"
+          if [ -z "$authored_from_xml" ]; then
+            echo "::error title=Authored profiles::iccFromXml is missing"
+            exit 1
+          fi
+          authored_names=(
+            sequence-metadata-coverage
+            dict-localization-coverage
+            response-curve-coverage
+            acs-bookends-coverage
+          )
+          for name in "${authored_names[@]}"; do
+            output="$authored_profile_dir/$name.icc"
+            rm -f "$output"
+            if ! timeout 30s "$authored_from_xml" \
+                "${WORKSPACE_DIR}/Testing/Format/$name.xml" "$output" \
+                > "$authored_profile_dir/$name.log" 2>&1; then
+              echo "::error title=Authored profiles::Failed to convert $name.xml"
+              exit 1
+            fi
+            if [ ! -s "$output" ]; then
+              echo "::error title=Authored profiles::Empty ICC from $name.xml"
+              exit 1
+            fi
+          done
+
+          testing_profile_count="$profile_count"
+          authored_profile_count="$(find "$authored_profile_dir" -name '*.icc' -type f | wc -l)"
+          if [ "$authored_profile_count" -ne "${#authored_names[@]}" ]; then
+            echo "::error title=Authored profiles::Expected ${#authored_names[@]} ICC files"
+            exit 1
+          fi
+          unique_profile_count="$(
+            sha256sum "$authored_profile_dir"/*.icc | awk '{print $1}' | sort -u | wc -l
+          )"
+          if [ "$unique_profile_count" -ne "$authored_profile_count" ]; then
+            echo "::error title=Authored profiles::Authored ICC payloads are not unique"
+            exit 1
+          fi
+          profile_count="$((testing_profile_count + authored_profile_count))"
+          authored_stage_end_ns="$(date +%s%N)"
+          authored_stage_elapsed_ms="$(( (authored_stage_end_ns - authored_stage_start_ns) / 1000000 ))"
+          printf 'authored-profiles\t%s\n' "$authored_stage_elapsed_ms" \
+            >> "${WORKSPACE_DIR}/coverage-report/timing/phases.tsv"
+          {
+            printf 'profile_count=%s\n' "$profile_count"
+            printf 'testing_profile_count=%s\n' "$testing_profile_count"
+            printf 'authored_profile_count=%s\n' "$authored_profile_count"
+            printf 'authored_profile_dir=%s\n' "$authored_profile_dir"
+            printf 'authored_stage_elapsed_ms=%s\n' "$authored_stage_elapsed_ms"
+          } >> "$GITHUB_ENV"
+          authored_notice="Staged ${profile_count} ICC profiles after stubs"
+          authored_notice+=" (${testing_profile_count} Testing, ${authored_profile_count} authored)"
+          echo "::notice title=Test profiles::${authored_notice}"
 
       - name: "Run focused hybrid CTest coverage gate"
         run: |
@@ -513,6 +586,9 @@ jobs:
           total=0
           pass_count=0
           fail_count=0
+          authored_dump_total=0
+          authored_dump_pass=0
+          authored_dump_fail=0
           mkdir -p coverage-report
           fail_log="coverage-report/dump-failures.txt"
           : > "$fail_log"
@@ -520,14 +596,39 @@ jobs:
 
           while IFS= read -r -d '' icc; do
             total=$((total + 1))
-            if timeout 10s "$tool" "$icc" >/dev/null 2>&1; then
-              pass_count=$((pass_count + 1))
+            is_authored=false
+            case "$icc" in
+              "$authored_profile_dir"/*)
+                is_authored=true
+                authored_dump_total=$((authored_dump_total + 1))
+                ;;
+            esac
+            if [ "$is_authored" = true ]; then
+              dump_log="$authored_profile_dir/$(basename "$icc" .icc).dump.log"
+              if timeout 10s "$tool" -v 1 "$icc" > "$dump_log" 2>&1 &&
+                 grep -Eq '^Profile is valid for version [0-9]+\.[0-9]+$' "$dump_log"; then
+                rc=0
+              else
+                rc="$?"
+              fi
+            elif timeout 10s "$tool" "$icc" >/dev/null 2>&1; then
+              rc=0
             else
               rc="$?"
+            fi
+            if [ "$rc" -eq 0 ]; then
+              pass_count=$((pass_count + 1))
+              if [ "$is_authored" = true ]; then
+                authored_dump_pass=$((authored_dump_pass + 1))
+              fi
+            else
               fail_count=$((fail_count + 1))
+              if [ "$is_authored" = true ]; then
+                authored_dump_fail=$((authored_dump_fail + 1))
+              fi
               printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$fail_log"
             fi
-          done < <(find Testing -name '*.icc' -type f -print0 | sort -z)
+          done < <(find Testing "$authored_profile_dir" -name '*.icc' -type f -print0 | sort -z)
 
           dump_end_ns="$(date +%s%N)"
           dump_elapsed_ms="$(( (dump_end_ns - dump_start_ns) / 1000000 ))"
@@ -539,6 +640,9 @@ jobs:
             printf 'dump_pass=%s\n' "$pass_count"
             printf 'dump_fail=%s\n' "$fail_count"
             printf 'dump_elapsed_ms=%s\n' "$dump_elapsed_ms"
+            printf 'authored_dump_total=%s\n' "$authored_dump_total"
+            printf 'authored_dump_pass=%s\n' "$authored_dump_pass"
+            printf 'authored_dump_fail=%s\n' "$authored_dump_fail"
           } >> "$GITHUB_ENV"
 
           printf 'IccDumpProfile: %s tested, %s pass, %s fail\n' "$total" "$pass_count" "$fail_count"
@@ -550,6 +654,11 @@ jobs:
               printf '\n'
             done < "$fail_log"
             echo "::endgroup::"
+          fi
+          if [ "$authored_dump_total" -ne "$authored_profile_count" ] ||
+             [ "$authored_dump_fail" -ne 0 ]; then
+            echo "::error title=Authored profiles::iccDumpProfile validation failed for authored ICCs"
+            exit 1
           fi
 
       - name: "Exercise XML round-trip and iccRoundTrip"
@@ -597,11 +706,22 @@ jobs:
           converted=0
           xml_fail=0
           from_xml_fail=0
-          mapfile -d '' -t icc_files < <(find Testing -name '*.icc' -type f -print0 | sort -z)
+          authored_xml_total=0
+          authored_xml_pass=0
+          authored_xml_fail=0
+          mapfile -d '' -t icc_files < <(find Testing "$authored_profile_dir" -name '*.icc' -type f -print0 | sort -z)
           printf 'XML round-trip: testing %s profiles\n' "${#icc_files[@]}"
           xml_roundtrip_start_ns="$(date +%s%N)"
 
           for icc in "${icc_files[@]}"; do
+            is_authored=false
+            authored_case_pass=true
+            case "$icc" in
+              "$authored_profile_dir"/*)
+                is_authored=true
+                authored_xml_total=$((authored_xml_total + 1))
+                ;;
+            esac
             base="$(sanitize_filename "$(basename "$icc" .icc)")"
             if [ -z "$base" ]; then
               base="profile-$(sha256sum "$icc" | awk '{print $1}')"
@@ -616,18 +736,31 @@ jobs:
                 timeout 10s "$from_xml" "$xml_out" "$icc_out" >/dev/null 2>&1
                 rc="$?"
                 set -e
+                if [ "$is_authored" = true ] && [ ! -s "$icc_out" ]; then
+                  rc=1
+                fi
                 if [ "$rc" -ne 0 ]; then
+                  authored_case_pass=false
                   from_xml_fail=$((from_xml_fail + 1))
                   printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$xml_from_fail_log"
                 fi
               else
+                authored_case_pass=false
                 from_xml_fail=$((from_xml_fail + 1))
                 printf '%s  exit=127\n' "$(basename "$icc")" >> "$xml_from_fail_log"
               fi
             else
               rc="$?"
+              authored_case_pass=false
               xml_fail=$((xml_fail + 1))
               printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$xml_fail_log"
+            fi
+            if [ "$is_authored" = true ]; then
+              if [ "$authored_case_pass" = true ]; then
+                authored_xml_pass=$((authored_xml_pass + 1))
+              else
+                authored_xml_fail=$((authored_xml_fail + 1))
+              fi
             fi
             rm -f "$xml_out" "$icc_out"
           done
@@ -642,6 +775,9 @@ jobs:
             printf 'xml_converted=%s\n' "$converted"
             printf 'xml_failed=%s\n' "$xml_fail"
             printf 'xml_from_failed=%s\n' "$from_xml_fail"
+            printf 'authored_xml_total=%s\n' "$authored_xml_total"
+            printf 'authored_xml_pass=%s\n' "$authored_xml_pass"
+            printf 'authored_xml_fail=%s\n' "$authored_xml_fail"
           } >> "$GITHUB_ENV"
 
           if [ "$xml_fail" -gt 0 ]; then
@@ -649,6 +785,11 @@ jobs:
           fi
           if [ "$from_xml_fail" -gt 0 ]; then
             echo "::notice title=XML round-trip::${from_xml_fail} non-blocking iccFromXml exits"
+          fi
+          if [ "$authored_xml_total" -ne "$authored_profile_count" ] ||
+             [ "$authored_xml_fail" -ne 0 ]; then
+            echo "::error title=Authored profiles::XML round-trip failed for authored ICCs"
+            exit 1
           fi
 
           rt_pass=0
@@ -796,6 +937,19 @@ jobs:
             echo "::error title=JSON/XML parser coverage::Regression driver produced no raw profiles"
             exit 1
           fi
+          parser_total="$(sed -n 's/^  Total:[[:space:]]*//p' "$parser_log" | tail -1)"
+          parser_passed="$(sed -n 's/^  Passed:[[:space:]]*//p' "$parser_log" | tail -1)"
+          if [[ ! "$parser_total" =~ ^[0-9]+$ ]] ||
+             [[ ! "$parser_passed" =~ ^[0-9]+$ ]] ||
+             [ "$parser_total" -eq 0 ] ||
+             [ "$parser_passed" -ne "$parser_total" ]; then
+            echo "::error title=JSON/XML parser coverage::Missing or incomplete case summary"
+            exit 1
+          fi
+          {
+            printf 'json_xml_parser_total=%s\n' "$parser_total"
+            printf 'json_xml_parser_passed=%s\n' "$parser_passed"
+          } >> "$GITHUB_ENV"
 
       - name: "Merge profdata and generate reports"
         run: |
@@ -838,6 +992,47 @@ jobs:
           done < coverage-report/coverage-env.txt
           printf 'profraw_count=%s\n' "$profraw_count" >> "$GITHUB_ENV"
           printf 'merge_elapsed_ms=%s\n' "$merge_elapsed_ms" >> "$GITHUB_ENV"
+
+          tool_inventory="coverage-report/tool-inventory"
+          mkdir -p "$tool_inventory"
+          find "$build_dir" -path '*/Tools/*' -type f -executable \
+            ! -name iccDumpProfileGui -printf '%f\n' \
+            | LC_ALL=C sort -u > "$tool_inventory/built.txt"
+          awk -F '\t' '
+            NR > 1 && $2 ~ /\/Tools\// {
+              n = split($2, parts, "/")
+              print parts[n]
+            }
+          ' coverage-report/matched-objects.tsv \
+            | LC_ALL=C sort -u > "$tool_inventory/matched.txt"
+          LC_ALL=C comm -23 "$tool_inventory/built.txt" \
+            "$tool_inventory/matched.txt" > "$tool_inventory/unmatched.txt"
+          LC_ALL=C comm -13 "$tool_inventory/built.txt" \
+            "$tool_inventory/matched.txt" > "$tool_inventory/unknown.txt"
+          broad_built_tool_count="$(wc -l < "$tool_inventory/built.txt" | tr -d ' ')"
+          broad_matched_tool_count="$(wc -l < "$tool_inventory/matched.txt" | tr -d ' ')"
+          broad_unmatched_tool_count="$(wc -l < "$tool_inventory/unmatched.txt" | tr -d ' ')"
+          if [ "$broad_built_tool_count" -ne "$tool_count" ] ||
+             [ "$broad_matched_tool_count" -eq 0 ] ||
+             [ -s "$tool_inventory/unknown.txt" ] ||
+             [ "$((broad_matched_tool_count + broad_unmatched_tool_count))" -ne "$broad_built_tool_count" ]; then
+            echo "::error title=Tool coverage inventory::Built and matched CLI inventories disagree"
+            exit 1
+          fi
+          broad_unmatched_tools="$(paste -sd, "$tool_inventory/unmatched.txt")"
+          broad_unmatched_tools="${broad_unmatched_tools:-none}"
+          {
+            printf 'Built CLI tools: %s\n' "$broad_built_tool_count"
+            printf 'CLI tools in broad matched report: %s\n' "$broad_matched_tool_count"
+            printf 'Built CLI tools outside broad matched report: %s\n' "$broad_unmatched_tool_count"
+            printf '\nUnmatched tool basenames:\n'
+            cat "$tool_inventory/unmatched.txt"
+          } > coverage-report/tool-coverage-inventory.txt
+          {
+            printf 'broad_matched_tool_count=%s\n' "$broad_matched_tool_count"
+            printf 'broad_unmatched_tool_count=%s\n' "$broad_unmatched_tool_count"
+            printf 'broad_unmatched_tools=%s\n' "$broad_unmatched_tools"
+          } >> "$GITHUB_ENV"
 
           matched_notice="${matched_object_count} objects, ${mismatch_count} mismatches"
           echo "::notice title=Matched coverage::${matched_notice}, ${profdata_kb}KB profdata"
@@ -952,6 +1147,30 @@ jobs:
             exit 1
           fi
 
+          junit_counts="$(python3 -c '
+          import sys
+          import xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          if root.tag != "testsuite":
+              sys.exit("Unexpected CTest JUnit root: " + root.tag)
+          print(*(int(root.attrib[key]) for key in
+                  ("tests", "failures", "disabled", "skipped")))
+          ' "$full_ctest_junit")"
+          read -r junit_total junit_failures junit_disabled junit_skipped <<< "$junit_counts"
+          if [ "$junit_total" -ne "$full_ctest_test_count" ] ||
+             [ "$junit_failures" -ne 0 ] ||
+             [ "$junit_disabled" -ne 0 ] ||
+             [ "$junit_skipped" -gt "$junit_total" ]; then
+            echo "::error title=Full CTest JUnit::Unexpected passed, failed, or skipped test counts"
+            exit 1
+          fi
+          full_ctest_passed_count="$((junit_total - junit_skipped))"
+          full_ctest_skipped_count="$junit_skipped"
+          {
+            printf 'Passed tests: %s\n' "$full_ctest_passed_count"
+            printf 'Skipped tests: %s\n' "$full_ctest_skipped_count"
+          } >> "$full_ctest_report"
+
           core_signatures="${full_ctest_artifacts}/core-library-signatures.txt"
           awk -F '\t' '
             NR > 1 && $2 ~ /libIcc(ProfLib|XML|JSON|Connect)2/ {
@@ -1023,6 +1242,8 @@ jobs:
           {
             printf 'full_ctest_exit_code=%s\n' "$full_ctest_rc"
             printf 'full_ctest_test_count=%s\n' "$full_ctest_test_count"
+            printf 'full_ctest_passed_count=%s\n' "$full_ctest_passed_count"
+            printf 'full_ctest_skipped_count=%s\n' "$full_ctest_skipped_count"
             printf 'full_ctest_profile_count=%s\n' "$full_ctest_profile_count"
             printf 'full_ctest_core_profile_count=%s\n' "$full_ctest_core_profile_count"
             printf 'full_ctest_elapsed_ms=%s\n' "$full_ctest_elapsed_ms"
@@ -1033,7 +1254,7 @@ jobs:
           full_core_line_pct="$(
             sed -n 's/^line_pct=//p' "$full_report_dir/coverage-env.txt"
           )"
-          full_core_notice="${full_ctest_test_count} tests"
+          full_core_notice="${full_ctest_passed_count} passed, ${full_ctest_skipped_count} skipped"
           full_core_notice+=", ${full_ctest_core_profile_count} core profiles"
           full_core_notice+=", ${full_core_line_pct} lines"
           echo "::notice title=Full CTest core coverage::${full_core_notice}"
@@ -1068,6 +1289,10 @@ jobs:
           summary_line ""
           summary_line "Module-matched aggregate from the focused hybrid CTest and broad tool/profile exercises."
           summary_line "Mismatched function records: ${mismatch_count:-n/a}"
+          summary_line "Broad matched CLI tools: ${broad_matched_tool_count:-n/a}/${tool_count:-n/a} built."
+          unmatched_row="Built CLIs outside the broad report "
+          unmatched_row+="(${broad_unmatched_tool_count:-n/a}): ${broad_unmatched_tools:-n/a}."
+          summary_line "$unmatched_row"
           summary_line ""
           summary_line "### Full CTest core-library coverage"
           summary_line "| Metric | Coverage |"
@@ -1084,7 +1309,9 @@ jobs:
           summary_line "### Test Execution"
           summary_line "| Step | Result | Details |"
           summary_line "|------|--------|---------|"
-          summary_line "| ICC profiles created | ${profile_count:-n/a} | ci-inside-stub |"
+          staged_row="| ICC profiles staged after stubs | ${profile_count:-n/a} |"
+          staged_row+=" ${testing_profile_count:-0} Testing + ${authored_profile_count:-0} authored |"
+          summary_line "$staged_row"
           summary_line \
             "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_ms:-n/a} ms |"
           focused_ctest_row="| Focused hybrid CTest | exit ${ctest_exit_code:-n/a} |"
@@ -1095,20 +1322,33 @@ jobs:
           summary_line \
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
           full_ctest_row="| Full CTest | exit ${full_ctest_exit_code:-n/a} |"
-          full_ctest_row+=" ${full_ctest_test_count:-0} tests, ${full_ctest_elapsed_ms:-n/a} ms |"
+          full_ctest_row+=" ${full_ctest_passed_count:-n/a} passed,"
+          full_ctest_row+=" ${full_ctest_skipped_count:-n/a} skipped of ${full_ctest_test_count:-0};"
+          full_ctest_row+=" ${full_ctest_elapsed_ms:-n/a} ms |"
           summary_line "$full_ctest_row"
           full_profile_row="| Full CTest raw profiles | ${full_ctest_profile_count:-0} |"
           full_profile_row+=" ${full_ctest_core_profile_count:-0} selected for core report |"
           summary_line "$full_profile_row"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
+          authored_dump_row="| Authored ICC validation |"
+          authored_dump_row+=" ${authored_dump_pass:-0}/${authored_dump_total:-0} pass |"
+          authored_dump_row+=" required iccDumpProfile -v |"
+          summary_line "$authored_dump_row"
           summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
+          authored_xml_row="| Authored ICC XML round-trip |"
+          authored_xml_row+=" ${authored_xml_pass:-0}/${authored_xml_total:-0} pass |"
+          authored_xml_row+=" required iccToXml and iccFromXml |"
+          summary_line "$authored_xml_row"
           summary_line "| ICC.2 XML specification QA | ${xml_spec_qa:-not run} | spectral, bi-spectral, MCS |"
           summary_line "| iccFromXml | ${xml_from_failed:-0} non-blocking exits | see exercise review |"
           summary_line \
             "| iccRoundTrip | ${rt_pass:-0}/${rt_suitable:-0} suitable pass | ${rt_fail:-0} non-blocking exits |"
           summary_line "| Other profiles | ${rt_exercised:-0} exercised | coverage only |"
-          parser_row="| JSON/XML parser | exit ${json_xml_parser_exit_code:-n/a} |"
-          parser_row+=" ${json_xml_parser_profile_count:-0} profiles, ${json_xml_parser_elapsed_ms:-n/a} ms |"
+          parser_row="| JSON/XML parser |"
+          parser_row+=" ${json_xml_parser_passed:-n/a}/${json_xml_parser_total:-n/a} cases pass"
+          parser_row+=" (exit ${json_xml_parser_exit_code:-n/a}) |"
+          parser_row+=" ${json_xml_parser_profile_count:-0} raw .profraw files,"
+          parser_row+=" ${json_xml_parser_elapsed_ms:-n/a} ms |"
           summary_line "$parser_row"
           summary_line ""
           summary_line "### Build"

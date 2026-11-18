@@ -54,6 +54,14 @@ executables, nested package rebuilds, and intentionally separate focused runs
 from changing the denominator. The workflow reports both denominators; do not
 combine or compare their percentages as though they were the same population.
 
+The workflow stages ICCs from selected hand-authored XML/JSON pairs after the
+legacy profile scripts and includes them in the later dump and round-trip
+sweeps. The staged count is a snapshot before the focused hybrid CTest creates
+more ICCs; the sweep totals show how many ICC files were actually exercised.
+The parser row reports regression cases separately from pooled LLVM `.profraw`
+files. A built-versus-matched CLI inventory lists tools outside the broad
+report, so the headline percentage is not mistaken for every built tool.
+
 Required profile-generation scripts, both CTest gates, coverage
 instrumentation, signature selection, and report construction fail the job.
 Expected capability exits from `iccFromXml` and `iccRoundTrip` remain
