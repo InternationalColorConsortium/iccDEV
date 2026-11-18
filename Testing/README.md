@@ -197,7 +197,9 @@ scripts check for the inputs it produces.
   including name-only and fully specified variants.
 - [`Format`](Format) contains hand-authored XML/JSON pairs for format-level
   parser and writer symmetry, including date-time, CICP, UTF-16, and numeric
-  array coverage.
+  array coverage. `metadata-numeric-coverage` pins the issue #3092
+  `u16Fixed16ArrayType` XML factory extension and unsigned writer path with
+  values above 32767, and also covers 64-bit integers above 32 bits.
 - [`Named`](Named) contains named-color profiles with tints, spectral
   reflectance, fluorescence, and sparse notation.
 - [`PCC`](PCC) contains abstract Profile Connection Condition profiles for

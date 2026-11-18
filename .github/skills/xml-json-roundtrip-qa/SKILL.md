@@ -60,5 +60,9 @@ coverage to an existing focused aggregate CTest when it has the same setup and
 behavioral oracle; do not create a redundant scheduling unit.
 
 Keep non-calculator pairs under `Testing/Format/`. Parse both sources, compare
-their ICC payloads, and reparse both writer outputs. Measure coverage with the
-same compiler, tests, matched objects, and denominator.
+their ICC payloads, and reparse both writer outputs through the existing
+`.github/scripts/iccdev-json-parser-regression-tests.sh` aggregate. This driver
+is invoked directly by CI and is not a CTest. For numeric type aliases, include
+values that distinguish signedness and width, and prove that the format factory
+returns an object carrying the required XML or JSON extension. Measure coverage
+with the same compiler, tests, matched objects, and denominator.

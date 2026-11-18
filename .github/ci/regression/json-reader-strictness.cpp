@@ -28,7 +28,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- * json-reader-strictness.cpp -- three places where the JSON profile reader
+ * json-reader-strictness.cpp -- strict JSON profile and tag parsing contracts
  * accepted a malformed document and built a different profile from it, each
  * refused by the XML reader's twin.
  *
@@ -46,6 +46,10 @@
  *          the tag built without it, changing the transform; only an element
  *          whose own parser failed refused the profile.  The XML reader fails
  *          an unknown element type.
+ *   #3092  The CICP range checks added beside the XML fixed-number factory fix
+ *          initially short-circuited while parsing directly into tag members.
+ *          Reusing a tag after a failed parse could therefore retain fields
+ *          that appeared after the invalid member.
  *
  * Each case checks that the control document still loads and that the
  * mutated one is refused with the message the reader now gives.
@@ -212,6 +216,47 @@ void testMpeElements()
                 "#2697: a non-object element is refused");
 }
 
+/* #3092 follow-up: failed parsing clears every field, including fields after
+   the first invalid member that the short-circuit expression never visits. */
+void testCicpFailureReset()
+{
+  CIccTagJsonCicp tag;
+  tag.SetFields(1, 13, 2, 1);
+
+  IccJson malformed = {
+    {"colourPrimaries", 9},
+    {"transferCharacteristics", 265},
+    {"matrixCoefficients", 9},
+    {"videoFullRangeFlag", 1}
+  };
+  std::string parseStr;
+  check(!tag.ParseJson(malformed, parseStr),
+        "#3092 follow-up: an out-of-range CICP field is refused");
+  check(has(parseStr, "Invalid transferCharacteristics in cicpType"),
+        "#3092 follow-up: CICP rejection identifies the invalid field");
+
+  icUInt8Number primaries = 255;
+  icUInt8Number transfer = 255;
+  icUInt8Number matrix = 255;
+  icUInt8Number fullRange = 255;
+  tag.GetFields(primaries, transfer, matrix, fullRange);
+  check(primaries == 0 && transfer == 0 && matrix == 0 && fullRange == 0,
+        "#3092 follow-up: failed CICP parsing clears all reused tag state");
+
+  IccJson control = {
+    {"colourPrimaries", 1},
+    {"transferCharacteristics", 13},
+    {"matrixCoefficients", 2},
+    {"videoFullRangeFlag", 1}
+  };
+  parseStr.clear();
+  check(tag.ParseJson(control, parseStr),
+        "#3092 follow-up: a valid CICP tag parses after a rejection");
+  tag.GetFields(primaries, transfer, matrix, fullRange);
+  check(primaries == 1 && transfer == 13 && matrix == 2 && fullRange == 1,
+        "#3092 follow-up: a valid CICP reparse commits all fields");
+}
+
 }  // namespace
 
 int main()
@@ -222,6 +267,7 @@ int main()
   testSpectralSteps();
   testTagsEntry();
   testMpeElements();
+  testCicpFailureReset();
 
   if (g_fail) {
     std::fprintf(stderr, "[json-reader-strictness] %d failure(s)\n", g_fail);

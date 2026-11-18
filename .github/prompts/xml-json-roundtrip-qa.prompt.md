@@ -23,4 +23,7 @@ semantic result on shared inputs. Treat returned XML/JSON and binary identity as
 secondary evidence because calculator serialization flattens authored source.
 Keep format-level pairs under `Testing/Format/`, extend an existing aggregate
 when its oracle fits, and compare coverage with the same compiler, tests,
-matched objects, and denominator.
+matched objects, and denominator. The format-pair aggregate is the standalone
+`.github/scripts/iccdev-json-parser-regression-tests.sh` driver, not a CTest.
+For numeric aliases, select values that distinguish signedness and width and
+verify that the factory object carries the required XML or JSON extension.
