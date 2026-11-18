@@ -24,6 +24,9 @@ TOOLS_DIR="${ICCDEV_TOOLS_DIR:?Set ICCDEV_TOOLS_DIR to iccDEV Build/Tools path}"
 TESTING_DIR="${ICCDEV_TESTING_DIR:?Set ICCDEV_TESTING_DIR to iccDEV Testing path}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-tool-output}"
 mkdir -p "$OUTDIR"
+OUTDIR="$(cd "$OUTDIR" && pwd -P)"
+TOOLS_DIR="$(cd "$TOOLS_DIR" && pwd -P)"
+TESTING_DIR="$(cd "$TESTING_DIR" && pwd -P)"
 
 APPLY_NAMED_CMM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
 APPLY_SEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
@@ -760,6 +763,36 @@ echo ""
 echo "-- Section 7: Cross-tool malformed (ApplyProfiles) --"
 run_test "profiles-empty"       "$APPLY_PROFILES" "$TMPDIR/empty-object.json"         true
 run_test "profiles-invalid"     "$APPLY_PROFILES" "$TMPDIR/invalid-syntax.json"       true
+echo ""
+
+# -- Section 8: Authored configuration documents -----------------------------
+
+# Both documents use paths relative to the working directory. Keep the small
+# tracked inputs and all generated output outside the source checkout.
+AUTHORED_CFG_DIR="$(cd "$(dirname "$0")/../ci/test-data" && pwd -P)"
+AUTHORED_WORKDIR="$OUTDIR/authored-config"
+mkdir -p "$AUTHORED_WORKDIR/Testing/ApplyDataFiles"
+cp "$TESTING_DIR/sRGB_v4_ICC_preference.icc" "$AUTHORED_WORKDIR/Testing/" || exit 1
+cp "$TESTING_DIR/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif" \
+  "$AUTHORED_WORKDIR/Testing/ApplyDataFiles/" || exit 1
+
+saved_pwd="$PWD"
+cd "$AUTHORED_WORKDIR" || exit 1
+echo "-- Section 8: Authored configuration coverage --"
+run_cfg_test_expect_text "named-it8-inline-coverage" "$APPLY_NAMED_CMM" \
+  "$AUTHORED_CFG_DIR/connect-it8-inline-coverage.json" \
+  "$OUTDIR/json-named-it8-inline-coverage.log" "$(printf 'NUMBER_OF_SETS\t2')"
+
+rm -f "$AUTHORED_WORKDIR/output.tif"
+pass_before="$PASS"
+run_test "profiles-threaded-tiff-coverage" "$APPLY_PROFILES" \
+  "$AUTHORED_CFG_DIR/connect-threaded-tiff-coverage.json"
+if [ "$PASS" -gt "$pass_before" ] && [ ! -s "$AUTHORED_WORKDIR/output.tif" ]; then
+  PASS=$((PASS - 1))
+  FAIL=$((FAIL + 1))
+  echo "  [FAIL] profiles-threaded-tiff-coverage -- no output TIFF"
+fi
+cd "$saved_pwd" || exit 1
 echo ""
 
 # -- Summary ------------------------------------------------------------------
