@@ -1262,6 +1262,10 @@ run_reject_test "cicp-videoFullRangeFlag-overflow" "$OUTDIR/cicp-videoFullRangeF
 run_authored_pair_test "format-feature-coverage"
 run_authored_pair_test "metadata-numeric-coverage"
 run_authored_pair_test "compressed-text-coverage"
+run_authored_pair_test "sequence-metadata-coverage"
+run_authored_pair_test "dict-localization-coverage"
+run_authored_pair_test "response-curve-coverage"
+run_authored_pair_test "acs-bookends-coverage"
 
 # The control runs first and must convert. The 65535-entry boundary must pass the
 # array-size guard and reach entry validation; 65536 must fail at the size guard.

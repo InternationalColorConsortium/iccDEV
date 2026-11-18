@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-authored ACS MPE bookends with nonzero signatures and payloads. -->
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>abst</ProfileDeviceClass>
+    <DataColourSpace>XYZ </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-18T12:34:56</CreationDateTime>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.964202880859375" Y="1" Z="0.8249053955078125"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag><multiLocalizedUnicodeType><LocalizedText LanguageCountry="enUS">Authored ACS MPE bookends</LocalizedText></multiLocalizedUnicodeType></profileDescriptionTag>
+    <copyrightTag><multiLocalizedUnicodeType><LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText></multiLocalizedUnicodeType></copyrightTag>
+    <mediaWhitePointTag><XYZArrayType><XYZNumber X="0.964202880859375" Y="1" Z="0.8249053955078125"/></XYZArrayType></mediaWhitePointTag>
+    <AToB0Tag><multiProcessElementType>
+      <MultiProcessElements InputChannels="3" OutputChannels="3">
+        <BAcsElement InputChannels="3" OutputChannels="3" Signature="AC01">00017FFF</BAcsElement>
+        <EAcsElement InputChannels="3" OutputChannels="3" Signature="AC01">010203</EAcsElement>
+      </MultiProcessElements>
+    </multiProcessElementType></AToB0Tag>
+  </Tags>
+</IccProfile>
