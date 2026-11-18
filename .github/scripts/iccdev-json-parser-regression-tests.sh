@@ -37,6 +37,7 @@ fi
 TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
+TOXML="$TOOLS_DIR/IccToXml/iccToXml"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd)"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -559,8 +560,58 @@ run_large_indented_roundtrip_test() {
   rm -f "$output_file"
 }
 
-if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ]; then
-  echo "ERROR: IccToJson, IccFromJson, and IccFromXml are required"
+run_authored_pair_test() {
+  local name="$1"
+  local xml_source="$TESTING_DIR/Format/$name.xml"
+  local json_source="$TESTING_DIR/Format/$name.json"
+  local xml_icc="$OUTDIR/$name-xml.icc"
+  local json_icc="$OUTDIR/$name-json.icc"
+  local returned_xml="$OUTDIR/$name-returned.xml"
+  local returned_json="$OUTDIR/$name-returned.json"
+  local returned_xml_icc="$OUTDIR/$name-returned-xml.icc"
+  local returned_json_icc="$OUTDIR/$name-returned-json.icc"
+  local logfile="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$xml_icc" "$json_icc" "$returned_xml" "$returned_json" \
+    "$returned_xml_icc" "$returned_json_icc" "$logfile"
+
+  timeout 30 "$FROMXML" "$xml_source" "$xml_icc" > "$logfile" 2>&1 &&
+  timeout 30 "$FROMJSON" "$json_source" "$json_icc" >> "$logfile" 2>&1 &&
+  timeout 30 "$TOXML" "$xml_icc" "$returned_xml" >> "$logfile" 2>&1 &&
+  timeout 30 "$TOJSON" "$json_icc" "$returned_json" >> "$logfile" 2>&1 &&
+  timeout 30 "$FROMXML" "$returned_xml" "$returned_xml_icc" >> "$logfile" 2>&1 &&
+  timeout 30 "$FROMJSON" "$returned_json" "$returned_json_icc" >> "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ]; then
+    echo "  [FAIL] $name -- parser or writer exited with code $exit_code"
+    sed -n '1,10p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! cmp -s "$xml_icc" "$json_icc" ||
+     ! cmp -s "$xml_icc" "$returned_xml_icc" ||
+     ! cmp -s "$xml_icc" "$returned_json_icc"; then
+    echo "  [FAIL] $name -- authored or returned ICC payloads differ"
+    sed -n '1,10p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (XML/JSON and both writer round trips are byte-equivalent)"
+  PASS=$((PASS + 1))
+}
+
+if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ] ||
+   [ ! -x "$TOXML" ]; then
+  echo "ERROR: IccToJson, IccFromJson, IccFromXml, and IccToXml are required"
   exit 1
 fi
 
@@ -1089,11 +1140,13 @@ import json
 import os
 import sys
 
-source_path, base_path, outdir = sys.argv[1:4]
+source_path, base_path, outdir, format_path = sys.argv[1:5]
 with open(source_path, encoding="utf-8") as source:
     control = json.load(source)
 with open(base_path, encoding="utf-8") as source:
     base = json.load(source)
+with open(format_path, encoding="utf-8") as source:
+    format_control = json.load(source)
 
 def save(name, document):
     with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as output:
@@ -1148,7 +1201,21 @@ chroma("three-coordinates", [[0.64, 0.33, 0.03], [0.3, 0.6], [0.15, 0.06]])
 chroma("one-coordinate", [[0.64], [0.3, 0.6], [0.15, 0.06]])
 chroma("nonnumeric-coordinate", [[0.64, "0.33"], [0.3, 0.6], [0.15, 0.06]])
 chroma("xy-object", [{"x": 0.64, "y": 0.33}, [0.3, 0.6], [0.15, 0.06]])
-' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$BASE_JSON" "$OUTDIR"
+
+def cicp(name, field=None, value=None):
+    document = copy.deepcopy(format_control)
+    for entry in document["IccProfile"]["Tags"]:
+        if "cicpTag" in entry:
+            entry["cicpTag"]["data"][field] = value
+            break
+    else:
+        raise SystemExit("format feature control has no cicpTag")
+    save("cicp-" + name, document)
+
+for field in ("colourPrimaries", "transferCharacteristics", "matrixCoefficients", "videoFullRangeFlag"):
+    cicp(field + "-overflow", field, 265)
+' "$REPO_ROOT/.github/ci/test-data/json-colorant-table-complete-pcs.json" "$BASE_JSON" "$OUTDIR" \
+  "$TESTING_DIR/Format/format-feature-coverage.json"
 
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
@@ -1188,6 +1255,13 @@ run_reject_test "chromaticity-three-coordinates" "$OUTDIR/chromaticity-three-coo
 run_reject_test "chromaticity-one-coordinate" "$OUTDIR/chromaticity-one-coordinate.json" "chromaticityType channel must be a pair of numbers"
 run_reject_test "chromaticity-nonnumeric-coordinate" "$OUTDIR/chromaticity-nonnumeric-coordinate.json" "chromaticityType channel must be a pair of numbers"
 run_reject_test "chromaticity-xy-object" "$OUTDIR/chromaticity-xy-object.json" "chromaticityType channel must be a pair of numbers"
+run_reject_test "cicp-colourPrimaries-overflow" "$OUTDIR/cicp-colourPrimaries-overflow.json" "Invalid colourPrimaries in cicpType"
+run_reject_test "cicp-transferCharacteristics-overflow" "$OUTDIR/cicp-transferCharacteristics-overflow.json" "Invalid transferCharacteristics in cicpType"
+run_reject_test "cicp-matrixCoefficients-overflow" "$OUTDIR/cicp-matrixCoefficients-overflow.json" "Invalid matrixCoefficients in cicpType"
+run_reject_test "cicp-videoFullRangeFlag-overflow" "$OUTDIR/cicp-videoFullRangeFlag-overflow.json" "Invalid videoFullRangeFlag in cicpType"
+run_authored_pair_test "format-feature-coverage"
+run_authored_pair_test "metadata-numeric-coverage"
+run_authored_pair_test "compressed-text-coverage"
 
 # The control runs first and must convert. The 65535-entry boundary must pass the
 # array-size guard and reach entry validation; 65536 must fail at the size guard.

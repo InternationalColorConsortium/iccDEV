@@ -1,0 +1,46 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileVersion": "4.40",
+      "ProfileDeviceClass": "mntr",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-17T12:34:56",
+      "RenderingIntent": "Relative",
+      "PCSIlluminant": [0.9642, 1.0, 0.8249],
+      "ProfileCreator": "ICC "
+    },
+    "Tags": [
+      {"profileDescriptionTag": {"data": {"type": "multiLocalizedUnicodeType", "localizedStrings": [
+        {"text": "Metadata and numeric format coverage", "language": "en", "country": "US"}
+      ]}}},
+      {"copyrightTag": {"data": {"type": "multiLocalizedUnicodeType", "localizedStrings": [
+        {"text": "Copyright 2026 International Color Consortium", "language": "en", "country": "US"}
+      ]}}},
+      {"mediaWhitePointTag": {"data": {"type": "XYZArrayType", "XYZ": [[0.9642, 1.0, 0.8249]]}}},
+      {"redColorantTag": {"data": {"type": "XYZArrayType", "XYZ": [[0.43606567, 0.2224884, 0.01391602]]}}},
+      {"greenColorantTag": {"data": {"type": "XYZArrayType", "XYZ": [[0.38514709, 0.71687317, 0.09707642]]}}},
+      {"blueColorantTag": {"data": {"type": "XYZArrayType", "XYZ": [[0.14306641, 0.06060791, 0.71409607]]}}},
+      {"redTRCTag": {"data": {"type": "parametricCurveType", "functionType": 4,
+        "params": [2.4, 0.9478673, 0.0521327, 0.0773994, 0.04045, 0.0, 0.0]}}},
+      {"greenTRCTag": {"data": {"type": "parametricCurveType", "functionType": 4,
+        "params": [2.4, 0.9478673, 0.0521327, 0.0773994, 0.04045, 0.0, 0.0]}}},
+      {"blueTRCTag": {"data": {"type": "parametricCurveType", "functionType": 4,
+        "params": [2.4, 0.9478673, 0.0521327, 0.0773994, 0.04045, 0.0, 0.0]}}},
+      {"measurementTag": {"data": {"type": "measurementType", "standardObserver": 1,
+        "backing": [0.9642, 1.0, 0.8249], "geometry": 1, "flare": "Flare 0",
+        "illuminant": 1}}},
+      {"technologyTag": {"data": {"type": "signatureType", "signature": "CRT "}}},
+      {"PrivateTag_1": {"sig": "sdi1", "data": {"type": "spectralDataInfoType",
+        "spectralColorSig": "RGB ", "spectralRange": [400.0, 700.0, 31],
+        "biSpectralRange": [400.0, 700.0, 31]}}},
+      {"PrivateTag_2": {"sig": "spr1", "data": {"type": "spectralRangeType",
+        "SpectralRange": {"start": 380.0, "end": 780.0, "steps": 81},
+        "BiSpectralRange": {"start": 400.0, "end": 700.0, "steps": 31}}}},
+      {"PrivateTag_3": {"sig": "u08a", "data": {"type": "uInt8ArrayType", "values": [0, 1, 127, 255]}}},
+      {"PrivateTag_4": {"sig": "u16a", "data": {"type": "uInt16ArrayType", "values": [0, 1, 32768, 65535]}}},
+      {"PrivateTag_5": {"sig": "sfix", "data": {"type": "s15Fixed16ArrayType", "values": [-1.5, 0.0, 1.5, 32767.0]}}},
+      {"PrivateTag_6": {"sig": "ufix", "data": {"type": "u16Fixed16ArrayType", "values": [0.0, 1.5, 32768.0, 65534.0]}}}
+    ]
+  }
+}

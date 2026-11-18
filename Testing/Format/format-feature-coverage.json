@@ -1,0 +1,245 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileVersion": "4.40",
+      "ProfileDeviceClass": "mntr",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-17T12:34:56",
+      "RenderingIntent": "Relative",
+      "PCSIlluminant": [
+        0.9642,
+        1.0,
+        0.8249
+      ],
+      "ProfileCreator": "ICC "
+    },
+    "Tags": [
+      {
+        "profileDescriptionTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Authored XML and JSON format feature coverage",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "copyrightTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Copyright 2026 International Color Consortium",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "mediaWhitePointTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.9642,
+                1.0,
+                0.8249
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.43606567,
+                0.2224884,
+                0.01391602
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "greenColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.38514709,
+                0.71687317,
+                0.09707642
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "blueColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.14306641,
+                0.06060791,
+                0.71409607
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "greenTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "blueTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "calibrationDateTimeTag": {
+          "data": {
+            "type": "dateTimeType",
+            "dateTime": "2026-11-17T12:34:56"
+          }
+        }
+      },
+      {
+        "chromaticityTag": {
+          "data": {
+            "type": "chromaticityType",
+            "colorantType": 1,
+            "channels": [
+              [
+                0.64,
+                0.33
+              ],
+              [
+                0.30,
+                0.60
+              ],
+              [
+                0.15,
+                0.06
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "cicpTag": {
+          "data": {
+            "type": "cicpType",
+            "colourPrimaries": 1,
+            "transferCharacteristics": 13,
+            "matrixCoefficients": 0,
+            "videoFullRangeFlag": 1
+          }
+        }
+      },
+      {
+        "PrivateTag_1": {
+          "sig": "u16t",
+          "data": {
+            "type": "utf16Type",
+            "text": "Authored UTF-16 text marker"
+          }
+        }
+      },
+      {
+        "PrivateTag_2": {
+          "sig": "u32a",
+          "data": {
+            "type": "uInt32ArrayType",
+            "values": [
+              0,
+              1,
+              65537,
+              4294967295
+            ]
+          }
+        }
+      },
+      {
+        "PrivateTag_3": {
+          "sig": "u64a",
+          "data": {
+            "type": "uInt64ArrayType",
+            "values": [
+              0,
+              4294967296,
+              9007199254740991
+            ]
+          }
+        }
+      },
+      {
+        "PrivateTag_4": {
+          "sig": "f64a",
+          "data": {
+            "type": "float64ArrayType",
+            "values": [
+              -1.25,
+              0.0,
+              3.141592653589793
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

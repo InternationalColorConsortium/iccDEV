@@ -86,6 +86,14 @@ test corpus, module-matching method, and build configuration. A material
 coverage change with identical inputs is a correctness signal, not timing
 jitter.
 
+## Fixture-Driven Coverage Changes
+
+Choose new fixtures from uncovered functions or branches, then confirm their
+paths with native tools. Compare before and after reports from the same build,
+test selection, matched objects, and denominator. Record the SHA, raw-profile
+and signature counts, mismatch count, and targeted file deltas; do not compare
+a focused report with the workflow's full-CTest or broad-tool percentages.
+
 ## Local Configuration Timing
 
 The timing driver builds isolated trees and runs the focused hybrid CTest in

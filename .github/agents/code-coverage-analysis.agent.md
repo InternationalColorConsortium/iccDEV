@@ -28,6 +28,9 @@ Use `docs/code-coverage.md` and
    repetitions, environment metadata, and full distribution statistics.
 9. Do not claim hosted-CI or performance-regression proof from local coverage
    measurements.
+9. For fixture-driven coverage, identify the uncovered paths, keep authored XML
+   and JSON independent, extend an existing aggregate where possible, and
+   compare targeted file/function/line results under an unchanged denominator.
 
 When changes are authorized, update workflow policy, preflight canaries,
 canonical documentation, prompt, skill, and agent guidance together.

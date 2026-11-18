@@ -589,13 +589,32 @@ bool CIccTagJsonCicp::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonCicp::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+static bool icJsonParseCicpField(const IccJson &j, const char *name,
+                                icUInt8Number &value, std::string &parseStr)
 {
-  m_nColorPrimaries = 0;          jGetValue(j, "colourPrimaries",         m_nColorPrimaries);
-  m_nTransferCharacteristics = 0; jGetValue(j, "transferCharacteristics", m_nTransferCharacteristics);
-  m_nMatrixCoefficients = 0;      jGetValue(j, "matrixCoefficients",      m_nMatrixCoefficients);
-  m_nVideoFullRangeFlag = 0;      jGetValue(j, "videoFullRangeFlag",      m_nVideoFullRangeFlag);
+  value = 0;
+  if (!j.contains(name))
+    return true;
+
+  int parsed = 0;
+  if (!j[name].is_number_integer() || !jGetValue(j, name, parsed) ||
+      parsed < 0 || parsed > 255) {
+    parseStr += "Invalid ";
+    parseStr += name;
+    parseStr += " in cicpType\n";
+    return false;
+  }
+
+  value = (icUInt8Number)parsed;
   return true;
+}
+
+bool CIccTagJsonCicp::ParseJson(const IccJson &j, std::string &parseStr)
+{
+  return icJsonParseCicpField(j, "colourPrimaries", m_nColorPrimaries, parseStr) &&
+         icJsonParseCicpField(j, "transferCharacteristics", m_nTransferCharacteristics, parseStr) &&
+         icJsonParseCicpField(j, "matrixCoefficients", m_nMatrixCoefficients, parseStr) &&
+         icJsonParseCicpField(j, "videoFullRangeFlag", m_nVideoFullRangeFlag, parseStr);
 }
 
 // ===========================================================================

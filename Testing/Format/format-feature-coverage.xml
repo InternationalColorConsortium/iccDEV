@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Authored XML reference for format-feature coverage. The adjacent JSON is a
+  hand-maintained translation, not output copied from iccToJson. The pair
+  exercises standard date-time, chromaticity, and CICP tags plus private tags
+  carrying UTF-16 text and numeric arrays that are otherwise absent from the
+  tracked Testing corpus.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-17T12:34:56</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective"
+                      GlossyOrMatte="glossy"
+                      MediaPolarity="positive"
+                      MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag>
+      <multiLocalizedUnicodeType>
+        <LocalizedText LanguageCountry="enUS">Authored XML and JSON format feature coverage</LocalizedText>
+      </multiLocalizedUnicodeType>
+    </profileDescriptionTag>
+    <copyrightTag>
+      <multiLocalizedUnicodeType>
+        <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+      </multiLocalizedUnicodeType>
+    </copyrightTag>
+    <mediaWhitePointTag>
+      <XYZArrayType>
+        <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+      </XYZArrayType>
+    </mediaWhitePointTag>
+    <redColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+      </XYZArrayType>
+    </redColorantTag>
+    <greenColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+      </XYZArrayType>
+    </greenColorantTag>
+    <blueColorantTag>
+      <XYZArrayType>
+        <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+      </XYZArrayType>
+    </blueColorantTag>
+    <redTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </redTRCTag>
+    <greenTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </greenTRCTag>
+    <blueTRCTag>
+      <parametricCurveType>
+        <ParametricCurve FunctionType="4">
+          2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+        </ParametricCurve>
+      </parametricCurveType>
+    </blueTRCTag>
+    <calibrationDateTimeTag>
+      <dateTimeType>
+        <DateTime>2026-11-17T12:34:56</DateTime>
+      </dateTimeType>
+    </calibrationDateTimeTag>
+    <chromaticityTag>
+      <chromaticityType>
+        <Colorant>ITU-R BT.709</Colorant>
+        <Channel x="0.64" y="0.33"/>
+        <Channel x="0.30" y="0.60"/>
+        <Channel x="0.15" y="0.06"/>
+      </chromaticityType>
+    </chromaticityTag>
+    <cicpTag>
+      <cicpType>
+        <cicpFields ColorPrimaries="1" TransferCharacteristics="13"
+                    MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+      </cicpType>
+    </cicpTag>
+    <utf16Type>
+      <TagSignature>u16t</TagSignature>
+      <TextData>Authored UTF-16 text marker</TextData>
+    </utf16Type>
+    <uInt32ArrayType>
+      <TagSignature>u32a</TagSignature>
+      <Array>0 1 65537 4294967295</Array>
+    </uInt32ArrayType>
+    <uInt64ArrayType>
+      <TagSignature>u64a</TagSignature>
+      <Array>0 4294967296 9007199254740991</Array>
+    </uInt64ArrayType>
+    <float64ArrayType>
+      <TagSignature>f64a</TagSignature>
+      <Data>-1.25 0.0 3.141592653589793</Data>
+    </float64ArrayType>
+  </Tags>
+</IccProfile>

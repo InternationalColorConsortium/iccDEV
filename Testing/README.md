@@ -105,6 +105,15 @@ Known malformed Calculator under-stack fixtures are reported as expected
 failures. A profile rejected by either JSON tool is a skip; size differences
 outside `CalcTest` fail the script.
 
+## Authored XML and JSON Fixtures
+
+Keep hand-authored pairs together in the narrowest `Testing/` subdirectory;
+`Format/` contains format-level examples. Translate the second document by
+hand rather than copying writer output. Extend an existing aggregate when its
+tools and oracle fit, keep generated files outside the source tree, and report
+coverage against the same object set and denominator. See
+[`docs/xml-json-roundtrip-qa.md`](../docs/xml-json-roundtrip-qa.md).
+
 ## Specialized Profile Lanes
 
 | Scripts | Working directory | Purpose |
@@ -186,6 +195,9 @@ scripts check for the inputs it produces.
   (#2804); moving to 0.04045 would change all four.
 - [`Encoding`](Encoding) contains three-channel encoding-class profiles,
   including name-only and fully specified variants.
+- [`Format`](Format) contains hand-authored XML/JSON pairs for format-level
+  parser and writer symmetry, including date-time, CICP, UTF-16, and numeric
+  array coverage.
 - [`Named`](Named) contains named-color profiles with tints, spectral
   reflectance, fluorescence, and sparse notation.
 - [`PCC`](PCC) contains abstract Profile Connection Condition profiles for
