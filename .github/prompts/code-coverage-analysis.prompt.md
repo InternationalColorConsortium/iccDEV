@@ -20,7 +20,10 @@ or workflow.
    coverage totals, warnings, and test outcomes.
 2. Prove that every raw profile participates exactly once. Reject shell globs
    and `find | xargs ... merge -o fixed.profdata`; use input files and
-   module-matched reporting.
+   module-matched reporting. Review `probe-candidates.tsv`, report rejected
+   cross-object mismatch counts separately, require zero selected-owner
+   mismatches, and retain candidate command failures separately without
+   publishing expected rejections as generic `.err` files.
 3. Audit all workflows for repeated fixed-output batching, without flagging
    safe streamed checksum or lint output.
 4. Run the local configuration timing driver for Debug, Release,

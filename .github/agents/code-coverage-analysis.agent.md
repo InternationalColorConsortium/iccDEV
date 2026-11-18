@@ -12,8 +12,11 @@ Use `docs/code-coverage.md` and
    binary signatures, profdata size, and llvm-cov object matching.
 3. Treat any split command that repeatedly writes one fixed report as a defect.
    Audit all workflows and distinguish safe streamed output.
-4. Require zero mismatched function records and a matched owner for every
-   profraw signature admitted to a report.
+4. Require zero mismatched function records in selected owners and a matched
+   owner for every profraw signature admitted to a report. Classify every
+   rejected cross-object probe in `probe-candidates.tsv`; do not conflate its
+   mismatch count with the selected-report gate or publish expected rejections
+   as generic `.err` files.
 5. Keep the broad tool/profile and full-CTest core-library denominators
    separate. Record discovery evidence for any claim about the complete suite.
 6. Separate required gates from expected capability exits and preserve partial

@@ -36,12 +36,25 @@ more than one module can contribute to more than one module total, so establish
 a new baseline after changing report topology. Require zero mismatched function
 records, every profile signature matched, nonempty HTML, and nonempty LCOV.
 
+Owner discovery deliberately probes each profile signature against every
+candidate executable and shared library. An incompatible candidate can make
+`llvm-cov` report mismatched function data even though the selected owner is
+clean. The helper records every attempted pairing and its mismatch count in
+`probe-candidates.tsv`; these rejected-candidate diagnostics are not accepted
+coverage records. Candidate `llvm-cov` process failures remain in
+`probe-command-failures.txt` for separate review. The `mismatch_count` gate
+applies only to selected owners and must remain zero. Do not publish expected
+candidate rejections as a directory of generic `.err` files or describe them
+as clean report failures.
+
 ## CI Signal
 
 `ci-code-coverage.yml` records environment metadata and millisecond phase
 timings in the developer artifact. Its primary percentage is a broad
 module-matched aggregate from legacy profile generation, the focused hybrid
 CTest, and tool/profile exercises. It is not a full-CTest percentage.
+The job summary reports rejected candidate probes separately from selected
+report mismatches so neither count can be mistaken for the other.
 
 The workflow also builds `build-test-binaries`, discovers the complete CTest
 inventory, runs its granular tests while excluding `standalone-aggregate`, and

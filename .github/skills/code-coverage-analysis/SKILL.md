@@ -19,7 +19,11 @@ coverage drift, or local timing comparisons across build configurations.
 4. Merge with `llvm-profdata --input-files`; never feed an unbounded list or
    wildcard to a fixed `-o` merge. Generate module-matched reports with
    `Build/Cmake/Testing/iccdev-matched-coverage-report.sh` and require zero
-   mismatches.
+   mismatches in selected owners. Review `probe-candidates.tsv` separately:
+   mismatched-data rows are rejected cross-object probes, not accepted report
+   mismatches. Preserve exact counts without publishing expected rejections as
+   generic `.err` files. Review `probe-command-failures.txt` as a separate
+   diagnostic class.
 5. Separate gates from review-only capability exits. Required CTest,
    instrumentation, profile generation, and report construction fail the job.
    Preserve partial artifacts with `always()`.
