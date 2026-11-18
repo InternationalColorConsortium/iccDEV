@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Authored compressed payloads. The adjacent JSON is maintained independently;
+  the comments record the uncompressed UTF-8 text for human review.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-17T12:34:56</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy"
+                      MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9642" Y="1.0" Z="0.8249"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag><multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS">Compressed text format coverage</LocalizedText>
+    </multiLocalizedUnicodeType></profileDescriptionTag>
+    <copyrightTag><multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType></copyrightTag>
+    <mediaWhitePointTag><XYZArrayType>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZArrayType></mediaWhitePointTag>
+    <redColorantTag><XYZArrayType>
+      <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+    </XYZArrayType></redColorantTag>
+    <greenColorantTag><XYZArrayType>
+      <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+    </XYZArrayType></greenColorantTag>
+    <blueColorantTag><XYZArrayType>
+      <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+    </XYZArrayType></blueColorantTag>
+    <redTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></redTRCTag>
+    <greenTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></greenTRCTag>
+    <blueTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></blueTRCTag>
+    <!-- Compressed UTF-8: "Compressed UTF-8 coverage marker" -->
+    <zipUtf8TextType><TagSignature>zut1</TagSignature><HexCompressedData>
+      789C73CECF2D284A2D2E4E4D51080D71D3B55048CE2F4B2D4A4C4F55C84D2CCA4E2D0200BDE80B98
+    </HexCompressedData></zipUtf8TextType>
+    <!-- Compressed XML: "&lt;coverage&gt;ICC&lt;/coverage&gt;" -->
+    <zipXmlType><TagSignature>zxm1</TagSignature><HexCompressedData>
+      789CB349CE2F4B2D4A4C4FB5F37476B6D187F3006B43088B
+    </HexCompressedData></zipXmlType>
+  </Tags>
+</IccProfile>

@@ -36,6 +36,10 @@ coverage drift, or local timing comparisons across build configurations.
 9. Validate YAML, jactionlint, yamllint, zizmor, ShellCheck, Python syntax and
    checker fixtures, fast-lane preflight, documentation rendering, and focused
    local report generation. State whether hosted CI ran.
+10. For new XML/JSON coverage fixtures, identify the uncovered paths first,
+    extend an existing focused aggregate when possible, and measure before and
+    after with identical test selection, compiler, objects, and report topology.
+    Report targeted file/function/line deltas in addition to the aggregate.
 
 Report raw sample counts and distributions, not only averages. A same-input
 coverage percentage change is a correctness issue until deterministic merge and

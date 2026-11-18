@@ -1827,9 +1827,9 @@ bool CIccTagXmlFixedNum<T, Tsig>::ToXml(std::string &xml, std::string blanks/* =
   if (this->m_nSize > nMaxNumValues)
     return false;
 
+  xml += blanks + "<Array>\n";
   if (Tsig==icSigS15Fixed16ArrayType) {
     int n = 8;
-    xml += blanks + "<Array>\n";
     for (i=0; i<(int)this->m_nSize; i++) {
       if (!(i%n)) {
         if (i)
@@ -1960,8 +1960,8 @@ bool CIccTagXmlNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/* = "
     else {
       xml += " ";
     }
-    if (sizeof(T)==16)
-      snprintf(buf, bufSize, "%llu", (icUInt64Number)this->m_Num[i]);
+    if (sizeof(T)==sizeof(icUInt64Number))
+      snprintf(buf, bufSize, "%llu", (unsigned long long)this->m_Num[i]);
     else
       snprintf(buf, bufSize, "%u", (unsigned int) this->m_Num[i]);
     xml += buf;

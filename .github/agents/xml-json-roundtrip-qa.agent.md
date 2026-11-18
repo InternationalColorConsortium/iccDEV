@@ -25,3 +25,5 @@ Use `docs/xml-json-roundtrip-qa.md` and
    Parse both independently and compare validation, inventories, and exact
    behavior on shared inputs. Returned documents are secondary evidence because
    calculator source is flattened in the blob.
+7. Keep format-level pairs under `Testing/Format/`, extend an existing aggregate,
+   and use same-compiler, same-test, same-object coverage comparisons.

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Authored reference; metadata-numeric-coverage.json is maintained by hand. -->
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-17T12:34:56</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy"
+                      MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.9642" Y="1.0" Z="0.8249"/></PCSIlluminant>
+    <ProfileCreator>ICC </ProfileCreator>
+  </Header>
+  <Tags>
+    <profileDescriptionTag><multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS">Metadata and numeric format coverage</LocalizedText>
+    </multiLocalizedUnicodeType></profileDescriptionTag>
+    <copyrightTag><multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText>
+    </multiLocalizedUnicodeType></copyrightTag>
+    <mediaWhitePointTag><XYZArrayType>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZArrayType></mediaWhitePointTag>
+    <redColorantTag><XYZArrayType>
+      <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+    </XYZArrayType></redColorantTag>
+    <greenColorantTag><XYZArrayType>
+      <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+    </XYZArrayType></greenColorantTag>
+    <blueColorantTag><XYZArrayType>
+      <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+    </XYZArrayType></blueColorantTag>
+    <redTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></redTRCTag>
+    <greenTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></greenTRCTag>
+    <blueTRCTag><parametricCurveType><ParametricCurve FunctionType="4">
+      2.4 0.9478673 0.0521327 0.0773994 0.04045 0.0 0.0
+    </ParametricCurve></parametricCurveType></blueTRCTag>
+    <measurementTag><measurementType>
+      <StandardObserver>CIE 1931 (two degree) standard observer</StandardObserver>
+      <MeasurementBacking X="0.9642" Y="1.0" Z="0.8249"/>
+      <Geometry>Geometry 0-45 or 45-0</Geometry>
+      <Flare>Flare 0</Flare>
+      <StandardIlluminant>Illuminant D50</StandardIlluminant>
+    </measurementType></measurementTag>
+    <technologyTag><signatureType><Signature>CRT </Signature></signatureType></technologyTag>
+    <spectralDataInfoType><TagSignature>sdi1</TagSignature>
+      <SpectralSpace>RGB </SpectralSpace>
+      <SpectralRange><Wavelengths start="400" end="700" steps="31"/></SpectralRange>
+      <BiSpectralRange><Wavelengths start="400" end="700" steps="31"/></BiSpectralRange>
+    </spectralDataInfoType>
+    <spectralRangeType><TagSignature>spr1</TagSignature>
+      <SpectralRange><Wavelengths start="380" end="780" steps="81"/></SpectralRange>
+      <BiSpectralRange><Wavelengths start="400" end="700" steps="31"/></BiSpectralRange>
+    </spectralRangeType>
+    <uInt8ArrayType><TagSignature>u08a</TagSignature><Array>0 1 127 255</Array></uInt8ArrayType>
+    <uInt16ArrayType><TagSignature>u16a</TagSignature><Array>0 1 32768 65535</Array></uInt16ArrayType>
+    <s15Fixed16ArrayType><TagSignature>sfix</TagSignature><Array>-1.5 0 1.5 32767</Array></s15Fixed16ArrayType>
+    <u16Fixed16ArrayType><TagSignature>ufix</TagSignature><Array>0 1.5 32768 65534</Array></u16Fixed16ArrayType>
+  </Tags>
+</IccProfile>
