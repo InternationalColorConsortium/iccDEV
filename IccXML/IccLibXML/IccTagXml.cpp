@@ -1973,7 +1973,6 @@ bool CIccTagXmlNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/* = "
 
   xml += blanks + "</Array>\n";
   return true;
-  return true;
 }
 
 // for multi-platform support
