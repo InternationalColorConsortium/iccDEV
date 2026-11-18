@@ -40,7 +40,7 @@
       {"PrivateTag_3": {"sig": "u08a", "data": {"type": "uInt8ArrayType", "values": [0, 1, 127, 255]}}},
       {"PrivateTag_4": {"sig": "u16a", "data": {"type": "uInt16ArrayType", "values": [0, 1, 32768, 65535]}}},
       {"PrivateTag_5": {"sig": "sfix", "data": {"type": "s15Fixed16ArrayType", "values": [-1.5, 0.0, 1.5, 32767.0]}}},
-      {"PrivateTag_6": {"sig": "ufix", "data": {"type": "u16Fixed16ArrayType", "values": [0.0, 1.5, 32768.0, 65534.0]}}}
+      {"PrivateTag_6": {"sig": "ufix", "data": {"type": "u16Fixed16ArrayType", "values": [0.0, 1.5, 32768.0, 65534.0, 65535.5, 65535.9999847412109375]}}}
     ]
   }
 }

@@ -627,6 +627,78 @@ run_authored_pair_test() {
   PASS=$((PASS + 1))
 }
 
+
+# ICC.1:2022 4.7 and 10.25/Table 79 define uf32 as reserved-zero bytes
+# followed by unsigned 16.16 words. The ufix and uflf tag signatures are
+# test-only private extensions; this oracle checks the type encoding, not
+# registration or full profile conformance. It also pins the XML wrapper's
+# precision at one LSB and at the maximum representable word (#3092/#2095).
+run_u16fixed16_xml_precision_test() {
+  local name="u16fixed16-xml-precision-coverage"
+  local xml_source="$TESTING_DIR/Format/$name.xml"
+  local xml_icc="$OUTDIR/$name.icc"
+  local returned_xml="$OUTDIR/$name-returned.xml"
+  local returned_icc="$OUTDIR/$name-returned.icc"
+  local logfile="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$xml_icc" "$returned_xml" "$returned_icc" "$logfile"
+  timeout 30 "$FROMXML" "$xml_source" "$xml_icc" > "$logfile" 2>&1 &&
+  timeout 30 "$TOXML" "$xml_icc" "$returned_xml" >> "$logfile" 2>&1 &&
+  timeout 30 "$FROMXML" "$returned_xml" "$returned_icc" >> "$logfile" 2>&1 ||
+    exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$xml_icc" ] ||
+     [ ! -s "$returned_xml" ] || [ ! -s "$returned_icc" ] ||
+     ! cmp -s "$xml_icc" "$returned_icc"; then
+    echo "  [FAIL] $name -- XML conversion or byte round-trip failed (exit=$exit_code)"
+    sed -n '1,12p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! python3 - "$xml_icc" >> "$logfile" 2>&1 <<'PY'
+from pathlib import Path
+import struct
+import sys
+
+profile = Path(sys.argv[1]).read_bytes()
+if len(profile) < 132:
+    raise SystemExit("ICC profile is shorter than the tag table")
+count = struct.unpack_from(">I", profile, 128)[0]
+if 132 + count * 12 > len(profile):
+    raise SystemExit("ICC tag table exceeds the profile")
+tags = {b"ufix": [], b"uflf": []}
+for i in range(count):
+    sig, offset, size = struct.unpack_from(">4sII", profile, 132 + i * 12)
+    if sig in tags:
+        if offset % 4 or offset + size > len(profile):
+            raise SystemExit(f"{sig!r} tag is unaligned or out of bounds")
+        tags[sig].append(profile[offset:offset + size])
+expected_words = (
+    0x00000000, 0x00000001, 0x00018000, 0x80000000,
+    0xFFFE0000, 0xFFFF8000, 0xFFFFFFFF,
+)
+expected = b"uf32" + b"\0" * 4 + struct.pack(">7I", *expected_words)
+if tags != {b"ufix": [expected], b"uflf": [expected]}:
+    raise SystemExit(f"uf32 bytes differ: got {tags!r}")
+PY
+  then
+    echo "  [FAIL] $name -- text or <f> uf32 signature, reserved bytes, or exact words differ"
+    tail -12 "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (text and <f> ICC.1 uf32 words exact; XML byte round-trip)"
+  PASS=$((PASS + 1))
+}
+
 if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ] ||
    [ ! -x "$TOXML" ] || [ ! -x "$DUMP" ]; then
   echo "ERROR: IccToJson, IccFromJson, IccFromXml, IccToXml, and IccDumpProfile are required"
@@ -1279,6 +1351,7 @@ run_reject_test "cicp-matrixCoefficients-overflow" "$OUTDIR/cicp-matrixCoefficie
 run_reject_test "cicp-videoFullRangeFlag-overflow" "$OUTDIR/cicp-videoFullRangeFlag-overflow.json" "Invalid videoFullRangeFlag in cicpType"
 run_authored_pair_test "format-feature-coverage"
 run_authored_pair_test "metadata-numeric-coverage"
+run_u16fixed16_xml_precision_test
 run_authored_pair_test "compressed-text-coverage"
 run_authored_pair_test "sequence-metadata-coverage"
 run_authored_pair_test "dict-localization-coverage"

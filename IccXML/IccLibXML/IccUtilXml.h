@@ -158,6 +158,9 @@ typedef CIccXmlArrayType<icUInt16Number, icSigUInt16ArrayType> CIccUInt16Array;
 typedef CIccXmlArrayType<icUInt32Number, icSigUInt32ArrayType> CIccUInt32Array;
 typedef CIccXmlArrayType<icUInt64Number, icSigUInt64ArrayType> CIccUInt64Array;
 typedef CIccXmlArrayType<icFloatNumber, icSigFloatArrayType> CIccFloatArray;
+// Keep the float-array XML grammar (text or <f> elements) while retaining
+// double precision for fixed-point values with 16 fractional bits.
+typedef CIccXmlArrayType<icFloat64Number, icSigFloatArrayType> CIccFloat64FArray;
 typedef CIccXmlArrayType<icFloat32Number, icSigFloat32ArrayType> CIccFloat32Array;
 typedef CIccXmlArrayType<icFloat64Number, icSigFloat64ArrayType> CIccFloat64Array;
 
