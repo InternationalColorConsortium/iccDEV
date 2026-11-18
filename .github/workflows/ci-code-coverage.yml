@@ -1344,7 +1344,7 @@ jobs:
           authored_dump_row+=" ${authored_dump_pass:-0}/${authored_dump_total:-0} pass |"
           authored_dump_row+=" required iccDumpProfile -v |"
           summary_line "$authored_dump_row"
-          summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
+          summary_line "| ICC to XML | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
           authored_xml_row="| Authored ICC XML round-trip |"
           authored_xml_row+=" ${authored_xml_pass:-0}/${authored_xml_total:-0} pass |"
           authored_xml_row+=" required iccToXml and iccFromXml |"
