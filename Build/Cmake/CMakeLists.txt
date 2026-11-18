@@ -2076,7 +2076,6 @@ IF(ENABLE_TOOLS)
   ELSE()
     message(STATUS "IccJSON disabled - skipping JSON runtime-config tools.")
   ENDIF()
-  ADD_SUBDIRECTORY(Tools/IccDescribeSinkTest)
   ADD_SUBDIRECTORY(Tools/IccDumpProfile)
   ADD_SUBDIRECTORY(Tools/IccPawgReport)
   ADD_SUBDIRECTORY(Tools/IccRoundTrip)
@@ -2193,7 +2192,6 @@ IF(ENABLE_TOOLS)
       iccHeifDump
       iccJpegDump
       iccApplyNamedCmm
-      iccDescribeSinkTest
       iccDumpProfile
       iccPawgReport
       iccRoundTrip

@@ -82,6 +82,13 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
+# The describe-sink API probe is a regression helper, not a product CLI.
+# It remains available with ENABLE_TOOLS=OFF and is built by build-test-binaries.
+iccdev_add_regression_executable(iccDescribeSinkTest
+  "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccDescribeSinkTest.cpp")
+target_link_libraries(iccDescribeSinkTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+iccdev_fixup_msvc_compile_pdb(iccDescribeSinkTest)
+
 # Native extraction safety must run on Windows as well as Unix.
 if(TARGET iccHeifDump)
   find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -213,7 +220,6 @@ function(iccdev_add_check_dependencies)
       iccApplyProfiles
       iccApplySearch
       iccApplyToLink
-      iccDescribeSinkTest
       iccDumpProfile
       iccPawgReport
       iccFromCube
@@ -240,9 +246,6 @@ function(iccdev_add_check_dependencies)
 endfunction()
 
 iccdev_add_check_dependencies()
-if(TARGET iccDescribeSinkTest)
-  add_dependencies(build-test-binaries iccDescribeSinkTest)
-endif()
 
 find_program(ICCDEV_NINJA_EXECUTABLE ninja)
 if(ICCDEV_NINJA_EXECUTABLE)
@@ -16698,6 +16701,17 @@ if(TARGET iccDescribeSinkTest)
     TIMEOUT 60
     LABELS  "iccdev;describe;api;sink;options"
   )
+  if(WIN32)
+    set(_describe_sink_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDescribeSinkTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>")
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _describe_sink_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.describe-sink-api PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_describe_sink_windows_env_mods}")
+  endif()
 endif()
 
 if(BASH_EXECUTABLE)
