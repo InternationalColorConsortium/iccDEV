@@ -91,6 +91,10 @@ ICCPROFLIB_API icFloatNumber icFtoD(icS15Fixed16Number num);
 
 ICCPROFLIB_API icU16Fixed16Number icDtoUF(icFloatNumber num);
 ICCPROFLIB_API icFloatNumber icUFtoD(icU16Fixed16Number num);
+// Preserve every u16Fixed16Number bit, including the fractional range above
+// 65535 that icFloatNumber cannot represent at 1/65536 precision.
+ICCPROFLIB_API icU16Fixed16Number icDtoUF64(icFloat64Number num);
+ICCPROFLIB_API icFloat64Number icUFtoD64(icU16Fixed16Number num);
 
 ICCPROFLIB_API icU1Fixed15Number icDtoUSF(icFloatNumber num);
 ICCPROFLIB_API icFloatNumber icUSFtoD(icU1Fixed15Number num);

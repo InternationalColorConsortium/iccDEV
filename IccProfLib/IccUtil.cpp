@@ -567,18 +567,7 @@ icFloatNumber icFtoD(icS15Fixed16Number num)
 
 icU16Fixed16Number icDtoUF(icFloatNumber num)
 {
-  icU16Fixed16Number rv;
-
-  if (std::isnan(num))
-    num = 0;
-  else if (num<0)
-    num = 0;
-  else if (num>65535.0)
-    num = 65535.0;
-
-  rv = (icU16Fixed16Number)icRoundOffset((double)num*65536.0);
-
-  return rv;
+  return icDtoUF64((icFloat64Number)num);
 }
 
 icFloatNumber icUFtoD(icU16Fixed16Number num)
@@ -586,6 +575,24 @@ icFloatNumber icUFtoD(icU16Fixed16Number num)
   icFloatNumber rv = (icFloatNumber)((double)num / 65536.0);
 
   return rv;
+}
+
+icU16Fixed16Number icDtoUF64(icFloat64Number num)
+{
+  const icU16Fixed16Number maxRaw = std::numeric_limits<icU16Fixed16Number>::max();
+  const icFloat64Number maxValue = (icFloat64Number)maxRaw / 65536.0;
+
+  if (std::isnan(num) || num <= 0.0)
+    return 0;
+  if (num >= maxValue)
+    return maxRaw;
+
+  return (icU16Fixed16Number)icRoundOffset(num * 65536.0);
+}
+
+icFloat64Number icUFtoD64(icU16Fixed16Number num)
+{
+  return (icFloat64Number)num / 65536.0;
 }
 
 icU1Fixed15Number icDtoUSF(icFloatNumber num)

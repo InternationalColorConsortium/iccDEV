@@ -1858,7 +1858,9 @@ bool CIccTagXmlFixedNum<T, Tsig>::ToXml(std::string &xml, std::string blanks/* =
       else {
         xml += " ";
       }
-      snprintf(buf, bufSize, icXmlFloatFmt, (float)icUFtoD(this->m_Num[i]));
+      // The 32-bit raw word has 16 fractional bits even near 65536.
+      // A float and the shared %.9g format can each lose the low bits.
+      snprintf(buf, bufSize, "%.17g", icUFtoD64(this->m_Num[i]));
       xml += buf;
     }
 
@@ -1881,32 +1883,32 @@ bool CIccTagXmlFixedNum<T, Tsig>::ParseXml(xmlNode *pNode, std::string & /*parse
 
   pNode = pNode->children;
 
-  CIccFloatArray a;
+  // The signed path keeps its existing float parser. The unsigned path must
+  // use doubles: a float cannot resolve every 1/65536 step near 65536.
+  if constexpr (Tsig == icSigS15Fixed16ArrayType) {
+    CIccFloatArray a;
+    if (!a.ParseArray(pNode) || !a.GetSize())
+      return false;
 
-  if (!a.ParseArray(pNode) || !a.GetSize()) {   
-    return false;
-  }
+    // SetSize() can fail on allocation, leaving m_Num NULL.
+    if (!this->SetSize(a.GetSize()))
+      return false;
 
-  icUInt32Number i, n = a.GetSize();
-  icFloatNumber *buf = a.GetBuf();
-
-  // Same shape as the XYZ array above (#2106): the loop indexes m_Num[0..n-1]
-  // unconditionally, so a SetSize() that returned false -- which leaves m_Num
-  // NULL and m_nSize 0 -- would be written through. CIccTagFixedNum::SetSize
-  // carries no entry cap, so unlike the XYZ case this is reachable only on
-  // allocation failure; it is checked because the write below cannot tell the
-  // difference. The GetSize() test above guarantees n is non-zero, so the
-  // icRealloc(p, 0) path that makes a false return legitimate cannot arise.
-  if (!this->SetSize(n))
-    return false;
-
-  for (i=0; i<n; i++) {
-    if (Tsig==icSigS15Fixed16ArrayType) {
+    icFloatNumber *buf = a.GetBuf();
+    for (icUInt32Number i=0; i<a.GetSize(); i++)
       this->m_Num[i] = icDtoF(buf[i]);
-    }
-    else {
-      this->m_Num[i] = icDtoUF(buf[i]);
-    }
+  }
+  else {
+    CIccFloat64FArray a;
+    if (!a.ParseArray(pNode) || !a.GetSize())
+      return false;
+
+    if (!this->SetSize(a.GetSize()))
+      return false;
+
+    icFloat64Number *buf = a.GetBuf();
+    for (icUInt32Number i=0; i<a.GetSize(); i++)
+      this->m_Num[i] = icDtoUF64(buf[i]);
   }
   return true;
 }

@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Authored reference; metadata-numeric-coverage.json is maintained by hand.
-  The u16Fixed16ArrayType is the issue #3092 regression: its values above
-  32767 require the unsigned XML wrapper and its Array writer branch.
+  The u16Fixed16ArrayType is the issue #3092 regression: values above
+  32767 require the unsigned XML wrapper. Upper fractional values also
+  exercise the #2095 full-range conversion. A separate XML-only fixture
+  checks the exact ICC.1 unsigned 16.16 words independently.
 -->
 <IccProfile>
   <Header>
@@ -67,6 +69,6 @@
     <uInt8ArrayType><TagSignature>u08a</TagSignature><Array>0 1 127 255</Array></uInt8ArrayType>
     <uInt16ArrayType><TagSignature>u16a</TagSignature><Array>0 1 32768 65535</Array></uInt16ArrayType>
     <s15Fixed16ArrayType><TagSignature>sfix</TagSignature><Array>-1.5 0 1.5 32767</Array></s15Fixed16ArrayType>
-    <u16Fixed16ArrayType><TagSignature>ufix</TagSignature><Array>0 1.5 32768 65534</Array></u16Fixed16ArrayType>
+    <u16Fixed16ArrayType><TagSignature>ufix</TagSignature><Array>0 1.5 32768 65534 65535.5 65535.9999847412109375</Array></u16Fixed16ArrayType>
   </Tags>
 </IccProfile>
