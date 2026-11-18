@@ -123,3 +123,10 @@ each pair:
 `iccdev.calculator-regressions` applies this contract to the hand-authored
 `calculator-structure-symmetry.{xml,json}` and issue 2086 Table 102 pairs. It is
 one existing aggregate CTest rather than an additional scheduling unit.
+
+`Testing/Format/` contains hand-authored, hand-translated XML/JSON pairs for
+format-level parser and writer paths. `iccdev.json-parser-regressions` parses
+both sources, compares their ICC payloads, writes and reparses both formats,
+and compares the returned payloads. Keep its generated output external and
+measure additions with the same compiler, test selection, matched objects, and
+denominator.

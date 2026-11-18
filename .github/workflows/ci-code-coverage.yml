@@ -757,6 +757,61 @@ jobs:
           append_review_section "iccFromXml non-blocking exits" "$xml_from_fail_log"
           append_review_section "iccRoundTrip non-blocking exits" "$rt_fail_log"
 
+      - name: "Exercise JSON and XML parser coverage"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/json-xml-parser-%4m.profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          parser_dir="${RUNNER_TEMP}/iccdev-json-xml-parser-coverage"
+          parser_log="${WORKSPACE_DIR}/coverage-report/json-xml-parser.txt"
+          mkdir -p "$parser_dir"
+
+          parser_start_ns="$(date +%s%N)"
+          set +e
+          ICCDEV_TOOLS_DIR="${build_dir}/Tools" \
+          ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+          ICCDEV_TEST_OUTDIR="$parser_dir" \
+            .github/scripts/iccdev-json-parser-regression-tests.sh \
+              > "$parser_log" 2>&1
+          parser_rc="$?"
+          set -e
+          parser_end_ns="$(date +%s%N)"
+          parser_elapsed_ms="$(( (parser_end_ns - parser_start_ns) / 1000000 ))"
+          parser_profile_count="$(
+            find "${WORKSPACE_DIR}/profraw" -maxdepth 1 -type f \
+              -name 'json-xml-parser-*.profraw' -size +0c -print \
+              | wc -l | tr -d ' '
+          )"
+
+          printf 'json-xml-parser\t%s\n' "$parser_elapsed_ms" \
+            >> coverage-report/timing/phases.tsv
+          {
+            printf 'json_xml_parser_exit_code=%s\n' "$parser_rc"
+            printf 'json_xml_parser_profile_count=%s\n' "$parser_profile_count"
+            printf 'json_xml_parser_elapsed_ms=%s\n' "$parser_elapsed_ms"
+          } >> "$GITHUB_ENV"
+
+          if [ "$parser_rc" -ne 0 ] || [ "$parser_profile_count" -eq 0 ]; then
+            echo "::group::JSON/XML parser coverage tail"
+            tail -80 "$parser_log" | while IFS= read -r line; do
+              sanitize_line "$line"
+              printf '\n'
+            done
+            echo "::endgroup::"
+          fi
+          if [ "$parser_rc" -ne 0 ]; then
+            echo "::error title=JSON/XML parser coverage::Regression driver exited with code ${parser_rc}"
+            exit "$parser_rc"
+          fi
+          if [ "$parser_profile_count" -eq 0 ]; then
+            echo "::error title=JSON/XML parser coverage::Regression driver produced no raw profiles"
+            exit 1
+          fi
+
       - name: "Merge profdata and generate reports"
         run: |
           set -euo pipefail
@@ -1087,6 +1142,9 @@ jobs:
           summary_line \
             "| iccRoundTrip | ${rt_pass:-0}/${rt_suitable:-0} suitable pass | ${rt_fail:-0} non-blocking exits |"
           summary_line "| Other profiles | ${rt_exercised:-0} exercised | coverage only |"
+          parser_row="| JSON/XML parser | exit ${json_xml_parser_exit_code:-n/a} |"
+          parser_row+=" ${json_xml_parser_profile_count:-0} profiles, ${json_xml_parser_elapsed_ms:-n/a} ms |"
+          summary_line "$parser_row"
           summary_line ""
           summary_line "### Build"
           summary_line "| Component | Value |"

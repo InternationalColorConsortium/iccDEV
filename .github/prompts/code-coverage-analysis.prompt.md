@@ -41,6 +41,10 @@ or workflow.
    and preserve partial failure evidence.
 9. Validate the focused report helper and repository preflight. Record exact
    commands and distinguish local proof from hosted-CI proof.
+9. For new test documents, map values to uncovered paths, extend an existing
+   aggregate where its setup fits, and compare targeted file/function/line
+   coverage with the same compiler, test selection, object set, and report
+   topology. Do not use a focused/full-CTest denominator change as a gain.
 
 Return findings ordered by impact, the implemented changes, the local timing
 table, validation results, and remaining limits.

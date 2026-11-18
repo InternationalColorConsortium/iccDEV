@@ -21,3 +21,6 @@ passing XML through an ICC blob. Parse both documents independently, compare
 their validation and tag/type/channel inventories, and require the same exact
 semantic result on shared inputs. Treat returned XML/JSON and binary identity as
 secondary evidence because calculator serialization flattens authored source.
+Keep format-level pairs under `Testing/Format/`, extend an existing aggregate
+when its oracle fits, and compare coverage with the same compiler, tests,
+matched objects, and denominator.
