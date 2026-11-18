@@ -276,12 +276,10 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.issue-3070-json-temp-isolation` | `.github/scripts/iccdev-issue-3070-json-temp-isolation-regression.sh`; eight concurrent `RunJsonTests.sh` copies must keep JSON and ICC temporary files private to each invocation |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
-| `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
 | `iccdev.json-import-opener` | `.github/ci/regression/json-import-opener.cpp`; calculator imports, CLUT data and tint array data share one opener: refused with imports off, bare names only, read through `IccJsonSetOpenFileIO()` (#3073) |
-| `iccdev.stdobserver-regressions` | `.github/scripts/iccdev-stdobserver-regression-tests.sh` |
+| `iccdev.json-reader-strictness` | `.github/ci/regression/json-reader-strictness.cpp`; malformed spectral ranges, tag entries, MPE elements, and failed CICP reparses are fail-closed, including cleared reused-tag state for issue #3092 |
 | `iccdev.mluc-setter-regressions` | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` |
 | `iccdev.mluc-read-utf16-regressions` | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` |
-| `iccdev.mluc-iso-code-regressions` | `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh` |
 | `iccdev.pcc-zero-illuminant-regressions` | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` |
 | `iccdev.iccconnect-search-cost-regressions` | `.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh` |
 | `iccdev.iccconnect-htos-selector` | `.github/ci/regression/iccconnect-htos-selector.cpp`; the IccConnect `useHToS` control is on unless a configuration sets it false (ICC.2:2023 K.2.9), and false stops the HDR-to-SDR transform in standard and search chains (#2981) |
@@ -317,6 +315,25 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.iccviz-gamut-roundtrip-metrics` | `.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp` |
 | `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
 | `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
+
+### Standalone JSON regression drivers
+
+The following drivers are invoked directly by `ci-json-roundtrip` and are not
+registered CTests:
+
+- `.github/scripts/iccdev-json-parser-regression-tests.sh`
+- `.github/scripts/iccdev-stdobserver-regression-tests.sh`
+- `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh`
+
+The JSON parser driver owns the hand-authored pairs under `Testing/Format/`,
+including the issue #3092 unsigned fixed-number XML regression. Keep their
+outputs under `ICCDEV_TEST_OUTDIR`, outside the source tree.
+
+The `ci-regression-checks` job summary provides a manual reproduction command.
+For CTest modes, that command must configure telemetry, build the default
+targets and the `build-test-binaries` aggregate, and export the sanitizer
+runtime settings before invoking `run-recent-ctests.py`. This contract is
+tracked by [issue #3093](https://github.com/InternationalColorConsortium/iccDEV/issues/3093).
 
 `iccdev.issue-1781-applytolink-qa-matrix` uses a one-channel grid-255 positive
 control. It still proves that the documented maximum was not reduced to 254,

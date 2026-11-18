@@ -239,6 +239,23 @@ def test_workflow_wires_limit_and_smoke() -> None:
                 "fast mode must add the core smoke set")
 
 
+def test_workflow_manual_reproduction_builds_registered_contract() -> None:
+    workflow = TOOL_WORKFLOW.read_text(encoding="utf-8")
+    start = workflow.index('echo "### Manual Reproduction"')
+    end = workflow.index("            echo '```'", start)
+    manual = workflow[start:end]
+    assert_true('issues/3093' in manual,
+                "manual reproduction must retain its tracking issue reference")
+    assert_true('-DICCDEV_ENABLE_TELEMETRY=ON' in manual,
+                "manual configure must register telemetry-dependent smoke tests")
+    assert_true('--target build-test-binaries' in manual,
+                "manual build must create EXCLUDE_FROM_ALL CTest helpers")
+    assert_true("ASAN_OPTIONS='halt_on_error=0,detect_leaks=0'" in manual,
+                "manual test environment must match the workflow ASan options")
+    assert_true("UBSAN_OPTIONS='halt_on_error=0,print_stacktrace=1'" in manual,
+                "manual test environment must match the workflow UBSan options")
+
+
 def main() -> int:
     tests = [
         test_no_limit_selects_all,
@@ -253,6 +270,7 @@ def main() -> int:
         test_parallel_level_is_validated_and_forwarded,
         test_label_excludes_are_combined,
         test_workflow_wires_limit_and_smoke,
+        test_workflow_manual_reproduction_builds_registered_contract,
     ]
     for test in tests:
         test()
