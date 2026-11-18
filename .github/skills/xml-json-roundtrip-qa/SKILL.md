@@ -58,3 +58,7 @@ XML or JSON, report that source-level normalization separately from semantic
 execution. Keep all returned documents and profiling evidence external. Add
 coverage to an existing focused aggregate CTest when it has the same setup and
 behavioral oracle; do not create a redundant scheduling unit.
+
+Keep non-calculator pairs under `Testing/Format/`. Parse both sources, compare
+their ICC payloads, and reparse both writer outputs. Measure coverage with the
+same compiler, tests, matched objects, and denominator.

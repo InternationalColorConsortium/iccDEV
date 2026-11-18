@@ -270,7 +270,7 @@ public:
 };
 
 typedef CIccTagXmlFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType> CIccTagXmlS15Fixed16;
-typedef CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagXmlU16Fixed16;
+typedef CIccTagXmlFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagXmlU16Fixed16;
 
 
 template <class T, class A, icTagTypeSignature Tsig>
