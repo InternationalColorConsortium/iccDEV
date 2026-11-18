@@ -36,12 +36,18 @@ on:
       - reopened
       - ready_for_review
     paths:
+      - '.github/ci/regression/json-reader-strictness.cpp'
+      - '.github/scripts/iccdev-json-parser-regression-tests.sh'
+      - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
+      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
+      - 'Build/Cmake/Testing/CMakeLists.txt'
       - 'IccJSON/**/*.cpp'
       - 'IccJSON/**/*.h'
       - 'IccProfLib/**/*.cpp'
       - 'IccProfLib/**/*.h'
       - 'IccXML/**/*.cpp'
       - 'IccXML/**/*.h'
+      - 'Testing/Format/**'
   workflow_dispatch:
 
 jobs:
@@ -99,6 +105,7 @@ jobs:
           test -x Build/build-json/Tools/IccToJson/iccToJson
           test -x Build/build-json/Tools/IccFromJson/iccFromJson
           test -x Build/build-json/Tools/IccFromXml/iccFromXml
+          test -x Build/build-json/Tools/IccToXml/iccToXml
           test -x Build/build-json/Tools/IccDumpProfile/iccDumpProfile
           echo "[OK] JSON tool binaries built"
 
@@ -402,16 +409,8 @@ jobs:
             exit 1
           fi
 
-      - name: Refresh trusted sanitizer helpers for CTest
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          path: trusted
-          sparse-checkout: .github/scripts
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: CTest JSON focused regressions
+      # preflight: allow-pr-script-execution reason=read-only regression drivers exercise PR parser changes
+      - name: JSON focused regressions
         env:
           BASH_ENV: /dev/null
           LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON:${{ github.workspace }}/Build/build-json/IccConnect"
@@ -419,31 +418,37 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
 
-          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
+          tools_dir="$GITHUB_WORKSPACE/Build/build-json/Tools"
+          testing_dir="$GITHUB_WORKSPACE/Testing"
+          output_root="$RUNNER_TEMP/iccdev-json-focused-regressions"
 
+          cmake --build Build/build-json \
+            --target iccJsonReaderStrictnessTest \
+            --parallel "$(nproc)"
           ctest --test-dir Build/build-json \
-            --parallel "$(nproc)" \
             --output-on-failure \
             --no-tests=error \
             --output-junit json-focused-ctest-results.xml \
-            -R 'iccdev\.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'
+            -R '^iccdev\.json-reader-strictness$'
+
+          ICCDEV_TOOLS_DIR="$tools_dir" \
+          ICCDEV_TESTING_DIR="$testing_dir" \
+          ICCDEV_TEST_OUTDIR="$output_root/json-parser" \
+            bash .github/scripts/iccdev-json-parser-regression-tests.sh
+          ICCDEV_TOOLS_DIR="$tools_dir" \
+          ICCDEV_TESTING_DIR="$testing_dir" \
+          ICCDEV_TEST_OUTDIR="$output_root/stdobserver" \
+            bash .github/scripts/iccdev-stdobserver-regression-tests.sh
+          ICCDEV_TOOLS_DIR="$tools_dir" \
+          ICCDEV_TESTING_DIR="$testing_dir" \
+          ICCDEV_TEST_OUTDIR="$output_root/mluc-iso-code" \
+            bash .github/scripts/iccdev-mluc-iso-code-regression-tests.sh
 
           {
             echo ""
-            echo "### CTest JSON Focused Regressions"
+            echo "### JSON Focused Regressions"
             echo ""
-            echo "**Command**: $(sanitize_line "ctest -R iccdev.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)")"
+            echo "The JSON reader strictness CTest and the JSON parser, standard observer, and mluc ISO-code regression drivers passed."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

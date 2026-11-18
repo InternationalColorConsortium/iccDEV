@@ -3902,7 +3902,7 @@ function(iccdev_add_json_reader_strictness_test)
   endif()
   set_tests_properties(iccdev.json-reader-strictness PROPERTIES
     TIMEOUT 60
-    LABELS "iccdev;json;parser-symmetry;issue-2674;issue-2695;issue-2697;regression"
+    LABELS "iccdev;json;parser-symmetry;issue-2674;issue-2695;issue-2697;issue-3092;regression"
   )
   if(WIN32)
     set(_iccjsonreaderstrictnesstest_env_mods

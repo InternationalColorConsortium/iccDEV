@@ -611,10 +611,29 @@ static bool icJsonParseCicpField(const IccJson &j, const char *name,
 
 bool CIccTagJsonCicp::ParseJson(const IccJson &j, std::string &parseStr)
 {
-  return icJsonParseCicpField(j, "colourPrimaries", m_nColorPrimaries, parseStr) &&
-         icJsonParseCicpField(j, "transferCharacteristics", m_nTransferCharacteristics, parseStr) &&
-         icJsonParseCicpField(j, "matrixCoefficients", m_nMatrixCoefficients, parseStr) &&
-         icJsonParseCicpField(j, "videoFullRangeFlag", m_nVideoFullRangeFlag, parseStr);
+  // Clear all four fields before the first fallible read.  Parsing directly
+  // into the members and short-circuiting on an invalid early field otherwise
+  // retains later values when callers reuse a tag after a failed parse.
+  m_nColorPrimaries = 0;
+  m_nTransferCharacteristics = 0;
+  m_nMatrixCoefficients = 0;
+  m_nVideoFullRangeFlag = 0;
+
+  icUInt8Number colorPrimaries = 0;
+  icUInt8Number transferCharacteristics = 0;
+  icUInt8Number matrixCoefficients = 0;
+  icUInt8Number videoFullRangeFlag = 0;
+  if (!icJsonParseCicpField(j, "colourPrimaries", colorPrimaries, parseStr) ||
+      !icJsonParseCicpField(j, "transferCharacteristics", transferCharacteristics, parseStr) ||
+      !icJsonParseCicpField(j, "matrixCoefficients", matrixCoefficients, parseStr) ||
+      !icJsonParseCicpField(j, "videoFullRangeFlag", videoFullRangeFlag, parseStr))
+    return false;
+
+  m_nColorPrimaries = colorPrimaries;
+  m_nTransferCharacteristics = transferCharacteristics;
+  m_nMatrixCoefficients = matrixCoefficients;
+  m_nVideoFullRangeFlag = videoFullRangeFlag;
+  return true;
 }
 
 // ===========================================================================
