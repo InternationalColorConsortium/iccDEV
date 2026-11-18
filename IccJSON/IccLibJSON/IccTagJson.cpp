@@ -1580,7 +1580,7 @@ bool CIccTagJsonFixedNum<T, Tsig>::ToJson(IccJson &j)
   }
   else {
     for (icUInt32Number i = 0; i < this->m_nSize; i++)
-      arr.push_back(icUFtoD(this->m_Num[i]));
+      arr.push_back(icUFtoD64(this->m_Num[i]));
   }
   j["values"] = std::move(arr);
   return true;
@@ -1598,17 +1598,13 @@ bool CIccTagJsonFixedNum<T, Tsig>::ParseJson(const IccJson &j, std::string & /*p
       double value = 0.0;
       if (!jsonToValue(arr[i], value))
         return false;
-      // #2085: the reader mirrors the writer's branch above, and the XML reader's
-      // (CIccTagXmlFixedNum::ParseXml). icDtoF clamps its input at 32767.0
-      // (IccUtil.cpp:569), so parsing a u16Fixed16 through it truncates everything
-      // above that -- a lower threshold than the writer's, which only misreads from
-      // 32768 up. Note icDtoUF has a ceiling of its own at 65535.0, so the last
-      // 1/65536 of the type is unreachable either way; that is a separate question
-      // in IccProfLib, filed as #2095 and left alone here.
+      // #2085: signed and unsigned arrays need separate conversions. The
+      // unsigned path uses double precision to preserve every 16.16 raw word,
+      // including the fractional range above 65535 (#2095).
       if (Tsig == icSigS15Fixed16ArrayType)
         this->m_Num[i] = icDtoF(value);
       else
-        this->m_Num[i] = icDtoUF(value);
+        this->m_Num[i] = icDtoUF64(value);
     }
   }
   return true;
