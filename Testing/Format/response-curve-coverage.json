@@ -1,0 +1,114 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileFileSignature": "acsp",
+      "PrimaryPlatform": "",
+      "ProfileVersion": "2.10",
+      "ProfileDeviceClass": "mntr",
+      "DataColourSpace": "GRAY",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-18T12:34:56",
+      "RenderingIntent": "Perceptual",
+      "PCSIlluminant": [
+        0.964202880859375,
+        1.0,
+        0.8249053955078125
+      ]
+    },
+    "Tags": [
+      {
+        "profileDescriptionTag": {
+          "data": {
+            "type": "textDescriptionType",
+            "description": "Response curve authored symmetry"
+          }
+        }
+      },
+      {
+        "copyrightTag": {
+          "data": {
+            "type": "textType",
+            "text": "Copyright 2026 International Color Consortium"
+          }
+        }
+      },
+      {
+        "mediaWhitePointTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.964202880859375,
+                1.0,
+                0.8249053955078125
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "grayTRCTag": {
+          "data": {
+            "type": "curveType",
+            "curveType": "gamma",
+            "gamma": 2.19921880909169
+          }
+        }
+      },
+      {
+        "outputResponseTag": {
+          "data": {
+            "type": "responseCurveSet16Type",
+            "CountOfChannels": 1,
+            "ResponseCurves": [
+              {
+                "MeasurementUnit": "Status A",
+                "Channels": [
+                  {
+                    "MaxColorantXYZ": [
+                      0.964202880859375,
+                      1.0,
+                      0.8249053955078125
+                    ],
+                    "Measurements": [
+                      {
+                        "DeviceCode": 0,
+                        "MeasValue": 0.0
+                      },
+                      {
+                        "DeviceCode": 65535,
+                        "MeasValue": 1.0
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "MeasurementUnit": "Status E",
+                "Channels": [
+                  {
+                    "MaxColorantXYZ": [
+                      0.964202880859375,
+                      1.0,
+                      0.8249053955078125
+                    ],
+                    "Measurements": [
+                      {
+                        "DeviceCode": 0,
+                        "MeasValue": 0.0
+                      },
+                      {
+                        "DeviceCode": 65535,
+                        "MeasValue": 1.0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
