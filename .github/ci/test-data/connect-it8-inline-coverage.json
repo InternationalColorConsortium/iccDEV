@@ -1,0 +1,40 @@
+{
+  "dataFiles": {
+    "srcType": "colorData",
+    "dstType": "it8",
+    "dstEncoding": "value",
+    "dstPrecision": 6,
+    "dstDigits": 12
+  },
+  "profileSequence": [
+    {
+      "iccFile": "Testing/sRGB_v4_ICC_preference.icc",
+      "intent": "relative",
+      "interpolation": "linear"
+    }
+  ],
+  "colorData": {
+    "space": "RGB ",
+    "encoding": "float",
+    "data": [
+      {
+        "i": 0,
+        "l": "neutral",
+        "v": [
+          0.5,
+          0.5,
+          0.5
+        ]
+      },
+      {
+        "i": 1,
+        "l": "red",
+        "v": [
+          1.0,
+          0.0,
+          0.0
+        ]
+      }
+    ]
+  }
+}
