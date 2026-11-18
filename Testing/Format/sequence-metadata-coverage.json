@@ -1,0 +1,262 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileFileSignature": "acsp",
+      "PrimaryPlatform": "",
+      "ProfileVersion": "4.40",
+      "ProfileDeviceClass": "mntr",
+      "DataColourSpace": "RGB ",
+      "PCS": "XYZ ",
+      "CreationDateTime": "2026-11-18T12:34:56",
+      "RenderingIntent": "Relative",
+      "PCSIlluminant": [
+        0.9642,
+        1.0,
+        0.8249
+      ],
+      "ProfileCreator": "ICC "
+    },
+    "Tags": [
+      {
+        "profileDescriptionTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Authored sequence metadata coverage",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "copyrightTag": {
+          "data": {
+            "type": "multiLocalizedUnicodeType",
+            "localizedStrings": [
+              {
+                "text": "Copyright 2026 International Color Consortium",
+                "language": "en",
+                "country": "US"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "mediaWhitePointTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.9642,
+                1.0,
+                0.8249
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.43606567,
+                0.2224884,
+                0.01391602
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "greenColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.38514709,
+                0.71687317,
+                0.09707642
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "blueColorantTag": {
+          "data": {
+            "type": "XYZArrayType",
+            "XYZ": [
+              [
+                0.14306641,
+                0.06060791,
+                0.71409607
+              ]
+            ]
+          }
+        }
+      },
+      {
+        "redTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "greenTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "blueTRCTag": {
+          "data": {
+            "type": "parametricCurveType",
+            "functionType": 4,
+            "params": [
+              2.4,
+              0.9478673,
+              0.0521327,
+              0.0773994,
+              0.04045,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      },
+      {
+        "profileSequenceDescTag": {
+          "data": {
+            "type": "profileSequenceDescType",
+            "profileSequence": [
+              {
+                "deviceManufacturerSignature": "ICC ",
+                "deviceModelSignature": "MOD1",
+                "deviceAttributes": {
+                  "ReflectiveOrTransparency": "reflective",
+                  "GlossyOrMatte": "glossy",
+                  "MediaPolarity": "positive",
+                  "MediaColour": "colour"
+                },
+                "technology": "dcam",
+                "deviceManufacturer": {
+                  "type": "multiLocalizedUnicodeType",
+                  "localizedStrings": [
+                    {
+                      "text": "ICC sequence maker",
+                      "language": "en",
+                      "country": "US"
+                    }
+                  ]
+                },
+                "deviceModel": {
+                  "type": "multiLocalizedUnicodeType",
+                  "localizedStrings": [
+                    {
+                      "text": "Model one!",
+                      "language": "en",
+                      "country": "US"
+                    }
+                  ]
+                }
+              },
+              {
+                "deviceManufacturerSignature": "",
+                "deviceModelSignature": "",
+                "deviceAttributes": {
+                  "ReflectiveOrTransparency": "transparency",
+                  "GlossyOrMatte": "matte",
+                  "MediaPolarity": "negative",
+                  "MediaColour": "blackAndWhite"
+                },
+                "technology": "",
+                "deviceManufacturer": {
+                  "type": "multiLocalizedUnicodeType",
+                  "localizedStrings": [
+                    {
+                      "text": "Fabricant deux",
+                      "language": "fr",
+                      "country": "FR"
+                    }
+                  ]
+                },
+                "deviceModel": {
+                  "type": "multiLocalizedUnicodeType",
+                  "localizedStrings": [
+                    {
+                      "text": "Modele deux!",
+                      "language": "fr",
+                      "country": "FR"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "profileSequenceIdentifierTag": {
+          "data": {
+            "type": "profileSequenceIdentifierType",
+            "profileSequenceId": [
+              {
+                "profileId": "00112233445566778899AABBCCDDEEFF",
+                "localizedStrings": [
+                  {
+                    "text": "Input device",
+                    "language": "en",
+                    "country": "US"
+                  },
+                  {
+                    "text": "Peripherique d entree",
+                    "language": "fr",
+                    "country": "FR"
+                  }
+                ]
+              },
+              {
+                "profileId": "FFEEDDCCBBAA99887766554433221100",
+                "localizedStrings": [
+                  {
+                    "text": "Output device",
+                    "language": "en",
+                    "country": "US"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
