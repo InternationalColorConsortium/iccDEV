@@ -35,7 +35,7 @@ queries for the MCP REST/API package.
 | `counted-buffer-off-by-one` | CWE-125, CWE-787 | `index > count` guard permits a one-past-end counted-buffer access |
 | `new-array-delete-mismatch` | CWE-762 | `new[]` allocation released with scalar `delete` |
 | `null-after-read` | CWE-476 | Pointer dereferenced after `Read()` / `ParseXml()` without null check |
-| `recursive-parse-no-depth-limit` | CWE-674 | Recursive parse/read/apply call lacks depth guard |
+| `recursive-parse-no-depth-limit` | CWE-674 | Recursive read/parse/import/apply or nested composite validation lacks a depth guard (#3021, #3086) |
 | `rule-of-three-violation` | CWE-415, CWE-416 | Destructor frees member without copy constructor / assignment operator |
 | `signed-char-byte-conversion` | CWE-704 | UTF-8 byte parser assigns signed `char` data to unsigned bytes without an explicit cast |
 | `tell-subtraction-underflow` | CWE-191, CWE-681 | Writer offset/size field computed from unchecked `Tell()` subtraction and narrowed to `icUInt32Number` |

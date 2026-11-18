@@ -1,0 +1,95 @@
+{
+  "reviewed_findings": [
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 1227,
+      "path": "IccProfLib/IccTagMPE.cpp",
+      "rationale": "m_position and the element walk use the same m_list size",
+      "source_sha256": "5313cb1fe1486d1bfa35499131ce540e0e3bb8b02cbe0e3bfe58a57231e4cdb4",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 5495,
+      "path": "IccProfLib/IccTagLut.cpp",
+      "rationale": "NewCurvesA allocates m_nOutput entries before the matching loop",
+      "source_sha256": "49b5945a97915ddf586d6e6806b9293ef3326cc49329e8748d86514f4c5bbde1",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 5970,
+      "path": "IccProfLib/IccTagLut.cpp",
+      "rationale": "NewCurvesA allocates m_nOutput entries before the matching loop",
+      "source_sha256": "49b5945a97915ddf586d6e6806b9293ef3326cc49329e8748d86514f4c5bbde1",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 142,
+      "path": "IccProfLib/IccMD5.cpp",
+      "rationale": "the loop condition keeps the 64-byte transform inside inputLen",
+      "source_sha256": "75dcb54a14f333a8c9c9c7f5a711421e8bf7decb4ccba422b6588a9780d6d536",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 150,
+      "path": "IccProfLib/IccMD5.cpp",
+      "rationale": "the MD5 remainder invariant keeps the copy within the 64-byte buffer",
+      "source_sha256": "460640c83cb8e7e1debb3f5e346d6742be7c4116a02089edf3529f900b12a2b2",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 586,
+      "path": "IccProfLib/IccConvertUTF.cpp",
+      "rationale": "extraBytesToRead comes from a table whose maximum is five and indexes six entries",
+      "source_sha256": "346b2203874de9815316662980f3ecc201b03eb568cc78f54cb54cd6ec963912",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 632,
+      "path": "IccProfLib/IccConvertUTF.cpp",
+      "rationale": "extraBytesToRead comes from a table whose maximum is five and indexes six entries",
+      "source_sha256": "346b2203874de9815316662980f3ecc201b03eb568cc78f54cb54cd6ec963912",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 702,
+      "path": "IccProfLib/IccConvertUTF.cpp",
+      "rationale": "extraBytesToRead comes from a table whose maximum is five and indexes six entries",
+      "source_sha256": "346b2203874de9815316662980f3ecc201b03eb568cc78f54cb54cd6ec963912",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 872,
+      "path": "IccProfLib/IccConvertUTF.cpp",
+      "rationale": "extraBytesToRead comes from a table whose maximum is five and indexes six entries",
+      "source_sha256": "346b2203874de9815316662980f3ecc201b03eb568cc78f54cb54cd6ec963912",
+      "tool": "clang-tidy"
+    },
+    {
+      "checker": "clang-analyzer-security.ArrayBound",
+      "issue": "#3010",
+      "line": 931,
+      "path": "IccProfLib/IccConvertUTF.cpp",
+      "rationale": "extraBytesToRead comes from a table whose maximum is five and indexes six entries",
+      "source_sha256": "346b2203874de9815316662980f3ecc201b03eb568cc78f54cb54cd6ec963912",
+      "tool": "clang-tidy"
+    }
+  ],
+  "version": 1
+}

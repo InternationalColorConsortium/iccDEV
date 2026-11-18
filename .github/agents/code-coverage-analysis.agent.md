@@ -18,9 +18,12 @@ Use `docs/code-coverage.md` and
    separate. Record discovery evidence for any claim about the complete suite.
 6. Separate required gates from expected capability exits and preserve partial
    failure artifacts.
-7. Compare build configurations only with a fixed job count, interleaved
+7. Render the QA detector ownership matrix for cited issues. Keep coverage
+   reachability, CodeQL patterns, lint diagnostics, and runtime assertions as
+   separate signals; never use a percentage as a defect oracle.
+8. Compare build configurations only with a fixed job count, interleaved
    repetitions, environment metadata, and full distribution statistics.
-8. Do not claim hosted-CI or performance-regression proof from local coverage
+9. Do not claim hosted-CI or performance-regression proof from local coverage
    measurements.
 
 When changes are authorized, update workflow policy, preflight canaries,

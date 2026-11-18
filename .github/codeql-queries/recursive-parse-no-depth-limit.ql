@@ -1,11 +1,11 @@
 /**
- * @name Recursive Parse/Read/Apply call lacks depth guard
- * @description Functions named ParseXml, Read, Apply, ApplySequence,
- *              Flatten, SetElem on Calculator/MPE/Tag classes recursively
- *              invoke themselves (directly or via mutual recursion) without
- *              an explicit depth or visited-set guard. Untrusted input can
- *              drive unbounded recursion to stack-exhaustion crash (CWE-674).
- *              See PRs #413, #406, #684, #cce5f9b, #798be59.
+ * @name Recursive parse or composite validation lacks a depth guard
+ * @description Parse/import functions that call themselves, and composite
+ *              Validate methods that dispatch to nested Validate methods,
+ *              need an explicit depth or visited-set guard. Untrusted input
+ *              can otherwise drive stack exhaustion (CWE-674). This includes
+ *              the XML import shape from #3021 and nested array validation
+ *              from #3086.
  * @kind problem
  * @problem.severity warning
  * @security-severity 6.5
@@ -18,9 +18,14 @@
 
 import cpp
 
+private predicate isProductSource(File file) {
+  file.getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON|IccConnect)/.*") or
+  file.getBaseName() = "case.cpp"
+}
+
 /** A function whose name suggests it processes untrusted nested input. */
 predicate isParseLike(MemberFunction f) {
-  f.getName().regexpMatch("(?i)(ParseXml|ParseTag|Read|Apply|ApplySequence|Flatten|SetElem|Iterate)") and
+  f.getName().regexpMatch("(?i)(ParseXml|ParseTag|ParseImport|Read|Apply|ApplySequence|Flatten|SetElem|Iterate|Validate)") and
   f.fromSource()
 }
 
@@ -29,6 +34,23 @@ predicate selfRecursive(MemberFunction f) {
   exists(FunctionCall c |
     c.getEnclosingFunction() = f and
     c.getTarget() = f
+  )
+}
+
+/**
+ * A composite Validate method that dispatches to a nested object's Validate.
+ * The static target can be a base-class virtual method, so direct self-call
+ * matching alone misses the nested tag-array path from #3086.
+ */
+predicate nestedCompositeValidation(MemberFunction f) {
+  f.getName() = "Validate" and
+  f.getDeclaringType().getName().regexpMatch(
+    "CIcc(TagArray|TagStruct|ArrayUnknown|StructUnknown)"
+  ) and
+  exists(FunctionCall c |
+    c.getEnclosingFunction() = f and
+    c.getTarget().getName() = "Validate" and
+    c.getTarget() != f
   )
 }
 
@@ -56,9 +78,9 @@ predicate hasDepthGuard(MemberFunction f) {
 from MemberFunction f
 where
   isParseLike(f) and
-  selfRecursive(f) and
+  (selfRecursive(f) or nestedCompositeValidation(f)) and
   not hasDepthGuard(f) and
-  f.getFile().getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON|IccConnect)/.*")
+  isProductSource(f.getFile())
 select f,
-  "Recursive '" + f.getDeclaringType().getName() + "::" + f.getName() +
-  "' has no visible depth or visited-set guard. Untrusted nested input may exhaust the stack."
+  "Nested '" + f.getDeclaringType().getName() + "::" + f.getName() +
+  "' processing has no visible depth or visited-set guard. Untrusted nested input may exhaust the stack."

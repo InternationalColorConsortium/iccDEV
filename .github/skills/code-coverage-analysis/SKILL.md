@@ -26,14 +26,20 @@ coverage drift, or local timing comparisons across build configurations.
 6. Treat the broad tool/profile aggregate and full-CTest core-library aggregate
    as separate denominators. A complete-suite claim requires CTest JSON
    discovery, a full run, and an explicit object-selection boundary.
-7. For timing analysis, run
+7. Render `.github/ci/qa-detection-matrix.json` and identify the primary
+   detector for each cited issue. Coverage proves execution, not the presence
+   of a defect oracle; do not infer defect-free behavior from a percentage.
+8. Inspect the lint high-signal audit separately from CodeQL SARIF and runtime
+   regression results. Explain gaps by detector ownership, not by substituting
+   one signal for another.
+9. For timing analysis, run
    `.github/scripts/iccdev-build-config-timing.py` with a fixed job count and
    interleaved repetitions. Use at least ten test iterations for comparison;
    label shorter runs as smoke evidence.
-8. Audit every workflow with
+10. Audit every workflow with
    `.github/scripts/check-workflow-fixed-output-batching.py`; distinguish unsafe
    repeated fixed-output commands from safe streamed output.
-9. Validate YAML, jactionlint, yamllint, zizmor, ShellCheck, Python syntax and
+11. Validate YAML, jactionlint, yamllint, zizmor, ShellCheck, Python syntax and
    checker fixtures, fast-lane preflight, documentation rendering, and focused
    local report generation. State whether hosted CI ran.
 

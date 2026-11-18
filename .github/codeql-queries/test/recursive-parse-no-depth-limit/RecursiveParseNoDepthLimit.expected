@@ -1,0 +1,2 @@
+| case.cpp:38:8:38:15 | Validate | Nested 'CIccArrayUnknown::Validate' processing has no visible depth or visited-set guard. Untrusted nested input may exhaust the stack. |
+| case.cpp:62:8:62:18 | ParseImport | Nested 'CIccCalculatorImport::ParseImport' processing has no visible depth or visited-set guard. Untrusted nested input may exhaust the stack. |

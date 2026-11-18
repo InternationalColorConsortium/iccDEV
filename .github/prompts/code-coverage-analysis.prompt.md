@@ -31,9 +31,12 @@ or workflow.
 6. Distinguish the broad tool/profile aggregate from the complete-CTest
    core-library aggregate. Verify CTest discovery and do not compare their
    percentages as though they share a denominator.
-7. Make authorized corrections, align canonical docs and repository guidance,
+7. Render `.github/ci/qa-detection-matrix.json`, verify each cited issue's
+   primary detector, and distinguish coverage reachability from an assertion or
+   static-analysis oracle. Review the lint high-signal audit independently.
+8. Make authorized corrections, align canonical docs and repository guidance,
    and preserve partial failure evidence.
-8. Validate the focused report helper and repository preflight. Record exact
+9. Validate the focused report helper and repository preflight. Record exact
    commands and distinguish local proof from hosted-CI proof.
 
 Return findings ordered by impact, the implemented changes, the local timing
