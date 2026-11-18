@@ -154,10 +154,17 @@ conformance for that profile.
 
 Run `Testing/Format/run-coverage-conversions.sh` (Bash) or
 `Testing/Format/run-coverage-conversions.ps1` (PowerShell) to produce the seven
-paired ICC outputs and the focused XML-only ICC locally. These generated
-`*.icc` files are ignored by Git.
+XML/JSON pairs (14 ICC outputs) and the focused XML-only ICC locally. These generated
+`*.icc` files are ignored by Git. The scripts validate each ICC with
+`iccDumpProfile -v`, write both XML and JSON returns to a fresh `qa/` evidence
+directory under the home directory (or `ICCDEV_FORMAT_QA_OUTDIR`), reparse
+both, and require byte-identical returned ICCs. Their fidelity tables record
+source/return text sizes and retain text diffs: a different document size does
+not by itself establish profile data loss. `iccRoundTrip` is reported separately
+as a color-transform diagnostic; abstract `acs-bookends` profiles do not support
+that diagnostic.
 
 Keep automated regression and coverage output external. Measure fixture
-additions with the same
-compiler, test selection, matched objects, and denominator. Extend the existing
+additions with the same compiler, test selection, matched objects, and
+denominator. Extend the existing
 driver rather than adding a second CTest scheduling unit.
