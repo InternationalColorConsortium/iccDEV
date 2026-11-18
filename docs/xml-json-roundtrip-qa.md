@@ -139,6 +139,25 @@ a matching opening `Array` element, and distinguish unsigned conversion from
 the signed path. The same pair keeps a `uInt64ArrayType` value above 32 bits so
 the integer writer cannot silently take its 32-bit formatting branch.
 
-Keep generated output external and measure fixture additions with the same
+`u16fixed16-xml-precision-coverage.xml` is a focused hand-authored XML
+control for the #3092 wrapper and #2095 unsigned boundary. Its existing
+parser regression checks the `uf32` signature, zero reserved bytes, and
+exact unsigned 16.16 words for text and `<f>` arrays independently of XML/JSON
+parity; it also requires
+an ICC-to-XML-to-ICC byte round trip. The type encoding follows
+[ICC.1:2022 sections 4.7 and 10.25](https://www.color.org/specifications/ICC.1-2022-05.pdf)
+and [ICC.2:2023 section 10.2.26](https://www.color.org/specification/ICC.2-2023.pdf).
+The XML element names are iccDEV syntax. Its `ufix` and `uflf` tag signatures
+are **test-only private extensions**, absent from the ICC tag registry; an
+`iccDumpProfile -v` verdict alone does not establish full specification
+conformance for that profile.
+
+Run `Testing/Format/run-coverage-conversions.sh` (Bash) or
+`Testing/Format/run-coverage-conversions.ps1` (PowerShell) to produce the seven
+paired ICC outputs and the focused XML-only ICC locally. These generated
+`*.icc` files are ignored by Git.
+
+Keep automated regression and coverage output external. Measure fixture
+additions with the same
 compiler, test selection, matched objects, and denominator. Extend the existing
 driver rather than adding a second CTest scheduling unit.
