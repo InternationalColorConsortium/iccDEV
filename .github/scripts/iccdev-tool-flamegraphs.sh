@@ -194,6 +194,22 @@ tool_path()
   printf '%s\n' "$path"
 }
 
+test_helper_path()
+{
+  local exe="$1"
+  local dir path
+  for dir in "$BUILD_ROOT/Testing" "$BUILD_ROOT/Testing/Debug" \
+      "$BUILD_ROOT/Testing/Release" "$BUILD_ROOT/Testing/RelWithDebInfo"; do
+    for path in "$dir/$exe" "$dir/$exe.exe"; do
+      if [ -x "$path" ]; then
+        printf '%s\n' "$path"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
 command_string()
 {
   local out=""
@@ -513,7 +529,8 @@ V5CONV="$(tool_path IccV5DspObsToV4Dsp iccV5DspObsToV4Dsp || true)"
 SPECSEP="$(tool_path IccSpecSepToTiff iccSpecSepToTiff || true)"
 PAWG="$(tool_path IccPawgReport iccPawgReport || true)"
 VISUALIZE="$(tool_path IccProfileVisualize iccProfileVisualize || true)"
-DESCRIBE="$(tool_path IccDescribeSinkTest iccDescribeSinkTest || true)"
+# CTest-only helper; accept the former Tools path in existing build trees.
+DESCRIBE="$(test_helper_path iccDescribeSinkTest || tool_path IccDescribeSinkTest iccDescribeSinkTest || true)"
 
 if [ -n "$TOXML" ] && [ -f "$SRGB" ]; then
   "$TOXML" "$SRGB" "$WORKDIR/srgb.xml" >/dev/null 2>&1 || true
@@ -639,7 +656,7 @@ if [ -n "$DESCRIBE" ]; then
     profile_tool iccDescribeSinkTest "$DESCRIBE"
   fi
 else
-  skip_tool iccDescribeSinkTest "missing tool"
+  skip_tool iccDescribeSinkTest "CTest helper not built"
 fi
 
 write_dashboard

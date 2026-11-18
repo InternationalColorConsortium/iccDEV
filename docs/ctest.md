@@ -158,11 +158,19 @@ ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --out
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
 
-Regression-only CTest helper binaries such as `iccFileIoSeekTellTest` and
-`iccParserRestoreCallsTest` are intentionally excluded from the default `all`
-product build. Build `build-test-binaries` before a direct filtered CTest run,
-or use `check`/`check-fast`; both targets build their tool and test dependencies
-before running the suite.
+Regression-only CTest helper binaries such as `iccFileIoSeekTellTest`,
+`iccParserRestoreCallsTest`, and `iccDescribeSinkTest` are intentionally excluded
+from the default `all` product build. `iccDescribeSinkTest` is emitted under the
+build tree's `Testing/` directory and runs as the existing
+`iccdev.describe-sink-api` CTest; it is available when tests are enabled even if
+`ENABLE_TOOLS=OFF`. Build `build-test-binaries` before a direct filtered CTest
+run, or use `check`/`check-fast`; both targets build their tool and test
+dependencies before running the suite.
+
+`iccBenchApply` remains a diagnostic command-line tool. Its registered
+`iccdev.apply-throughput` case is a bounded correctness and checksum smoke;
+it does not assert a timing threshold or establish the same coverage envelope
+as the other Apply tools.
 
 ## Native HEIF extraction safety
 
@@ -314,7 +322,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.issue-1781-applytolink-qa-matrix` | `.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh` |
 | `iccdev.ncl2-nonul-ascii-regression` | `.github/scripts/iccdev-ncl2-nonul-ascii-regression.sh` |
 | `iccdev.fromcube-cli-args` | `.github/scripts/iccdev-fromcube-cli-args-regression.sh` |
-| `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
+| `iccdev.describe-sink-api` | `iccDescribeSinkTest` regression helper under the build tree `Testing/` directory; `.github/ci/regression/iccDescribeSinkTest.cpp` |
 | `iccdev.iccviz-gamut-roundtrip-metrics` | `.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp` |
 | `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
 | `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
