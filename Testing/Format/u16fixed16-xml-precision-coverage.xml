@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hand-authored #3092 XML-wrapper and #2095 unsigned 16.16 precision control.
+  ICC.1:2022 4.7 and 10.25/Table 79; ICC.2:2023 10.2.26/Table 74:
+  type signature uf32, four reserved zero bytes, then unsigned 16.16 words.
+  ufix and uflf are test-only private tag signatures, not registered ICC tags.
+  The text array and <f> element array must encode identical binary words.
+  The independent regression oracle checks both; iccDEV XML element names
+  are an implementation convention, not specified by ICC.
+-->
+<IccProfile>
+  <Header>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>GRAY</DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-11-18T12:34:56</CreationDateTime>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant><XYZNumber X="0.964202880859375" Y="1" Z="0.8249053955078125"/></PCSIlluminant>
+  </Header>
+  <Tags>
+    <profileDescriptionTag><multiLocalizedUnicodeType><LocalizedText LanguageCountry="enUS">Unsigned fixed-point XML precision</LocalizedText></multiLocalizedUnicodeType></profileDescriptionTag>
+    <copyrightTag><multiLocalizedUnicodeType><LocalizedText LanguageCountry="enUS">Copyright 2026 International Color Consortium</LocalizedText></multiLocalizedUnicodeType></copyrightTag>
+    <mediaWhitePointTag><XYZArrayType><XYZNumber X="0.964202880859375" Y="1" Z="0.8249053955078125"/></XYZArrayType></mediaWhitePointTag>
+    <grayTRCTag><curveType><Curve>563</Curve></curveType></grayTRCTag>
+    <u16Fixed16ArrayType><TagSignature>ufix</TagSignature>
+      <Array>0 0.0000152587890625 1.5 32768 65534 65535.5 65535.9999847412109375</Array>
+    </u16Fixed16ArrayType>
+    <u16Fixed16ArrayType><TagSignature>uflf</TagSignature>
+      <Array><f>0</f><f>0.0000152587890625</f><f>1.5</f><f>32768</f><f>65534</f><f>65535.5</f><f>65535.9999847412109375</f></Array>
+    </u16Fixed16ArrayType>
+  </Tags>
+</IccProfile>

@@ -1571,6 +1571,7 @@ template class CIccXmlArrayType<icUInt16Number, icSigUInt16ArrayType>;
 template class CIccXmlArrayType<icUInt32Number, icSigUInt32ArrayType>;
 template class CIccXmlArrayType<icUInt64Number, icSigUInt64ArrayType>;
 template class CIccXmlArrayType<icFloatNumber, icSigFloatArrayType>;
+template class CIccXmlArrayType<icFloat64Number, icSigFloatArrayType>;
 template class CIccXmlArrayType<icFloat32Number, icSigFloat32ArrayType>;
 template class CIccXmlArrayType<icFloat64Number, icSigFloat64ArrayType>;
 
