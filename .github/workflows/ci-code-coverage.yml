@@ -399,8 +399,9 @@ jobs:
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
           authored_stage_start_ns="$(date +%s%N)"
 
-          # Convert each new authored pair once. The parser regression below
-          # checks that its independent JSON source produces the same ICC.
+          # Convert authored XML once. The parser regression below checks
+          # independent JSON parity for pairs and exact uf32 words for the
+          # dedicated XML-only precision fixture.
           authored_profile_dir="${WORKSPACE_DIR}/coverage-report/authored-profiles"
           mkdir -p "$authored_profile_dir"
           authored_from_xml="$(
@@ -412,10 +413,14 @@ jobs:
             exit 1
           fi
           authored_names=(
+            acs-bookends-coverage
+            compressed-text-coverage
+            format-feature-coverage
             sequence-metadata-coverage
+            metadata-numeric-coverage
             dict-localization-coverage
             response-curve-coverage
-            acs-bookends-coverage
+            u16fixed16-xml-precision-coverage
           )
           for name in "${authored_names[@]}"; do
             output="$authored_profile_dir/$name.icc"
