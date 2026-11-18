@@ -38,6 +38,7 @@ TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 TOXML="$TOOLS_DIR/IccToXml/iccToXml"
+DUMP="$TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd)"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -571,11 +572,13 @@ run_authored_pair_test() {
   local returned_xml_icc="$OUTDIR/$name-returned-xml.icc"
   local returned_json_icc="$OUTDIR/$name-returned-json.icc"
   local logfile="$OUTDIR/$name.log"
+  local validation_log="$OUTDIR/$name-validation.log"
   local exit_code=0
+  local validation_rc=0
 
   TOTAL=$((TOTAL + 1))
   rm -f "$xml_icc" "$json_icc" "$returned_xml" "$returned_json" \
-    "$returned_xml_icc" "$returned_json_icc" "$logfile"
+    "$returned_xml_icc" "$returned_json_icc" "$logfile" "$validation_log"
 
   timeout 30 "$FROMXML" "$xml_source" "$xml_icc" > "$logfile" 2>&1 &&
   timeout 30 "$FROMJSON" "$json_source" "$json_icc" >> "$logfile" 2>&1 &&
@@ -605,13 +608,28 @@ run_authored_pair_test() {
     return
   fi
 
-  echo "  [PASS] $name (XML/JSON and both writer round trips are byte-equivalent)"
+  # A byte-identical writer round trip can still preserve a non-compliant
+  # profile. The XML and JSON ICCs are equal above, so validate one payload.
+  timeout 30 "$DUMP" -v "$xml_icc" > "$validation_log" 2>&1 || validation_rc=$?
+  if ! check_sanitizers "$name-validation" "$validation_log"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if [ "$validation_rc" -ne 0 ] ||
+     ! grep -Eq '^Profile is valid for version [0-9]+\.[0-9]+$' "$validation_log"; then
+    echo "  [FAIL] $name -- ICC validation did not report a valid profile (exit=$validation_rc)"
+    tail -12 "$validation_log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (XML/JSON byte-equivalent; ICC valid)"
   PASS=$((PASS + 1))
 }
 
 if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ] ||
-   [ ! -x "$TOXML" ]; then
-  echo "ERROR: IccToJson, IccFromJson, IccFromXml, and IccToXml are required"
+   [ ! -x "$TOXML" ] || [ ! -x "$DUMP" ]; then
+  echo "ERROR: IccToJson, IccFromJson, IccFromXml, IccToXml, and IccDumpProfile are required"
   exit 1
 fi
 
