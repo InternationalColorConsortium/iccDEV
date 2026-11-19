@@ -92,7 +92,7 @@ RUN for attempt in 1 2 3; do \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.3 \
     libxml2-dev=2.15.2+dfsg-0.1ubuntu0.3 \
     lcov=2.4-3 \
-    linux-perf=7.0.0-43.43 \
+    linux-perf=7.0.0-44.44 \
     lsb-release=12.1-2build1 \
     llvm-22=1:22.1.2-1ubuntu1 \
     llvm-22-tools=1:22.1.2-1ubuntu1 \

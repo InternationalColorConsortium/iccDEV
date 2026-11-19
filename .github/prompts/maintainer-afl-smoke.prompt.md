@@ -7,7 +7,7 @@ command-line tools.
 
 - Workflow: `.github/workflows/ci-afl-smoke.yml`
 - Driver: `.github/scripts/iccdev-afl-smoke.sh`
-- AFL++ commit: `2400206be6fe0d93681c8a5c1535209366602eb1`
+- AFL++ commit: `441e2cdbd690c00174b1fa54d0b144bbc24a736c`
 - Container: `ghcr.io/internationalcolorconsortium/iccdev`
 - Container workflow: `.github/workflows/ci-docker.yml`
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`

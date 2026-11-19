@@ -41,7 +41,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
    apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
    apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log
    afl_src=$(mktemp -d)
-   afl_ref=2400206be6fe0d93681c8a5c1535209366602eb1
+   afl_ref=441e2cdbd690c00174b1fa54d0b144bbc24a736c
    git clone --filter=blob:none --no-checkout https://github.com/AFLplusplus/AFLplusplus.git "$afl_src"
    git -C "$afl_src" fetch --depth=1 origin "$afl_ref"
    git -C "$afl_src" checkout --detach FETCH_HEAD
@@ -69,7 +69,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Keep workflow triggers manual or reusable unless maintainers explicitly widen
   them.
 - Keep CI AFL++ tooling pinned to commit
-  `2400206be6fe0d93681c8a5c1535209366602eb1` and rebuilt against the unified
+  `441e2cdbd690c00174b1fa54d0b144bbc24a736c` and rebuilt against the unified
   image's Clang/LLVM major version.
 - The unified image packages the compiler runtime needed by its packaged
   `afl-clang-fast` for short local smoke checks. The AFL workflow must still
