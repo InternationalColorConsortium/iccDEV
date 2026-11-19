@@ -5,7 +5,7 @@
 # This source file is licensed under the BSD 3-Clause "New" or "Revised"
 # License used by ICC software projects.
 
-FROM gcr.io/oss-fuzz-base/base-builder@sha256:d0d9fb8232fd746e487e6e8e6f8631060b4a391a64b19ad3d87bdf454d00da50
+FROM gcr.io/oss-fuzz-base/base-builder@sha256:1f9cf74bc3d7029b528494542f9d9851b256dceed38d3f420989434dc5ae0760
 
 RUN apt-get update -qq && \
     apt-get install -y --no-install-recommends \

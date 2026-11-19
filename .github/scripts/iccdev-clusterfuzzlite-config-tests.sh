@@ -299,7 +299,7 @@ grep -Fq \
   'ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh' \
   "$afl_workflow"
 
-afl_pin='2400206be6fe0d93681c8a5c1535209366602eb1'
+afl_pin='441e2cdbd690c00174b1fa54d0b144bbc24a736c'
 grep -Fq "      AFLPLUSPLUS_REF: $afl_pin" "$afl_workflow"
 for pin_consumer in \
   "$repo_root/docs/afl-fuzzing.md" \
