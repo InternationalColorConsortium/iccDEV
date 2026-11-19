@@ -56,6 +56,8 @@ The XML library converts profiles and their tags to and from XML. Link the
 for the source-level API. The \ref md_IccXML_2CmdLine_2IccToXml_2Readme
 "iccToXml" and \ref md_IccXML_2CmdLine_2IccFromXml_2Readme "iccFromXml"
 guides cover the command-line tools.
+
+- \subpage md_docs_2iccxml "IccXML library guide"
 */
 
 /**
@@ -143,6 +145,8 @@ configuration. Link the `IccConnect2` target. See \ref IccConnect.h
 /**
 \page curatedexamples Examples
 
+- \subpage md_examples_2hello-iccdev_2README "hello-iccdev"
+- \subpage md_examples_2c-validation-dlopen_2README "C validation runtime loading"
 - \subpage md_examples_2ios-apply-preview_2README "iOS apply preview"
 - \subpage md_examples_2ios-clut-editor_2README "iOS CLUT editor"
 - \subpage md_examples_2ios-benchapply_2README "iOS apply benchmark"

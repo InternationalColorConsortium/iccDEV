@@ -22,6 +22,7 @@ point to deeper references.
 | Apply tool and TIFF pipeline diagrams | `docs/iccapply/README.md`, `docs/iccapply/tiff-processing-pipeline.dox`, `docs/iccapply/diagrams/*.dot`, and `docs/tiff/` |
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
+| IccXML library, API, and command-line entry points | `docs/iccxml.md` |
 | IccConnect library and `CIccConnectCmm` factory | `docs/icc-connect.md` |
 | IccConnect JSON config schema | `docs/icc-connect-config.schema.json` |
 | Threaded CMM apply (`CIccThreadedCmm`) | `docs/icc-cmm-threading.md` |

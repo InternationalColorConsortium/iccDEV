@@ -1,0 +1,15 @@
+/* Keep public documentation usable on narrow screens. */
+@media screen and (max-width: 767px) {
+  #side-nav {
+    display: none !important;
+  }
+
+  #doc-content {
+    margin-left: 0 !important;
+    width: auto !important;
+  }
+
+  #nav-path {
+    left: 0 !important;
+  }
+}

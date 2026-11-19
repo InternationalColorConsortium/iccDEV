@@ -1,4 +1,4 @@
-## Quickstart installation: 
+# Install iccDEV
 
 | Method | Command |
 |--------|---------|
