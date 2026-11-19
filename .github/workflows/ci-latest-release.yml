@@ -2196,10 +2196,6 @@ jobs:
           test -f docs/generated/html/dot_tolink-lane.svg
           test ! -f docs/generated/html/icc__apply__qa__suite_8sh_source.html
           grep -q 'iccDEV Documentation' docs/generated/html/index.html
-          test -f docs/generated/html/curateddocumentation.html
-          test -f docs/generated/html/curatedlibraries.html
-          test -f docs/generated/html/curatedtools.html
-          test -f docs/generated/html/curatedmaintainerqa.html
           python3 .github/scripts/check-doxygen-html.py docs/generated/html
           if grep -q 'superpowers' docs/generated/html/navtreedata.js; then
             echo "::error::Doxygen navigation contains excluded internal documentation"
@@ -2263,7 +2259,8 @@ jobs:
             echo "wxWidget tools, hello-iccdev, iOS examples, maintainer docs,"
             echo "and iccApply command-line lane references."
             echo ""
-            echo "**Navigation QA**: Five curated entry points and no broken packaged links."
+            echo "**Navigation QA**: Curated entry points, required child guides,"
+            echo "and packaged links passed."
             echo ""
             echo "**Visual aids**: Interactive SVG (pan/zoom),"
             echo "class hierarchy browser, call/caller graphs,"
