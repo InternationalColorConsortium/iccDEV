@@ -119,14 +119,19 @@ run_doxygen_check() {
   local output_dir status=0
   output_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-doxygen.XXXXXX")"
 
-  if ! doxygen .github/ci/doxygen/Doxyfile \
-    "OUTPUT_DIRECTORY=$output_dir" \
-    "WARN_LOGFILE=$output_dir/doxygen-warnings.log"; then
+  if ! {
+    cat .github/ci/doxygen/Doxyfile
+    printf '\nOUTPUT_DIRECTORY = %s\n' "$output_dir"
+    printf 'WARN_LOGFILE = %s/doxygen-warnings.log\n' "$output_dir"
+  } | doxygen -; then
     status=1
   fi
   if [ -s "$output_dir/doxygen-warnings.log" ]; then
     cat "$output_dir/doxygen-warnings.log" >&2
     status=1
+  fi
+  if [ "$status" -eq 0 ]; then
+    python3 .github/scripts/check-doxygen-html.py "$output_dir/html" || status=1
   fi
 
   rm -rf "$output_dir"

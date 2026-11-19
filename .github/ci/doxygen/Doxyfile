@@ -26,6 +26,7 @@ INPUT                  = IccProfLib \
                          Tools/Winnt \
                          Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml \
                          Tools/wxWidget \
+                         examples/hello-iccdev/README.md \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          examples/ios-apply-preview/README.md \
                          examples/ios-apply-preview/main.mm \
@@ -35,6 +36,7 @@ INPUT                  = IccProfLib \
                          examples/ios-clut-editor/main.mm \
                          examples/ios-clut-editor/ClutEditorHost.h \
                          examples/ios-clut-editor/ClutEditorHost.mm \
+                         examples/c-validation-dlopen/README.md \
                          examples/c-validation-dlopen/main.c \
                          examples/ios-benchapply/README.md \
                          examples/ios-benchapply/BenchApplyHost.h \
@@ -142,6 +144,7 @@ GENERATE_PERLMOD       = NO
 
 # HTML settings -- interactive navigation and search
 HTML_COLORSTYLE        = AUTO_LIGHT
+HTML_EXTRA_STYLESHEET  = .github/ci/doxygen/iccdev.css
 HTML_DYNAMIC_SECTIONS  = YES
 HTML_INDEX_NUM_ENTRIES = 100
 DISABLE_INDEX          = NO
