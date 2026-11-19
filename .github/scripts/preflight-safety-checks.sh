@@ -131,7 +131,7 @@ run_doxygen_check() {
     status=1
   fi
   if [ "$status" -eq 0 ]; then
-    python3 "$SCRIPT_DIR/check-doxygen-html.py" "$output_dir/html" || status=1
+    python3 .github/scripts/check-doxygen-html.py "$output_dir/html" || status=1
   fi
 
   rm -rf "$output_dir"

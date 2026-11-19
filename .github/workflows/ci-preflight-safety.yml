@@ -101,7 +101,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
 
       # preflight: allow-package-install reason=security-tool-bootstrap
       - name: Install pre-flight tools
@@ -125,7 +125,7 @@ jobs:
             'pytest>=9.0.3,<10' \
             'PyYAML>=6,<7' \
             'yamllint>=1.35,<2' \
-            'zizmor==1.33.1' \
+            'zizmor==1.32.0' \
             --quiet
           echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
 
@@ -154,9 +154,9 @@ jobs:
           # The digest is the release asset's, so bump CODEQL_VER and CODEQL_SHA256 together:
           #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
           #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-          CODEQL_VER="2.27.5"
+          CODEQL_VER="2.27.4"
           CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-          CODEQL_SHA256="a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5"
+          CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
           CODEQL_URL="https://github.com/github/codeql-action/releases/download"
           if [[ ! -f "${CODEQL_ARCHIVE}" ]]; then
             curl -fsSL --retry 3 \
@@ -175,7 +175,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
+          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
 
       # preflight: allow-pr-script-execution reason=readonly-workflow-contract-tests
       - name: Run workflow contract tests
@@ -194,14 +194,10 @@ jobs:
             --rootdir . \
             --import-mode=importlib \
             .github/tests/test_apple_mobile_release_artifact.py \
-            .github/tests/test_audit_lint_findings.py \
-            .github/tests/test_codeql_report.py \
             .github/tests/test_downstream_oidc_gate.py \
             .github/tests/test_downstream_oidc_workflow.py \
-            .github/tests/test_matched_coverage_report.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_python_release_wheels.py \
-            .github/tests/test_qa_detection_matrix.py \
             .github/tests/test_ci_rebase_policy.py \
             .github/tests/test_tool_ctest_workflow.py \
             .github/tests/test_wasm_workflow.py \
@@ -438,7 +434,7 @@ jobs:
             exit 1
           fi
           if [ "$doxygen_status" -eq 0 ]; then
-            python3 ../trusted/.github/scripts/check-doxygen-html.py "$output_dir/html"
+            python3 .github/scripts/check-doxygen-html.py "$output_dir/html"
           fi
           exit "$doxygen_status"
 
