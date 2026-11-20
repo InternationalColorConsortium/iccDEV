@@ -121,6 +121,14 @@ its destination transform. `interp` selects interpolation while sampling the
 input transforms, not interpolation by later consumers of the output. A stage
 is zero or more four-character `-ENV:` controls, a profile/intent pair, and an
 optional immediately following `-PCC` control; at least one stage is required.
+Environment values must be finite and are supplied as 32-bit CMM environment
+values to the following profile. DeviceLink stages must share one base intent
+from `0` through `3`; the tool records it in the profile header and rejects a
+mixed-intent DeviceLink that the single header field could not describe. Cube
+output has no ICC header and permits mixed intents. Malformed positional and
+stage arguments are diagnosed on standard error. Its historical `+100`
+luminance and `+1000` V5-subprofile modifier columns are tool-specific and are
+not numerically interchangeable with config-driven Apply tool intent codes.
 It accepts the same telemetry/evidence options in
 any order; human telemetry uses UTC timestamps and goes to stderr, while
 JSONL/evidence record the link output, grid size/node count, elapsed time, and
