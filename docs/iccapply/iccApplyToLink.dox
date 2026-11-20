@@ -12,10 +12,16 @@ After global options are removed, this tool has one positional form:
 Telemetry-enabled builds remove `--telemetry=off|human|jsonl`,
 `--telemetry-file FILE`, and `--evidence-file FILE` in any order before
 positional validation. The first ten remaining process tokens include the
-executable and the nine fixed fields.
-Every remaining token belongs to profile/intent pairs, with `-ENV:sig value`
-and `-PCC file` participating in that pair-shaped sequence. An odd remainder
-is rejected before a writer or CMM is created.
+executable and the nine fixed fields. They are followed by one or more transform
+stages:
+
+`{-ENV:cccc value} profile intent {-PCC file}`
+
+The environment pair can repeat before each profile, and the whole stage can
+repeat. An environment signature has exactly four characters. A PCC applies to
+the immediately preceding profile. Leading or duplicate PCC controls, dangling
+environment controls, an odd remainder, and a sequence with no profile are
+rejected before a writer or CMM is created.
 
 \dotfile tolink-lane.dot "iccApplyToLink validation, CMM sampling, and writer lane"
 
@@ -26,8 +32,8 @@ is rejected before a writer or CMM is created.
 | `dst_link` | output path | ICC DeviceLink profile or text Cube LUT to create. |
 | `link_type` | 0, 1 | DeviceLink or `.cube` text file. |
 | `lut_size` | integer 2 through 255 | Grid entries along each source dimension. |
-| `option`, DeviceLink | 0, 1 | ICC V4 16-bit table or V5 profile. |
-| `option`, Cube | integer 0 through 20 | Decimal precision for Cube entries. |
+| `option`, DeviceLink | 0, 1 | ICC V4.3 profile with a 2-byte mAB CLUT, or a V5 profile. |
+| `option`, Cube | integer 0 through 20 | Digits after the decimal point for Cube LUT samples. |
 | `title` | text | Output description. |
 | `range_min`, `range_max` | finite floats, min less than max | Input domain sampled by every grid axis. |
 | `first_transform` | 0, 1 | Destination or source transform from the first profile. |
@@ -36,6 +42,19 @@ is rejected before a writer or CMM is created.
 The range is not an output clipping range. Node zero samples `range_min` and
 the final node samples `range_max`. A non-default range requires V5 or Cube:
 V4 DeviceLinks cannot declare that altered input domain.
+Cube input-range metadata is written independently of the LUT sample precision,
+with enough significant digits to round-trip each `icFloatNumber` endpoint.
+`interp` controls evaluation while the tool samples the input transforms; it
+does not prescribe interpolation by a later consumer of the output.
+
+The DeviceLink structures follow ICC.1:2022 clauses 8.6 and 10.12 for V4 mAB
+output and ICC.2:2023 clauses 8.6, 9.2.1, 11.2.2.2, and 11.2.3 for V5 MPE
+output. The tool writes a version 4.3 header; ICC.1:2022 identifies version 4.4
+for that specification edition. Cube text output is outside both ICC
+specifications.
+For V4 output with an xCLR endpoint, the corresponding endpoint profile must
+provide the colorant table required by ICC.1:2022 clause 8.6. A missing table
+causes generation to fail, including when a V5 source has no legacy table.
 
 \section tolink_runtime Sampling and safety gates
 
