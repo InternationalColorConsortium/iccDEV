@@ -1,0 +1,11 @@
+TITLE "Legacy input range regression"
+LUT_3D_SIZE 2
+LUT_3D_INPUT_RANGE 0.25 0.75
+0.0 0.0 0.0
+1.0 0.0 0.0
+0.0 1.0 0.0
+1.0 1.0 0.0
+0.0 0.0 1.0
+1.0 0.0 1.0
+0.0 1.0 1.0
+1.0 1.0 1.0

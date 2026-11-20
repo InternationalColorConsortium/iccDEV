@@ -18,6 +18,11 @@ FROM_CUBE="$ICCDEV_TOOLS_DIR/IccFromCube/iccFromCube"
 DUMP_PROFILE="$ICCDEV_TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 PROFILE="$ICCDEV_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 PCC_PROFILE="$ICCDEV_ROOT/Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+IDENTITY_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-identity.cube"
+NEAR_DEFAULT_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-near-default-domain.cube"
+LEGACY_RANGE_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-legacy-input-range.cube"
+INPUT_VIDEO_RANGE_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-input-video-range.cube"
+OUTPUT_VIDEO_RANGE_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-output-video-range.cube"
 TELEMETRY="$QA_OUTDIR/link.jsonl"
 EVIDENCE="$QA_OUTDIR/link-evidence.json"
 
@@ -26,6 +31,11 @@ qa_require_tool "$FROM_CUBE"
 qa_require_tool "$DUMP_PROFILE"
 qa_require_file "$PROFILE"
 qa_require_file "$PCC_PROFILE"
+qa_require_file "$IDENTITY_CUBE"
+qa_require_file "$NEAR_DEFAULT_CUBE"
+qa_require_file "$LEGACY_RANGE_CUBE"
+qa_require_file "$INPUT_VIDEO_RANGE_CUBE"
+qa_require_file "$OUTPUT_VIDEO_RANGE_CUBE"
 if [ "$QA_FAILURES" -ne 0 ]; then
     qa_finish
     exit $?
@@ -36,30 +46,70 @@ qa_assert_cube_range() {
     local expected_min="$2"
     local expected_max="$3"
     local label="$4"
-    local line keyword actual_min actual_max extra
+    local min_line max_line min_keyword max_keyword
+    local min_r min_g min_b min_extra max_r max_g max_b max_extra
 
-    line="$(grep -m 1 '^LUT_3D_INPUT_RANGE ' "$file" 2>/dev/null || true)"
-    read -r keyword actual_min actual_max extra <<< "$line"
-    if [ "$keyword" != "LUT_3D_INPUT_RANGE" ] || [ -z "$actual_min" ] ||
-       [ -z "$actual_max" ] || [ -n "${extra:-}" ]; then
-        qa_fail "$label: missing or malformed LUT_3D_INPUT_RANGE in $file"
+    min_line="$(grep -m 1 '^DOMAIN_MIN ' "$file" 2>/dev/null || true)"
+    max_line="$(grep -m 1 '^DOMAIN_MAX ' "$file" 2>/dev/null || true)"
+    read -r min_keyword min_r min_g min_b min_extra <<< "$min_line"
+    read -r max_keyword max_r max_g max_b max_extra <<< "$max_line"
+    if [ "$min_keyword" != "DOMAIN_MIN" ] || [ "$max_keyword" != "DOMAIN_MAX" ] ||
+       [ -z "$min_r" ] || [ -z "$min_g" ] || [ -z "$min_b" ] ||
+       [ -z "$max_r" ] || [ -z "$max_g" ] || [ -z "$max_b" ] ||
+       [ -n "${min_extra:-}" ] || [ -n "${max_extra:-}" ]; then
+        qa_fail "$label: missing or malformed DOMAIN_MIN/DOMAIN_MAX in $file"
         return
     fi
 
-    if awk -v actual_min="$actual_min" -v actual_max="$actual_max" \
+    if awk -v min_r="$min_r" -v min_g="$min_g" -v min_b="$min_b" \
+           -v max_r="$max_r" -v max_g="$max_g" -v max_b="$max_b" \
            -v expected_min="$expected_min" -v expected_max="$expected_max" '
         function abs(value) { return value < 0 ? -value : value }
         BEGIN {
             min_tol = abs(expected_min) * 1e-6 + 1e-38
             max_tol = abs(expected_max) * 1e-6 + 1e-38
-            if (!(actual_min < actual_max) ||
-                abs(actual_min - expected_min) > min_tol ||
-                abs(actual_max - expected_max) > max_tol)
+            if (!(min_r < max_r) || !(min_g < max_g) || !(min_b < max_b) ||
+                abs(min_r - expected_min) > min_tol ||
+                abs(min_g - expected_min) > min_tol ||
+                abs(min_b - expected_min) > min_tol ||
+                abs(max_r - expected_max) > max_tol ||
+                abs(max_g - expected_max) > max_tol ||
+                abs(max_b - expected_max) > max_tol)
                 exit 1
         }'; then
         echo "[PASS] $label"
     else
-        qa_fail "$label: expected ordered range $expected_min $expected_max, got $actual_min $actual_max"
+        qa_fail "$label: expected three ordered channels at $expected_min $expected_max"
+    fi
+}
+
+qa_assert_cube_identity_order() {
+    local file="$1"
+    local label="$2"
+
+    if awk '
+        BEGIN {
+            expected[1] = "0 0 0"
+            expected[2] = "1 0 0"
+            expected[3] = "0 1 0"
+            expected[4] = "1 1 0"
+            expected[5] = "0 0 1"
+            expected[6] = "1 0 1"
+            expected[7] = "0 1 1"
+            expected[8] = "1 1 1"
+        }
+        NF == 3 {
+            count++
+            split(expected[count], value, " ")
+            if (($1 + 0) != value[1] || ($2 + 0) != value[2] ||
+                ($3 + 0) != value[3])
+                bad = 1
+        }
+        END { exit bad || count != 8 }
+    ' "$file"; then
+        echo "[PASS] $label"
+    else
+        qa_fail "$label: Cube rows are not red-fastest identity order"
     fi
 }
 
@@ -150,6 +200,18 @@ qa_require_file "$QA_OUTDIR/valid-v4.icc"
 qa_run valid-cube success "" "$BIN" "$QA_OUTDIR/valid.cube" \
     1 2 4 "QA cube" 0 1 0 0 "$PROFILE" 1
 qa_assert_contains "$QA_OUTDIR/valid.cube" "LUT_3D_SIZE 2" "Cube records grid size"
+qa_run cube-identity-profile success "" "$FROM_CUBE" "$IDENTITY_CUBE" \
+    "$QA_OUTDIR/cube-identity-profile.icc"
+qa_run cube-identity-order success "" "$BIN" "$QA_OUTDIR/cube-identity-order.cube" \
+    1 2 6 "QA Cube identity" 0 1 1 0 "$QA_OUTDIR/cube-identity-profile.icc" 0
+qa_assert_cube_identity_order "$QA_OUTDIR/cube-identity-order.cube" \
+    "Cube rows use Adobe red-fastest order"
+qa_run cube-quoted-title success "" "$BIN" "$QA_OUTDIR/cube-quoted-title.cube" \
+    1 2 6 'QA "quoted" title' 0 1 0 0 "$PROFILE" 1
+qa_assert_contains "$QA_OUTDIR/cube-quoted-title.cube" \
+    'TITLE "QA \x22quoted\x22 title"' "Cube title excludes raw delimiter quotes"
+qa_run cube-quoted-title-import success "" "$FROM_CUBE" \
+    "$QA_OUTDIR/cube-quoted-title.cube" "$QA_OUTDIR/cube-quoted-title.icc"
 qa_run cube-range-p0 success "" "$BIN" "$QA_OUTDIR/cube-range-p0.cube" \
     1 2 0 "QA cube range p0" 0.1 0.2 0 0 "$PROFILE" 1
 qa_assert_cube_range "$QA_OUTDIR/cube-range-p0.cube" 0.1 0.2 \
@@ -173,6 +235,22 @@ qa_run cube-near-default success "" "$BIN" "$QA_OUTDIR/cube-near-default.cube" \
     1 2 20 "QA cube near default" 5e-9 1 0 0 "$PROFILE" 1
 qa_assert_cube_range "$QA_OUTDIR/cube-near-default.cube" 5e-9 1 \
     "Cube records a non-default range below the old near threshold"
+qa_run cube-near-default-import success "" "$FROM_CUBE" \
+    "$NEAR_DEFAULT_CUBE" "$QA_OUTDIR/cube-near-default.icc"
+qa_run cube-near-default-dump success "" "$DUMP_PROFILE" -v 100 \
+    "$QA_OUTDIR/cube-near-default.icc" A2B0
+qa_assert_contains "$QA_LAST_LOG" "Single Sampled Curve [0.00000000, 1.00000000]" \
+    "iccFromCube preserves a range below the old near threshold"
+qa_run cube-legacy-range-import success "" "$FROM_CUBE" \
+    "$LEGACY_RANGE_CUBE" "$QA_OUTDIR/cube-legacy-range.icc"
+qa_run cube-legacy-range-dump success "" "$DUMP_PROFILE" -v 100 \
+    "$QA_OUTDIR/cube-legacy-range.icc" A2B0
+qa_assert_contains "$QA_LAST_LOG" "Single Sampled Curve [0.25000000, 0.75000000]" \
+    "iccFromCube retains legacy LUT_3D_INPUT_RANGE compatibility"
+qa_run cube-input-video-range reject "video-range scaling is not implemented" \
+    "$FROM_CUBE" "$INPUT_VIDEO_RANGE_CUBE" "$QA_OUTDIR/cube-input-video-range.icc"
+qa_run cube-output-video-range reject "video-range scaling is not implemented" \
+    "$FROM_CUBE" "$OUTPUT_VIDEO_RANGE_CUBE" "$QA_OUTDIR/cube-output-video-range.icc"
 qa_run link-type-2 reject "expected 0 (Device Link) or 1 (.cube text file)" \
     "$BIN" "$QA_OUTDIR/bad-type.icc" 2 2 0 "QA bad type" 0 1 0 0 "$PROFILE" 1
 qa_run link-type-text reject "Invalid link_type" \

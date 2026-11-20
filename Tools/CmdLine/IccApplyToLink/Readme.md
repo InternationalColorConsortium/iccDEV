@@ -25,7 +25,7 @@ Key arguments:
 | `link_type` | `0` writes an ICC DeviceLink profile; `1` writes a `.cube` text LUT. Other values are rejected. |
 | `lut_size` | Integer grid size from `2` through `255`. |
 | `option` with `link_type=0` | `0` writes a version 4.3 profile with a 2-byte mAB CLUT; `1` writes a version 5 profile. |
-| `option` with `link_type=1` | Digits after the decimal point for `.cube` LUT samples, from `0` through `20`. Non-default input-range metadata is written with enough significant digits to preserve its values. |
+| `option` with `link_type=1` | Digits after the decimal point for `.cube` LUT samples, from `0` through `20`. Non-default `DOMAIN_MIN`/`DOMAIN_MAX` metadata is written with enough significant digits to preserve its values. |
 | `first_transform` | `0` uses the destination transform from the first profile; `1` uses the source transform from the first profile. |
 | `interp` | `0` linear interpolation; `1` tetrahedral interpolation while sampling the input profile transforms. It does not prescribe interpolation by a later consumer of the generated link. |
 | `rendering_intent` | Base intent `0`-`3` plus decimal-coded modifiers, read as independent columns: the tens digit is the transform-lookup type (`icXformLutType`, reachable values `0`-`9`; `+10` drops the D2Bx/B2Dx tags and `+40` adds black-point compensation), `+100` requests luminance matching, and `+1000` uses a V5 sub-profile if present. A negative code is rejected (#2268). |
@@ -46,7 +46,11 @@ iccApplyToLink GRACoL_to_sRGB.icc 0 2 1 "GRACoL_to_sRGB" 0 1 1 0 GRACoL2006_Coat
 ```
 
 `.cube` output requires both source and destination spaces to have exactly three
-channels.
+channels. It follows Adobe Cube LUT Specification 1.0 for its three-component
+`DOMAIN_MIN`/`DOMAIN_MAX` keywords and table order: red varies fastest, then
+green, then blue. A quote in the requested title is represented as `\x22`
+because the Cube format excludes the quote delimiter from title text and
+defines no escape sequence for it.
 
 Each transform stage has the following shape. At least one stage is required,
 and an environment signature is exactly four characters:

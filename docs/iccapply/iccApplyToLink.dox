@@ -44,6 +44,10 @@ the final node samples `range_max`. A non-default range requires V5 or Cube:
 V4 DeviceLinks cannot declare that altered input domain.
 Cube input-range metadata is written independently of the LUT sample precision,
 with enough significant digits to round-trip each `icFloatNumber` endpoint.
+Cube output uses the Adobe Cube LUT Specification 1.0 `DOMAIN_MIN` and
+`DOMAIN_MAX` keywords and writes table rows with red varying fastest, then
+green, then blue. Quotes in a title are represented as `\x22` because the Cube
+format excludes its quote delimiter from title text and defines no escaping.
 `interp` controls evaluation while the tool samples the input transforms; it
 does not prescribe interpolation by a later consumer of the output.
 
@@ -67,7 +71,9 @@ allocate a CLUT.
 
 The generation loop walks the n-dimensional grid, maps each index to the
 validated input range, calls `CIccCmm::Apply()`, and sends the destination
-pixel to either `CDevLinkWriter` or `CCubeWriter`.
+pixel to either `CDevLinkWriter` or `CCubeWriter`. DeviceLink output retains
+ICC CLUT order; Cube output changes only the index rollover order to meet the
+red-fastest Cube table contract.
 
 \section tolink_qa QA example
 

@@ -1,0 +1,11 @@
+TITLE "Unsupported input video range"
+LUT_3D_SIZE 2
+LUT_IN_VIDEO_RANGE
+0.0 0.0 0.0
+1.0 0.0 0.0
+0.0 1.0 0.0
+1.0 1.0 0.0
+0.0 0.0 1.0
+1.0 0.0 1.0
+0.0 1.0 1.0
+1.0 1.0 1.0
