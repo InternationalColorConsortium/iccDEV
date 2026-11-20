@@ -110,10 +110,16 @@ signal and sanitizer classification.
 
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
-`.cube` text LUT and `option` is the precision (`0` through `20`). Other
+`.cube` text LUT and `option` is the number of digits after the decimal point
+for LUT samples (`0` through `20`). Cube range metadata uses independent,
+round-trip-safe significant digits. Other
 `link_type` values are rejected. `lut_size` must be `2` through `255`.
 `first_transform=1` uses the source transform from the first profile; `0` uses
-its destination transform. It accepts the same telemetry/evidence options in
+its destination transform. `interp` selects interpolation while sampling the
+input transforms, not interpolation by later consumers of the output. A stage
+is zero or more four-character `-ENV:` controls, a profile/intent pair, and an
+optional immediately following `-PCC` control; at least one stage is required.
+It accepts the same telemetry/evidence options in
 any order; human telemetry uses UTC timestamps and goes to stderr, while
 JSONL/evidence record the link output, grid size/node count, elapsed time, and
 node throughput.
@@ -257,6 +263,12 @@ available positionally (#2981).
 carries its own decode of a smaller set of columns, and the weights differ by a
 decade: in `iccApplyToLink` the tens digit is the transform-lookup type, `+100`
 is luminance matching and `+1000` selects the V5 sub-profile.
+Those are the canonical spellings. Existing command corpora also rely on the
+legacy flag semantics: any non-zero hundreds digit enables luminance matching,
+and any positive quotient above that column enables V5-subprofile selection.
+For example, `100`, `200`, and `900` select the same luminance flag, while
+`1000`, `10000`, and `100000` select the same V5-subprofile flag before the
+last three digits are decoded.
 
 The non-negative rule above holds in all three decodes, but it reached the two
 tools separately (#2268) -- before that a negative code whose units digit was
