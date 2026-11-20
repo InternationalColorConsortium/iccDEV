@@ -39,7 +39,7 @@
 #      QA cases 19 and 20, which the #1781 QA table records as
 #      "Fail - no early range rejection".
 #
-#   3. Only the .cube writer (LUT_3D_INPUT_RANGE) and the v5 device-link branch
+#   3. Only the .cube writer (DOMAIN_MIN/DOMAIN_MAX) and the v5 device-link branch
 #      (CIccSingleSampledCurve) can record the input domain; the v4 branch
 #      never reads it.  A v4 link over a restricted range therefore sampled
 #      that range while declaring [0,1] -- QA case 04, which the QA table
@@ -245,8 +245,17 @@ expect_ok "case04-cube-restricted-range-ok" \
 
 # Proves the range actually reached the file rather than being silently dropped
 # the way the v4 branch drops it -- which is the whole point of case 04.
-if [ -f "$C" ] && ! grep -q "LUT_3D_INPUT_RANGE" "$C"; then
-  fail "case04-cube-restricted-range-ok: .cube output does not carry LUT_3D_INPUT_RANGE"
+if [ -f "$C" ] && ! awk '
+  function abs(value) { return value < 0 ? -value : value }
+  $1 == "DOMAIN_MIN" && NF == 4 &&
+      abs($2 - 0.001) < 1e-8 && abs($3 - 0.001) < 1e-8 &&
+      abs($4 - 0.001) < 1e-8 { found_min = 1 }
+  $1 == "DOMAIN_MAX" && NF == 4 &&
+      abs($2 - 0.999) < 1e-7 && abs($3 - 0.999) < 1e-7 &&
+      abs($4 - 0.999) < 1e-7 { found_max = 1 }
+  END { exit !(found_min && found_max) }
+' "$C"; then
+  fail "case04-cube-restricted-range-ok: .cube output does not carry three-channel DOMAIN_MIN/MAX"
 fi
 
 ###############################################################################
@@ -319,17 +328,24 @@ expect_ok "case12-pcc-after-first"     "$O" 0 5 1 "QA 12" 0 1 1 1 \
   "$CMYK" 1 -PCC "$PCC" "$SRGB" 1
 
 ###############################################################################
-# 6. ICC.1:2022 8.6 requires colorantTableOutTag for xCLR DeviceLink output.
-#    A V5 source may already carry this legacy tag; the V4 writer must copy it
-#    under 'clot', not 'clrt', and retain it through another V4 link generation.
-#    A fresh directory prevents outputs from a prior run masking a failed writer.
+# 6. ICC.1:2022 8.6 requires colorantTableTag/colorantTableOutTag for xCLR
+#    DeviceLink endpoints. A V5 source may already carry the legacy output tag;
+#    the V4 writer must copy it under 'clot', not 'clrt', and retain it through
+#    another V4 link generation. It must also refuse an xCLR input without the
+#    corresponding 'clrt'. A fresh directory prevents outputs from a prior run
+#    masking a failed writer.
 ###############################################################################
 CASE_DIR="$(mktemp -d "$OUTDIR/issue-3096-XXXXXXXX")" || {
   fail "could not create a fresh #3096 case directory"
   exit 1
 }
 XCLR_XML="$REPO_ROOT/Testing/CLUT/avx2-3d-8-output.xml"
+XCLR_INPUT_XML="$REPO_ROOT/Testing/SpecRef/SixChanInputRef.xml"
+XCLR_INPUT_VALID_XML="$REPO_ROOT/.github/ci/test-data/test-xclr-input-colorant.xml"
 XCLR_SRC="$CASE_DIR/xclr-v5-source.icc"
+XCLR_INPUT_SRC="$CASE_DIR/xclr-input-no-table.icc"
+XCLR_INPUT_VALID_SRC="$CASE_DIR/xclr-input-with-table.icc"
+XCLR_INPUT_V4="$CASE_DIR/xclr-input-v4-link.icc"
 XCLR_V4="$CASE_DIR/xclr-v4-link.icc"
 XCLR_ROUNDTRIP="$CASE_DIR/xclr-v4-roundtrip.icc"
 assert_xclr_dump() {
@@ -379,6 +395,42 @@ else
       "$CASE_DIR/xclr-no-table.icc" 0
     if [ -e "$CASE_DIR/xclr-missing-table.icc" ]; then
       fail "xclr-missing-table: invalid V4 DeviceLink was written"
+    fi
+  fi
+
+  if [ ! -f "$XCLR_INPUT_XML" ]; then
+    fail "tracked xCLR input fixture missing: $XCLR_INPUT_XML"
+  elif ! timeout 120s "$FROMXML" "$XCLR_INPUT_XML" "$XCLR_INPUT_SRC" \
+       > "$CASE_DIR/fromxml-xclr-input.log" 2>&1 || [ ! -f "$XCLR_INPUT_SRC" ]; then
+    fail "could not build tracked xCLR input profile"
+  else
+    expect_arg_reject "xclr-input-missing-table" \
+      "xCLR input requires a colorantTableTag in the first profile" \
+      "$CASE_DIR/xclr-input-missing-table.icc" 0 2 0 "QA xCLR input missing" \
+      0 1 1 0 "$XCLR_INPUT_SRC" 13
+    if [ -e "$CASE_DIR/xclr-input-missing-table.icc" ]; then
+      fail "xclr-input-missing-table: invalid V4 DeviceLink was written"
+    fi
+  fi
+
+  if [ ! -f "$XCLR_INPUT_VALID_XML" ]; then
+    fail "tracked xCLR input colorant fixture missing: $XCLR_INPUT_VALID_XML"
+  elif ! timeout 120s "$FROMXML" "$XCLR_INPUT_VALID_XML" "$XCLR_INPUT_VALID_SRC" \
+       > "$CASE_DIR/fromxml-xclr-input-valid.log" 2>&1 ||
+       [ ! -f "$XCLR_INPUT_VALID_SRC" ]; then
+    fail "could not build tracked xCLR input profile with a colorant table"
+  else
+    expect_ok "xclr-input-to-v4" "$XCLR_INPUT_V4" 0 2 0 "QA xCLR input" \
+      0 1 1 0 "$XCLR_INPUT_VALID_SRC" 0
+    if [ "$RC" -eq 0 ] && [ -f "$XCLR_INPUT_V4" ]; then
+      if ! "$DUMP" -v "$XCLR_INPUT_V4" > "$CASE_DIR/xclr-input-v4.dump" 2>&1; then
+        fail "xclr-input-to-v4: unable to dump generated DeviceLink"
+      elif ! grep -qF "colorantTableTag" "$CASE_DIR/xclr-input-v4.dump"; then
+        fail "xclr-input-to-v4: missing input colorant table"
+      elif grep -E "NonCompliant!|Critical Error" "$CASE_DIR/xclr-input-v4.dump" |
+           grep -vF "profileSequenceDescTag: Contains non-aligned deviceModelDesc text tag information" >/dev/null; then
+        fail "xclr-input-to-v4: unexpected profile validation error"
+      fi
     fi
   fi
 fi
