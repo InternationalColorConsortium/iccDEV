@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <DataColourSpace>6CLR</DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </PCSIlluminant>
+    <ProfileCreator>icCD</ProfileCreator>
+    <ProfileID>1</ProfileID>
+  </Header>
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Six-channel input colorant regression]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+    <XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.9642" Y="1.0" Z="0.8249"/>
+    </XYZType>
+    <colorantTableTag>
+      <colorantTableType>
+        <ColorantTable>
+          <Colorant Name="Channel1" Channel1="0.1" Channel2="0.1" Channel3="0.1"/>
+          <Colorant Name="Channel2" Channel1="0.2" Channel2="0.2" Channel3="0.2"/>
+          <Colorant Name="Channel3" Channel1="0.3" Channel2="0.3" Channel3="0.3"/>
+          <Colorant Name="Channel4" Channel1="0.4" Channel2="0.4" Channel3="0.4"/>
+          <Colorant Name="Channel5" Channel1="0.5" Channel2="0.5" Channel3="0.5"/>
+          <Colorant Name="Channel6" Channel1="0.6" Channel2="0.6" Channel3="0.6"/>
+        </ColorantTable>
+      </colorantTableType>
+    </colorantTableTag>
+    <multiProcessElementType>
+      <TagSignature>A2B0</TagSignature>
+      <MultiProcessElements InputChannels="6" OutputChannels="3">
+        <MatrixElement InputChannels="6" OutputChannels="3">
+          <MatrixData>
+            1 0 0 0 0 0
+            0 1 0 0 0 0
+            0 0 1 0 0 0
+          </MatrixData>
+        </MatrixElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+  </Tags>
+</IccProfile>
