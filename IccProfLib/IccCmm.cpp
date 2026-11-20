@@ -10683,6 +10683,18 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
         switch(nEncode) {
         case icEncodeValue:
           {
+            //Device XYZ and Lab are read back the way FromInternalEncoding()
+            //writes them: XYZ with icXyzToPcs and Lab with icLabToPcs. They
+            //are not CLR spaces, so the check below refused both, and a
+            //3-channel space always took the Lab conversion.
+            if (nSpace == icSigDevXYZData) {
+              icXyzToPcs(pInput);
+              break;
+            }
+            if (nSpace == icSigDevLabData) {
+              icLabToPcs(pInput);
+              break;
+            }
             if (!bCLRspace || nSamples<3) {
               return icCmmStatBadColorEncoding;
             }
