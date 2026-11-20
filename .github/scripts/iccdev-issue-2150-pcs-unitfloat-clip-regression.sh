@@ -150,6 +150,36 @@ converted_row() {
   echo "$row"
 }
 
+# The echoed source column of the same row: the numeric fields after its ';'.
+source_row() {
+  local logfile="$1"
+  local row
+
+  row="$(awk '
+    $0 ~ /;/ {
+      seen = 0; out = ""; n = 0
+      for (i = 1; i <= NF; i++) {
+        if ($i == ";") { seen = 1; continue }
+        if (seen && $i ~ /^[+-]?[0-9]+\.?[0-9]*$/) { out = out " " $i; n++ }
+      }
+      if (n > 0) { print out; exit }
+    }
+  ' "$logfile")"
+
+  [ -n "$row" ] || fail "no source column in $(basename "$logfile")"
+  echo "$row"
+}
+
+assert_row_is_source() {
+  local what="$1" a="$2"
+
+  if [ "$(converted_row "$OUTDIR/$a.log")" != "$(source_row "$OUTDIR/$a.log")" ]; then
+    echo "    $a converted: $(converted_row "$OUTDIR/$a.log")"
+    echo "    $a source:    $(source_row "$OUTDIR/$a.log")"
+    fail "$what"
+  fi
+}
+
 assert_same_row() {
   local what="$1" a="$2" b="$3"
 
@@ -273,6 +303,40 @@ if [ -n "$APPLY" ]; then
     lab-unit-over-namedcmm lab-unit-at-namedcmm
 
   ###########################################################################
+  # The destination mirror of the remap: device 'XYZ ' out of a B2A tag
+  #
+  # Applying the profile a second time runs its B2A3 and writes device XYZ.
+  # Only the source was remapped, so FromInternalEncoding() met the 'XYZ ' PCS
+  # arm and applied icXyzFromPcs to device data. Measured before the fix:
+  #
+  #   icEncodeFloat  0.9642 1.0 0.8249  ->  1.9284 2.0000 1.6498   (doubled)
+  #
+  # A2B3 and B2A3 are both identity, so the round trip must equal the single
+  # A2B3 run -- relative, like the pins above, rather than a literal. The
+  # unitFloat and percent rows keep values above 1.0 so that clipping by the
+  # device default: arm is caught as well as the doubling.
+  ###########################################################################
+
+  write_data "$OUTDIR/xyz-dev-float.txt" "'XYZ '" icEncodeFloat "0.9642 1.0 0.8249"
+  write_data "$OUTDIR/xyz-dev-over.txt"  "'XYZ '" icEncodeFloat "1.5 1.8 1.2"
+
+  run_expect_success xyz-dev-float-once-namedcmm "$APPLY" "$OUTDIR/xyz-dev-float.txt" 3 0 "$XYZP" 3
+  run_expect_success xyz-dev-float-rt-namedcmm   "$APPLY" "$OUTDIR/xyz-dev-float.txt" 3 0 "$XYZP" 3 "$XYZP" 3
+
+  assert_same_row \
+    "iccApplyNamedCmm: device 'XYZ ' written by B2A3 was decoded as PCS XYZ" \
+    xyz-dev-float-rt-namedcmm xyz-dev-float-once-namedcmm
+
+  for enc in 2 1; do
+    run_expect_success "xyz-dev-over-once-$enc-namedcmm" "$APPLY" "$OUTDIR/xyz-dev-over.txt" "$enc" 0 "$XYZP" 3
+    run_expect_success "xyz-dev-over-rt-$enc-namedcmm"   "$APPLY" "$OUTDIR/xyz-dev-over.txt" "$enc" 0 "$XYZP" 3 "$XYZP" 3
+
+    assert_same_row \
+      "iccApplyNamedCmm: device 'XYZ ' above 1.0 must leave B2A3 unclipped under destination encoding $enc" \
+      "xyz-dev-over-rt-$enc-namedcmm" "xyz-dev-over-once-$enc-namedcmm"
+  done
+
+  ###########################################################################
   # The device control: the carve-out must NOT have widened
   #
   # bClip is cleared only inside the PCS remap branch, so a device source never
@@ -325,6 +389,34 @@ if [ -n "$SEARCH" ]; then
   assert_same_row \
     "iccApplySearch: an 'XYZ ' PCS source must convert identically under icEncodeUnitFloat and icEncodeFloat" \
     xyz-unit-search xyz-float-search
+
+  # The destination mirror, as in the iccApplyNamedCmm section: the search
+  # writes the destination profile's device 'XYZ ', and FromInternalEncoding()
+  # met the 'XYZ ' PCS arm and applied icXyzFromPcs to it. Measured before the
+  # fix (the doubling is also what produced the 3.5166 figure noted above):
+  #
+  #   icEncodeFloat      0.9642 1.0 0.8249  ->  1.9284 2.0000 1.6498
+  #
+  # Both profiles are identity, so each row must equal its own echoed source
+  # column. The 1.5 1.8 1.2 rows sit above 1.0 so that a clip by the device
+  # default: arm is caught too; the search lands on them exactly from -INIT 1.
+
+  write_data "$OUTDIR/xyz-dev-float-search.txt" "'XYZ '" icEncodeFloat "0.9642 1.0 0.8249"
+  write_data "$OUTDIR/xyz-dev-over-search.txt"  "'XYZ '" icEncodeFloat "1.5 1.8 1.2"
+
+  run_expect_success xyz-dev-float-search \
+    "$SEARCH" "$OUTDIR/xyz-dev-float-search.txt" 3 0 "$XYZP" 1 "$XYZP" 1 -INIT 1
+  assert_row_is_source \
+    "iccApplySearch: device 'XYZ ' found through the destination profile was decoded as PCS XYZ" \
+    xyz-dev-float-search
+
+  for enc in 3 2; do
+    run_expect_success "xyz-dev-over-$enc-search" \
+      "$SEARCH" "$OUTDIR/xyz-dev-over-search.txt" "$enc" 0 "$XYZP" 1 "$XYZP" 1 -INIT 1
+    assert_row_is_source \
+      "iccApplySearch: device 'XYZ ' above 1.0 must leave the search unclipped under destination encoding $enc" \
+      "xyz-dev-over-$enc-search"
+  done
 else
   echo "  [SKIP] iccApplySearch not built"
 fi

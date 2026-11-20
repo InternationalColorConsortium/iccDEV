@@ -652,7 +652,20 @@ int main(int argc, const char* argv[])
   //Get and validate the destination color space from the CMM.
   icColorSpaceSignature DestspaceSig = pCmm->GetDestSpace();
   icUInt32Number nDestSamples = icGetSpaceSamples(DestspaceSig);
-  
+
+  //The destination mirror of the source remap above, as in iccApplyNamedCmm:
+  //the search writes the destination profile's 'XYZ '/'Lab ' device values,
+  //whose encoding the profile defines, not PCS-encoded data. GetDestSpace()
+  //reports the PCS signature; GetLastXformDest() names the device space.
+  //Without this FromInternalEncoding() applied icXyzFromPcs to device XYZ,
+  //doubling it (65535/32768). The data file still records 'XYZ '/'Lab '.
+  icColorSpaceSignature DestEncodeSig = DestspaceSig;
+  if (IsSpacePCS(DestspaceSig)) {
+    icColorSpaceSignature lastXformDest = pCmm->GetLastXformDest();
+    if (lastXformDest == icSigDevXYZData || lastXformDest == icSigDevLabData)
+      DestEncodeSig = lastXformDest;
+  }
+
   //Allocate pixel buffers for performing encoding transformations
   CIccPixelBuf SrcPixel(nSrcSamples+16), DestPixel(nDestSamples+16), Pixel(icIntMax(nSrcSamples, nDestSamples)+16);
 
@@ -662,6 +675,15 @@ int main(int argc, const char* argv[])
 
   destEncoding = cfgApply.m_dstEncoding;
   outData.m_encoding = destEncoding;
+
+  //The remapped signature meets FromInternalEncoding()'s device default: arm,
+  //which clips float and percent to 0.0-1.0 whenever bClip. Leave the three
+  //encodings the source remap leaves unclipped (#2150) unclipped here too.
+  bool bDestClip = true;
+  if (DestEncodeSig != DestspaceSig &&
+      (destEncoding == icEncodeFloat || destEncoding == icEncodeUnitFloat ||
+       destEncoding == icEncodePercent))
+    bDestClip = false;
 
   outData.m_srcSpace = SrcspaceSig;
 
@@ -723,7 +745,8 @@ int main(int argc, const char* argv[])
 
     for (size_t index = 0; index < outputs.size(); ++index) {
       icFloatNumber* dst = dstPixels.data() + index * nDestSamples;
-      if (CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, dst, dst)) {
+      if (CIccCmm::FromInternalEncoding(DestEncodeSig, destEncoding, dst, dst,
+                                        bDestClip)) {
         printf("Invalid final data encoding\n");
         return -1;
       }
@@ -772,7 +795,7 @@ int main(int argc, const char* argv[])
       printf("Profile application failed.\n");
       return -1;
     }
-    if(CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, DestPixel, DestPixel)) {
+    if(CIccCmm::FromInternalEncoding(DestEncodeSig, destEncoding, DestPixel, DestPixel, bDestClip)) {
       printf("Invalid final data encoding\n");
       return -1;
     }

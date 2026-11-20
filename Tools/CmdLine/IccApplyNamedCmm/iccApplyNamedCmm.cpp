@@ -746,7 +746,25 @@ int main(int argc, const char* argv[])
   //Get and validate the destination color space from the CMM.
   icColorSpaceSignature DestspaceSig = pNamedCmm->GetDestSpace();
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
-  
+
+  //The destination mirror of the source remap above: when the last profile is
+  //applied in the output direction its 'XYZ '/'Lab ' values are device data,
+  //whose encoding the profile defines, not PCS-encoded data. The CMM reports
+  //the PCS signature, but the last xform's GetDstSpace() already names it
+  //icSigDevXYZData/icSigDevLabData. Without this FromInternalEncoding()
+  //applied icXyzFromPcs to device XYZ, doubling it (65535/32768).
+  //
+  //A preview xform is also built with bInput false, so its GetDstSpace()
+  //names the device space although it writes the PCS; keep the PCS encoding
+  //there. The data file still records the 'XYZ '/'Lab ' signature.
+  icColorSpaceSignature DestEncodeSig = DestspaceSig;
+  if (IsSpacePCS(DestspaceSig) && !cfgProfiles.m_profiles.empty() &&
+      cfgProfiles.m_profiles.back()->m_transform != icXformLutPreview) {
+    icColorSpaceSignature lastXformDest = pNamedCmm->GetLastXformDest();
+    if (lastXformDest == icSigDevXYZData || lastXformDest == icSigDevLabData)
+      DestEncodeSig = lastXformDest;
+  }
+
   //Allocate pixel buffers for performing encoding transformations
   char DestNameBuf[256];
   CIccPixelBuf SrcPixel(nSrcSamples+16), DestPixel(nDestSamples+16), Pixel(icIntMax(nSrcSamples, nDestSamples)+16);
@@ -759,6 +777,16 @@ int main(int argc, const char* argv[])
   if(DestspaceSig==icSigNamedData)
     destEncoding = icEncodeValue;
   outData.m_encoding = destEncoding;
+
+  //The remapped signature meets FromInternalEncoding()'s device default: arm,
+  //which clips float and percent to 0.0-1.0 whenever bClip. These are the
+  //three encodings the source remap leaves unclipped (#2150), so the
+  //destination leaves them unclipped too and stays readable as a source.
+  bool bDestClip = true;
+  if (DestEncodeSig != DestspaceSig &&
+      (destEncoding == icEncodeFloat || destEncoding == icEncodeUnitFloat ||
+       destEncoding == icEncodePercent))
+    bDestClip = false;
 
   outData.m_srcSpace = SrcspaceSig;
 
@@ -811,7 +839,7 @@ int main(int argc, const char* argv[])
               return EXIT_FAILURE;
             }
 
-            if(CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, DestPixel, DestPixel, destEncoding!=icEncodeFloat)) {
+            if(CIccCmm::FromInternalEncoding(DestEncodeSig, destEncoding, DestPixel, DestPixel, bDestClip && destEncoding!=icEncodeFloat)) {
               printf("Invalid final data encoding\n");
               return EXIT_FAILURE;
             }
@@ -870,7 +898,7 @@ int main(int argc, const char* argv[])
               printf("Profile application failed.\n");
               return EXIT_FAILURE;
             }
-            if(CIccCmm::FromInternalEncoding(DestspaceSig, destEncoding, DestPixel, DestPixel)) {
+            if(CIccCmm::FromInternalEncoding(DestEncodeSig, destEncoding, DestPixel, DestPixel, bDestClip)) {
               printf("Invalid final data encoding\n");
               return EXIT_FAILURE;
             }
