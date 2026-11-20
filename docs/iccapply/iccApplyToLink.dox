@@ -21,7 +21,10 @@ The environment pair can repeat before each profile, and the whole stage can
 repeat. An environment signature has exactly four characters. A PCC applies to
 the immediately preceding profile. Leading or duplicate PCC controls, dangling
 environment controls, an odd remainder, and a sequence with no profile are
-rejected before a writer or CMM is created.
+rejected before a writer or CMM is created. Environment values are finite
+32-bit CMM values keyed by their four-character signatures and are visible to
+calculator elements in the following profile. Malformed argument diagnostics
+are written to standard error.
 
 \dotfile tolink-lane.dot "iccApplyToLink validation, CMM sampling, and writer lane"
 
@@ -59,6 +62,21 @@ specifications.
 For V4 output with an xCLR endpoint, the corresponding endpoint profile must
 provide the colorant table required by ICC.1:2022 clause 8.6. A missing table
 causes generation to fail, including when a V5 source has no legacy table.
+The V4 `profileSequenceDescTag` normalizes legacy text descriptions to aligned
+`multiLocalizedUnicodeType` values and writes an empty `mluc` placeholder when
+a component profile omits either description, following ICC.1:2022 clause
+10.19.
+
+The `+100` luminance and `+1000` V5-subprofile modifier columns are specific to
+the historical `iccApplyToLink` command interface. They are not numerically
+interchangeable with the wider intent-modifier columns used by config-driven
+Apply tools.
+
+DeviceLink stages must share one base rendering intent from 0 through 3. The
+selected intent is recorded in the generated profile header as required by
+ICC.1:2022 clauses 7.2.15 and 8.6 and ICC.2:2023 clauses 7.2.17 and 8.6. A
+mixed-intent DeviceLink is rejected because the one header field cannot
+describe it; Cube chains may use mixed intents because Cube has no ICC header.
 
 \section tolink_runtime Sampling and safety gates
 
@@ -77,6 +95,8 @@ red-fastest Cube table contract.
 
 \section tolink_qa QA example
 
-`iccApplyToLink-quick-check.sh` checks DeviceLink and Cube output plus type,
+`iccApplyToLink-quick-check.sh` checks all four V4/V5 DeviceLink header intents,
+profile validation, V4 sequence-description alignment, Cube output, effective
+CMM environment controls, stderr diagnostics, mixed-intent policy, and type,
 LUT-size, range, option, transform, and interpolation rejection boundaries.
 */

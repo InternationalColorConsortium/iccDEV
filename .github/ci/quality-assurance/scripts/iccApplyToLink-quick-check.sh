@@ -15,9 +15,11 @@ qa_init "iccApplyToLink-quick-check"
 
 BIN="$ICCDEV_TOOLS_DIR/IccApplyToLink/iccApplyToLink"
 FROM_CUBE="$ICCDEV_TOOLS_DIR/IccFromCube/iccFromCube"
+FROM_XML="$ICCDEV_TOOLS_DIR/IccFromXml/iccFromXml"
 DUMP_PROFILE="$ICCDEV_TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 PROFILE="$ICCDEV_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 PCC_PROFILE="$ICCDEV_ROOT/Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+ENV_PROFILE_XML="$ICCDEV_ROOT/Testing/Display/RgbGSDF.xml"
 IDENTITY_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-identity.cube"
 NEAR_DEFAULT_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-near-default-domain.cube"
 LEGACY_RANGE_CUBE="$ICCDEV_ROOT/.github/ci/test-data/test-legacy-input-range.cube"
@@ -28,9 +30,11 @@ EVIDENCE="$QA_OUTDIR/link-evidence.json"
 
 qa_require_tool "$BIN"
 qa_require_tool "$FROM_CUBE"
+qa_require_tool "$FROM_XML"
 qa_require_tool "$DUMP_PROFILE"
 qa_require_file "$PROFILE"
 qa_require_file "$PCC_PROFILE"
+qa_require_file "$ENV_PROFILE_XML"
 qa_require_file "$IDENTITY_CUBE"
 qa_require_file "$NEAR_DEFAULT_CUBE"
 qa_require_file "$LEGACY_RANGE_CUBE"
@@ -187,6 +191,79 @@ qa_assert_same_file() {
     fi
 }
 
+qa_assert_different_file() {
+    local first="$1"
+    local second="$2"
+    local label="$3"
+
+    if cmp -s "$first" "$second"; then
+        qa_fail "$label: files are identical: $first $second"
+    else
+        echo "[PASS] $label"
+    fi
+}
+
+qa_run_stderr_reject() {
+    local name="$1"
+    local message="$2"
+    local stdout_log="$QA_OUTDIR/$name.stdout"
+    local stderr_log="$QA_OUTDIR/$name.stderr"
+    local rc
+    shift 2
+
+    timeout "$QA_TIMEOUT_SECONDS" "$@" >"$stdout_log" 2>"$stderr_log"
+    rc=$?
+    qa_scan_sanitizers "$stdout_log" >/dev/null || true
+    qa_scan_sanitizers "$stderr_log" >/dev/null || true
+    if [ "$rc" -eq 0 ]; then
+        qa_fail "$name exited 0; expected rejection"
+    elif [ "$rc" -eq 124 ]; then
+        qa_fail "$name timed out"
+    elif [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; then
+        qa_fail "$name terminated by signal $((rc - 128))"
+    elif [ -s "$stdout_log" ]; then
+        qa_fail "$name wrote its argument diagnostic to stdout"
+    elif ! grep -qF "$message" "$stderr_log"; then
+        qa_fail "$name rejected without stderr diagnostic: $message"
+    else
+        echo "[PASS] $name rejected on stderr"
+    fi
+}
+
+qa_check_devicelink_intents() {
+    local option version intent intent_name output
+
+    for option in 0 1; do
+        if [ "$option" -eq 0 ]; then
+            version="v4"
+        else
+            version="v5"
+        fi
+        for intent in 0 1 2 3; do
+            case "$intent" in
+                0) intent_name="Perceptual" ;;
+                1) intent_name="Relative Colorimetric" ;;
+                2) intent_name="Saturation" ;;
+                3) intent_name="Absolute Colorimetric" ;;
+            esac
+            output="$QA_OUTDIR/header-$version-intent-$intent.icc"
+            qa_run "header-$version-intent-$intent" success "" \
+                "$BIN" "$output" 0 2 "$option" "QA $version intent" \
+                0 1 0 0 "$PROFILE" "$intent"
+            qa_run "header-$version-intent-$intent-dump" success "" \
+                "$DUMP_PROFILE" -v "$output"
+            qa_assert_contains "$QA_LAST_LOG" \
+                "Rendering Intent:   $intent_name" \
+                "$version header records intent $intent"
+            qa_assert_contains "$QA_LAST_LOG" "Profile is valid" \
+                "$version intent $intent output validates"
+            if grep -Eq 'NonCompliant!|Critical Error' "$QA_LAST_LOG"; then
+                qa_fail "$version intent $intent output has a validation error"
+            fi
+        done
+    done
+}
+
 qa_run help success "" "$BIN" --help
 qa_assert_contains "$QA_LAST_LOG" \
     "0 through 20 - digits after the decimal point for .cube LUT samples" \
@@ -197,6 +274,7 @@ qa_assert_contains "$QA_LAST_LOG" "90 + Intent - Colorimetric Only" \
 qa_run valid-v4 success "" "$BIN" "$QA_OUTDIR/valid-v4.icc" \
     0 2 0 "QA v4" 0 1 0 0 "$PROFILE" 1
 qa_require_file "$QA_OUTDIR/valid-v4.icc"
+qa_check_devicelink_intents
 qa_run valid-cube success "" "$BIN" "$QA_OUTDIR/valid.cube" \
     1 2 4 "QA cube" 0 1 0 0 "$PROFILE" 1
 qa_assert_contains "$QA_OUTDIR/valid.cube" "LUT_3D_SIZE 2" "Cube records grid size"
@@ -289,6 +367,12 @@ qa_run restricted-v5 success "" "$BIN" "$QA_OUTDIR/restricted-v5.icc" \
     0 2 1 "QA restricted v5" 0.1 0.9 0 0 "$PROFILE" 1
 qa_run v5-device-link success "" "$BIN" "$QA_OUTDIR/v5-device-link.icc" \
     0 9 1 "AFL v5 DeviceLink" -0.25 1.25 1 0 "$PROFILE" 1 "$PROFILE" 1
+qa_run mixed-device-intents reject "require one base rendering intent" \
+    "$BIN" "$QA_OUTDIR/mixed-device-intents.icc" \
+    0 2 1 "QA mixed DeviceLink" 0 1 1 0 "$PROFILE" 0 "$PROFILE" 1
+qa_run mixed-cube-intents success "" \
+    "$BIN" "$QA_OUTDIR/mixed-cube-intents.cube" \
+    1 2 6 "QA mixed Cube" 0 1 1 0 "$PROFILE" 0 "$PROFILE" 1
 qa_run cube-intent-13 success "" "$BIN" "$QA_OUTDIR/cube-intent-13.cube" \
     1 2 4 "AFL" 0 1 0 0 "$PROFILE" 13
 qa_run first-transform-high reject "Invalid first_transform" \
@@ -303,6 +387,15 @@ qa_run intent-overflow reject "expected an integer code" \
     "$BIN" "$QA_OUTDIR/intent-overflow.icc" 0 2 1 "QA intent" 0 1 0 0 "$PROFILE" 2147483648
 qa_run intent-negative reject "a negative intent code is not a valid form" \
     "$BIN" "$QA_OUTDIR/intent-negative.icc" 0 2 1 "QA intent" 0 1 0 0 "$PROFILE" -110
+qa_run_stderr_reject first-transform-stderr "Invalid first_transform" \
+    "$BIN" "$QA_OUTDIR/first-transform-stderr.icc" \
+    0 2 1 "QA first stderr" 0 1 2 0 "$PROFILE" 1
+qa_run_stderr_reject intent-stderr "Invalid rendering intent" \
+    "$BIN" "$QA_OUTDIR/intent-stderr.icc" \
+    0 2 1 "QA intent stderr" 0 1 0 0 "$PROFILE" 9
+qa_run_stderr_reject env-stderr "Invalid environment value" \
+    "$BIN" "$QA_OUTDIR/env-stderr.cube" \
+    1 2 6 "QA ENV stderr" 0 1 0 0 -ENV:bkgX nan "$PROFILE" 1
 qa_run intent-int-max-class success "" \
     "$BIN" "$QA_OUTDIR/intent-int-max-class.icc" 0 2 1 "QA intent max" \
     0 1 0 0 "$PROFILE" 2147483640
@@ -348,6 +441,18 @@ qa_assert_same_file "$QA_OUTDIR/intent-alias-combined-1101.cube" \
     "Combined rendering-intent aliases retain identical flag semantics"
 qa_run valid-env success "" "$BIN" "$QA_OUTDIR/valid-env.cube" \
     1 2 4 "QA ENV" 0 1 0 0 -ENV:bkgX 0.0985 "$PROFILE" 1
+qa_run env-profile-from-xml success "" "$FROM_XML" \
+    "$ENV_PROFILE_XML" "$QA_OUTDIR/env-profile.icc"
+qa_run env-runtime-zero success "" "$BIN" "$QA_OUTDIR/env-runtime-zero.cube" \
+    1 3 9 "QA ENV runtime" 0 1 1 0 \
+    -ENV:ambL 0 "$QA_OUTDIR/env-profile.icc" 0
+qa_run env-runtime-hundred success "" "$BIN" \
+    "$QA_OUTDIR/env-runtime-hundred.cube" \
+    1 3 9 "QA ENV runtime" 0 1 1 0 \
+    -ENV:ambL 100 "$QA_OUTDIR/env-profile.icc" 0
+qa_assert_different_file "$QA_OUTDIR/env-runtime-zero.cube" \
+    "$QA_OUTDIR/env-runtime-hundred.cube" \
+    "CMM environment values affect calculator output"
 qa_run valid-pcc success "" "$BIN" "$QA_OUTDIR/valid-pcc.cube" \
     1 2 4 "QA PCC" 0 1 0 0 "$PROFILE" 1 -PCC "$PCC_PROFILE"
 qa_run no-profile-stage reject "expected at least one profile" \

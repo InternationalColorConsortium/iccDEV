@@ -10919,21 +10919,22 @@ bool CIccTagProfileSeqDesc::Read(icUInt32Number size, CIccIO *pIO)
   if (!nCount)
     return true;
 
-  if (sizeof(icTagTypeSignature) + 
-    sizeof(icUInt32Number)*2 +
-    sizeof(CIccProfileDescStruct) > size)
-    return false;
-
   icUInt32Number i;
   size_t nPos;
   CIccProfileDescStruct ProfileDescStruct;
 
-  // Reject counts that can't possibly fit even a bare-minimum record
-  // per entry (20 bytes: mfg + model + attrs + tech). Without this,
-  // a crafted nCount of ~40,000 drives ~1M nested MLU allocations
-  // before per-iteration Read*() finally fails on EOF.
-  static const icUInt32Number kProfSeqDescMinBytesPerEntry = 20;
-  if (nCount > size / kProfSeqDescMinBytesPerEntry)
+  // ICC.1:2022 10.19 serializes each entry as 20 fixed bytes followed by
+  // two complete description tags. The smallest permitted description is a
+  // 16-byte mluc with zero name records, so a serialized entry needs at least
+  // 52 bytes. Do not use sizeof(CIccProfileDescStruct) here: that in-memory
+  // C++ type contains pointer-owning wrapper objects and its ABI size has no
+  // relationship to the profile byte layout. The sizeof check rejected the
+  // specification's exact empty-placeholder form written by iccApplyToLink.
+  static const icUInt32Number kProfSeqDescHeaderBytes = 12;
+  static const icUInt32Number kProfSeqDescMinBytesPerEntry = 52;
+  if (size < kProfSeqDescHeaderBytes ||
+      nCount > (size - kProfSeqDescHeaderBytes) /
+                 kProfSeqDescMinBytesPerEntry)
     return false;
 
   for (i=0; i<nCount; i++) {
@@ -11157,8 +11158,29 @@ icValidateStatus CIccTagProfileSeqDesc::Validate(std::string sigPath, std::strin
       rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
-    rv = icMaxStatus(rv, i->m_deviceMfgDesc.GetTag()->Validate(sigPath+icGetSigPath(GetType()), sReport, pProfile));
-    rv = icMaxStatus(rv, i->m_deviceModelDesc.GetTag()->Validate(sigPath+icGetSigPath(GetType()), sReport, pProfile));
+    const std::string descPath = sigPath + icGetSigPath(GetType());
+    const CIccTag* pMfgDesc = i->m_deviceMfgDesc.GetTag();
+    const CIccTag* pModelDesc = i->m_deviceModelDesc.GetTag();
+
+    // ICC.1:2022 10.19 explicitly defines a zero-name mluc as the placeholder
+    // for an absent component-profile description. The general mluc validator
+    // warns for an empty standalone tag, but that warning is incorrect in this
+    // embedding context. Still run the base reserved-field validation.
+    if (pMfgDesc->GetType() == icSigMultiLocalizedUnicodeType &&
+        !static_cast<const CIccTagMultiLocalizedUnicode*>(pMfgDesc)->m_Strings->size()) {
+      rv = icMaxStatus(rv, pMfgDesc->CIccTag::Validate(descPath, sReport, pProfile));
+    }
+    else {
+      rv = icMaxStatus(rv, pMfgDesc->Validate(descPath, sReport, pProfile));
+    }
+
+    if (pModelDesc->GetType() == icSigMultiLocalizedUnicodeType &&
+        !static_cast<const CIccTagMultiLocalizedUnicode*>(pModelDesc)->m_Strings->size()) {
+      rv = icMaxStatus(rv, pModelDesc->CIccTag::Validate(descPath, sReport, pProfile));
+    }
+    else {
+      rv = icMaxStatus(rv, pModelDesc->Validate(descPath, sReport, pProfile));
+    }
   }  
 
   return rv;

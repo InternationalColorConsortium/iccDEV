@@ -206,6 +206,8 @@ public:
 
   virtual void setCmm(CIccCmm *pCmm) = 0;
 
+  virtual void setRenderingIntent(icRenderingIntent nIntent) = 0;
+
   virtual bool setLutSize(icUInt8Number nGridSize) = 0;
 
   virtual void setInputRange(icFloatNumber fMinInput, icFloatNumber fMaxInput) = 0;
@@ -259,6 +261,11 @@ public:
   virtual void setCmm(CIccCmm* pCmm)
   {
     m_pCmm = pCmm;
+  }
+
+  virtual void setRenderingIntent(icRenderingIntent /* nIntent */)
+  {
+    // Cube files do not have an ICC profile-header rendering-intent field.
   }
 
   virtual bool setLutSize(icUInt8Number nGridSize)
@@ -423,6 +430,11 @@ public:
     m_pCmm = pCmm;
   }
 
+  virtual void setRenderingIntent(icRenderingIntent nIntent)
+  {
+    m_nRenderingIntent = nIntent;
+  }
+
   virtual bool setLutSize(icUInt8Number nGridSize)
   {
     m_grid = nGridSize;
@@ -468,6 +480,11 @@ public:
     m_pProfile->m_Header.colorSpace = srcSpace;
     m_pProfile->m_Header.pcs = dstSpace;
     m_pProfile->m_Header.deviceClass = icSigLinkClass;
+    // ICC.1:2022 7.2.15/8.6 and ICC.2:2023 7.2.17/8.6 require a
+    // DeviceLink header to identify the rendering intent used to construct
+    // its single AToB0 transform. main() guarantees that every stage has the
+    // same base intent before passing it to the writer.
+    m_pProfile->m_Header.renderingIntent = m_nRenderingIntent;
 
     //Add description Tag
     CIccTagMultiLocalizedUnicode* pTextTag = new CIccTagMultiLocalizedUnicode();
@@ -658,30 +675,12 @@ public:
           psd.m_attributes = pProfile->m_Header.attributes;
           psd.m_technology = icSigUndefined;
 
-          // Populate the profileSequenceDesc device-description sub-tags with
-          // valid default mluc text up front. When a source profile carried no
-          // deviceMfgDesc/deviceModelDesc tag these were left unset, and writing
-          // a V4 device link then serialized empty descriptions -- the pseq
-          // write failed and iccApplyToLink exited 255 (#1730). The real dmnd/
-          // dmdd values below overwrite these defaults when present.
+          // ICC.1:2022 10.19 calls for an empty mluc placeholder when a source
+          // profile has no deviceMfgDesc/deviceModelDesc tag. Set the tag type
+          // up front so the pseq writer has a complete embedded tag (#1730),
+          // but leave its name count at zero unless source text exists.
           psd.m_deviceMfgDesc.SetType(icSigMultiLocalizedUnicodeType);
-          CIccTagMultiLocalizedUnicode* pMfgDesc =
-            (CIccTagMultiLocalizedUnicode*)psd.m_deviceMfgDesc.GetTag();
-          if (pMfgDesc)
-            pMfgDesc->SetText("Unknown device manufacturer");
-
           psd.m_deviceModelDesc.SetType(icSigMultiLocalizedUnicodeType);
-          CIccTagMultiLocalizedUnicode* pModelDesc =
-            (CIccTagMultiLocalizedUnicode*)psd.m_deviceModelDesc.GetTag();
-          if (pModelDesc) {
-            // The profile description is the best available model text when dmdd is absent.
-            std::string profileDesc;
-            const CIccTag* pDesc = pProfile->FindTagConst(icSigProfileDescriptionTag);
-            if (pDesc && icGetTagText(pDesc, profileDesc))
-              pModelDesc->SetText(profileDesc.c_str());
-            else
-              pModelDesc->SetText("Unknown device model");
-          }
 
           const CIccTag* pTag = pProfile->FindTagConst(icSigTechnologyTag);
           if (pTag && pTag->GetType() == icSigSignatureType) {
@@ -693,12 +692,16 @@ public:
           pTag = pProfile->FindTagConst(icSigDeviceMfgDescTag);
           if (pTag) {
             if (pTag->GetType() == icSigTextDescriptionType) {
-              const CIccTagTextDescription* pTextTag = (const CIccTagTextDescription*)pTag;
-
-              psd.m_deviceMfgDesc.SetType(icSigTextDescriptionType);
-              CIccTagTextDescription* pText = (CIccTagTextDescription*)psd.m_deviceMfgDesc.GetTag();
-              if (pText)
-                *pText = *pTextTag;
+              // Legacy textDescriptionType sizes are not necessarily a
+              // multiple of four. Copying one verbatim before an mluc model
+              // description placed that second embedded tag off a 4-byte
+              // boundary, and the generated profile failed its own pseq
+              // validation. Normalize legacy text into the V4 mluc form.
+              std::string text;
+              CIccTagMultiLocalizedUnicode* pText =
+                (CIccTagMultiLocalizedUnicode*)psd.m_deviceMfgDesc.GetTag();
+              if (pText && icGetTagText(pTag, text))
+                pText->SetText(text.c_str());
             }
             else if (pTag->GetType() == icSigMultiLocalizedUnicodeType) {
               const CIccTagMultiLocalizedUnicode* pTextTag = (const CIccTagMultiLocalizedUnicode*)pTag;
@@ -717,12 +720,11 @@ public:
           pTag = pProfile->FindTagConst(icSigDeviceModelDescTag);
           if (pTag) {
             if (pTag->GetType() == icSigTextDescriptionType) {
-              const CIccTagTextDescription* pTextTag = (const CIccTagTextDescription*)pTag;
-
-              psd.m_deviceModelDesc.SetType(icSigTextDescriptionType);
-              CIccTagTextDescription* pText = (CIccTagTextDescription*)psd.m_deviceModelDesc.GetTag();
-              if (pText)
-                *pText = *pTextTag;
+              std::string text;
+              CIccTagMultiLocalizedUnicode* pText =
+                (CIccTagMultiLocalizedUnicode*)psd.m_deviceModelDesc.GetTag();
+              if (pText && icGetTagText(pTag, text))
+                pText->SetText(text.c_str());
             }
             else if (pTag->GetType() == icSigMultiLocalizedUnicodeType) {
               const CIccTagMultiLocalizedUnicode* pTextTag = (const CIccTagMultiLocalizedUnicode*)pTag;
@@ -782,6 +784,7 @@ protected:
   icUInt16Number m_nOutSamples;
 
   CIccProfile* m_pProfile = nullptr;
+  icRenderingIntent m_nRenderingIntent = icPerceptual;
 
   //For establishing the profile sequence description and color order tags for v4
   const CIccProfile* m_pFirstProfile = nullptr;
@@ -878,6 +881,8 @@ void Usage(FILE* stream)
   fprintf(stream, "  +100 - Use Luminance based PCS adjustment\n");
   fprintf(stream, " +1000 - Use V5 sub-profile if present\n");
   fprintf(stream, "  These are canonical flag values; legacy non-zero flag magnitudes remain accepted.\n");
+  fprintf(stream, "  These modifier columns are specific to iccApplyToLink and are not interchangeable with config-driven Apply tool codes.\n");
+  fprintf(stream, "  DeviceLink stages must use one base intent (0 through 3); mixed base intents are available only for .cube output.\n");
 }
 
 //===================================================
@@ -1143,12 +1148,14 @@ int main(int argc, icChar* argv[])
 
   int nFirstTransform = 0;
   if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
-    printf("Invalid first_transform '%s': expected 0 or 1\n", icSanitizeConsoleText(argv[8]).c_str());
+    fprintf(stderr, "Invalid first_transform '%s': expected 0 or 1\n",
+            icSanitizeConsoleText(argv[8]).c_str());
     return EXIT_FAILURE;
   }
   int nInterpVal = 0;
   if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
-    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", icSanitizeConsoleText(argv[9]).c_str());
+    fprintf(stderr, "Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n",
+            icSanitizeConsoleText(argv[9]).c_str());
     return EXIT_FAILURE;
   }
 
@@ -1159,7 +1166,9 @@ int main(int argc, icChar* argv[])
 
   int nLinkType = 0;
   if (!ParseIntArg(argv[2], 0, 1, nLinkType)) {
-    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", icSanitizeConsoleText(argv[2]).c_str());
+    fprintf(stderr,
+            "Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n",
+            icSanitizeConsoleText(argv[2]).c_str());
     return 1;
   }
 
@@ -1182,7 +1191,8 @@ int main(int argc, icChar* argv[])
 
   int nLutSize = 0;
   if (!ParseIntArg(argv[3], 2, 255, nLutSize)) {
-    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", icSanitizeConsoleText(argv[3]).c_str());
+    fprintf(stderr, "Invalid LUT size '%s': expected an integer between 2 and 255\n",
+            icSanitizeConsoleText(argv[3]).c_str());
     return EXIT_FAILURE;
   }
   
@@ -1191,13 +1201,17 @@ int main(int argc, icChar* argv[])
   int nOption = 0;
   if (nLinkType == 0) {
     if (!ParseIntArg(argv[4], 0, 1, nOption)) {
-      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", icSanitizeConsoleText(argv[4]).c_str());
+      fprintf(stderr,
+              "Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n",
+              icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
   else {
     if (!ParseIntArg(argv[4], 0, 20, nOption)) {
-      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", icSanitizeConsoleText(argv[4]).c_str());
+      fprintf(stderr,
+              "Invalid option '%s': .cube precision must be between 0 and 20\n",
+              icSanitizeConsoleText(argv[4]).c_str());
       return 1;
     }
   }
@@ -1208,13 +1222,13 @@ int main(int argc, icChar* argv[])
   icFloatNumber loRange;
   icFloatNumber hiRange;
   if (!ParseFloatArg(argv[6], loRange) || !ParseFloatArg(argv[7], hiRange)) {
-    printf("Invalid input range: range_min and range_max must be finite numbers\n");
+    fprintf(stderr, "Invalid input range: range_min and range_max must be finite numbers\n");
     return 1;
   }
   icFloatNumber sizeRange = hiRange - loRange;
   PrintRangeDiagnostic(loRange, hiRange, sizeRange);
   if (!std::isfinite(loRange) || !std::isfinite(hiRange) || !std::isfinite(sizeRange)) {
-    printf("Invalid input range: range_min and range_max must be finite numbers\n");
+    fprintf(stderr, "Invalid input range: range_min and range_max must be finite numbers\n");
     return 1;
   }
 
@@ -1235,8 +1249,9 @@ int main(int argc, icChar* argv[])
   // grid generation to produce a link nobody asked for. Requiring strictly
   // increasing bounds satisfies both.
   if (!(loRange < hiRange)) {
-    printf("Invalid input range: range_max (%g) must be greater than range_min (%g)\n",
-           (double)hiRange, (double)loRange);
+    fprintf(stderr,
+            "Invalid input range: range_max (%g) must be greater than range_min (%g)\n",
+            (double)hiRange, (double)loRange);
     return 1;
   }
 
@@ -1252,8 +1267,9 @@ int main(int argc, icChar* argv[])
   // identical range on option 1 or link_type 1 is unaffected.
   if (nLinkType == 0 && nOption == 0 &&
       (loRange != 0.0f || hiRange != 1.0f)) {
-    printf("V4 device links cannot record a non-default input range; "
-           "use option 1 (V5) or link_type 1 (.cube), or use range 0 1\n");
+    fprintf(stderr,
+            "V4 device links cannot record a non-default input range; "
+            "use option 1 (V5) or link_type 1 (.cube), or use range 0 1\n");
     return 1;
   }
 
@@ -1279,6 +1295,7 @@ int main(int argc, icChar* argv[])
   icStatusCMM stat;       //status variable for CMM operations
   icCmmEnvSigMap sigMap;  //Keep track of CMM Environment for each profile
   bool bUseSubProfile;
+  int nDeviceLinkIntent = -1;
 
   //Remaining arguments define a sequence of profiles to be applied.  
   //Add them to theCmm one at a time providing CMM environment variables and PCC overrides as provided.
@@ -1287,7 +1304,10 @@ int main(int argc, icChar* argv[])
       icSignature sig = icGetSigVal(argv[nCount]+5);
       icFloatNumber val;
       if (!ParseFloatArg(argv[nCount+1], val)) {
-        printf("Invalid environment value '%s' for %s: expected a finite number\n", icSanitizeConsoleText(argv[nCount+1]).c_str(), icSanitizeConsoleText(argv[nCount]).c_str());
+        fprintf(stderr,
+                "Invalid environment value '%s' for %s: expected a finite number\n",
+                icSanitizeConsoleText(argv[nCount+1]).c_str(),
+                icSanitizeConsoleText(argv[nCount]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1297,7 +1317,8 @@ int main(int argc, icChar* argv[])
     else if (stricmp(argv[nCount], "-PCC")) { //Attach profile while ignoring -PCC (this are handled below as profiles are attached)
       bUseD2BxB2DxTags = true;
       if (!ParseIntArg(argv[nCount+1], INT_MIN, INT_MAX, nIntent)) {
-        printf("Invalid rendering intent '%s': expected an integer code\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
+        fprintf(stderr, "Invalid rendering intent '%s': expected an integer code\n",
+                icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1310,8 +1331,9 @@ int main(int argc, icChar* argv[])
       // Same gap and same remedy as CIccCfgProfileSequence::fromArgs()
       // (IccCmmConfig.cpp, #2190); refused here so the two tools agree (#2268).
       if (nIntent < 0) {
-        printf("Invalid rendering intent '%s': a negative intent code is not a"
-               " valid form\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
+        fprintf(stderr,
+                "Invalid rendering intent '%s': a negative intent code is not a valid form\n",
+                icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
       }
@@ -1346,9 +1368,30 @@ int main(int argc, icChar* argv[])
       // guard there, removed in #2267; adding the guard here without removing
       // this term would file the alert a second time (#2268).
       if (nIntent > (int)icAbsoluteColorimetric) {
-        printf("Invalid rendering intent '%s': decoded intent is out of range\n", icSanitizeConsoleText(argv[nCount+1]).c_str());
+        fprintf(stderr,
+                "Invalid rendering intent '%s': decoded intent is out of range\n",
+                icSanitizeConsoleText(argv[nCount+1]).c_str());
         releasePccList(pccList);
         return 1;
+      }
+
+      // A DeviceLink has one AToB0 transform and one header intent. Mixed base
+      // intents cannot be represented truthfully by that profile structure
+      // (ICC.1:2022 8.6; ICC.2:2023 8.6). Cube output has no such header and
+      // continues to support mixed-intent transform chains.
+      if (nLinkType == 0) {
+        if (nDeviceLinkIntent < 0) {
+          nDeviceLinkIntent = nIntent;
+        }
+        else if (nIntent != nDeviceLinkIntent) {
+          fprintf(stderr,
+                  "DeviceLink profiles require one base rendering intent for all stages; "
+                  "expected %d but '%s' selects %d (use link_type 1 for a mixed-intent Cube)\n",
+                  nDeviceLinkIntent,
+                  icSanitizeConsoleText(argv[nCount+1]).c_str(), nIntent);
+          releasePccList(pccList);
+          return 1;
+        }
       }
       
       // No transform-type range test here: neither bound can be crossed, and the
@@ -1424,6 +1467,10 @@ int main(int argc, icChar* argv[])
       sigMap.clear();
 
     }
+  }
+
+  if (nLinkType == 0) {
+    pWriter->setRenderingIntent((icRenderingIntent)nDeviceLinkIntent);
   }
 
   //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
