@@ -51,6 +51,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>  // strcmp, used by the -h/--help contract guard in main()
+#include <limits>
 #include <string>
 #include <vector>
 #include <list>
@@ -296,11 +297,15 @@ public:
 
     fprintf(m_f, "LUT_3D_SIZE %d\n", m_grid);
 
-    if (!icIsNear(m_fMinInput, 0.0f) || !icIsNear(m_fMaxInput, 1.0f)) {
-      const size_t fmtSize = 100;   // allow for twice precision
-      char fmt[fmtSize];
-      snprintf(fmt, fmtSize, "LUT_3D_INPUT_RANGE %%.%df %%.%df\n", m_precision, m_precision);
-      fprintf(m_f, fmt, m_fMinInput, m_fMaxInput);
+    if (m_fMinInput != 0.0f || m_fMaxInput != 1.0f) {
+      // The Cube precision option controls LUT sample rows, not the input-domain
+      // metadata. Reusing it here rounded distinct validated endpoints to the
+      // same text (for example 0.1 and 0.2 became "0 0" at precision zero).
+      // max_digits10 preserves every distinct binary icFloatNumber value on a
+      // text round trip, while %g retains very small values in exponent form.
+      constexpr int rangePrecision = std::numeric_limits<icFloatNumber>::max_digits10;
+      fprintf(m_f, "LUT_3D_INPUT_RANGE %.*g %.*g\n", rangePrecision,
+              (double)m_fMinInput, rangePrecision, (double)m_fMaxInput);
     }
 
     fprintf(m_f, "\n");
@@ -468,7 +473,7 @@ public:
       //Create A2B0 Tag with LUT
       CIccTagMultiProcessElement* pTag = new CIccTagMultiProcessElement(nSrcSamples, nDstSamples);
 
-      if (!icIsNear(m_fMinInput, 0.0) || !icIsNear(m_fMaxInput, 1.0)) {
+      if (m_fMinInput != 0.0f || m_fMaxInput != 1.0f) {
         CIccMpeCurveSet* pCurves = new CIccMpeCurveSet(nSrcSamples);
         CIccSingleSampledCurve* pCurve0 = new CIccSingleSampledCurve(m_fMinInput, m_fMaxInput);
 
@@ -547,43 +552,33 @@ public:
         m_pTagSeq = nullptr;
       }
 
-      if (icIsSpaceCLR(srcSpace) && m_pFirstProfile) {
-        if (m_pFirstProfile->m_Header.version < icVersionNumberV5) {
-          const CIccTag* pTagColor = m_pFirstProfile->FindTagConst(icSigColorantTableTag);
-          if (pTagColor) {
-            m_pProfile->AttachTag(icSigColorantTableTag, pTagColor->NewCopy());
-          }
+      // A V4 DeviceLink with an xCLR endpoint needs the matching colorant
+      // table even when the source profile is V5 and also carries V5 naming.
+      // Refuse the output if no V4 table can be copied rather than write a
+      // DeviceLink that validates as missing a required ICC.1 tag.
+      if (icIsSpaceCLR(srcSpace)) {
+        const CIccTag* pTagColor = m_pFirstProfile
+          ? m_pFirstProfile->FindTagConst(icSigColorantTableTag) : nullptr;
+        if (!pTagColor) {
+          printf("V4 DeviceLink with xCLR input requires a colorantTableTag in the first profile\n");
+          return false;
         }
-        else if (m_pFirstProfile->m_Header.version >= icVersionNumberV5) {
-          // V5+ source profiles carry colorant naming through the V5 machinery
-          // rather than the legacy colorantTable tag, so there is nothing to
-          // copy across for the CLR input space here.
-        }
+        m_pProfile->AttachTag(icSigColorantTableTag, pTagColor->NewCopy());
       }
 
-      if (icIsSpaceCLR(dstSpace) && m_pLastProfile) {
-        if (m_pLastProfile->m_Header.deviceClass == icSigLinkClass) {
-          if (m_pLastProfile->m_Header.version < icVersionNumberV5) {
-            const CIccTag* pTagColor = m_pLastProfile->FindTagConst(icSigColorantTableOutTag);
-            if (pTagColor) {
-              m_pProfile->AttachTag(icSigColorantTableTag, pTagColor->NewCopy());
-            }
-          }
-          else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-            // V5+ destination DeviceLink: no legacy colorantTableOut tag to copy;
-            // V5 colorant naming is handled through the V5 machinery elsewhere.
-          }
+      if (icIsSpaceCLR(dstSpace)) {
+        const CIccTag* pTagColor = nullptr;
+        if (m_pLastProfile) {
+          const icSignature sourceTag =
+            m_pLastProfile->m_Header.deviceClass == icSigLinkClass
+              ? icSigColorantTableOutTag : icSigColorantTableTag;
+          pTagColor = m_pLastProfile->FindTagConst(sourceTag);
         }
-        else if (m_pLastProfile->m_Header.version < icVersionNumberV5) {
-          const CIccTag* pTagColor = m_pLastProfile->FindTagConst(icSigColorantTableTag);
-          if (pTagColor) {
-            m_pProfile->AttachTag(icSigColorantTableOutTag, pTagColor->NewCopy());
-          }
+        if (!pTagColor) {
+          printf("V4 DeviceLink with xCLR output requires a colorant table in the last profile\n");
+          return false;
         }
-        else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-          // V5+ destination profile: no legacy colorantTable tag to copy; V5
-          // colorant naming is handled through the V5 machinery elsewhere.
-        }
+        m_pProfile->AttachTag(icSigColorantTableOutTag, pTagColor->NewCopy());
       }
 
       CIccTagLutAtoB* pTagLut = new CIccTagLutAtoB();
@@ -783,8 +778,8 @@ void Usage(FILE* stream)
 {
   fprintf(stream, "iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
   fprintf(stream, "Usage: iccApplyToLink dst_link_file link_type lut_size option title range_min range_max first_transform interp {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
-  fprintf(stream, "  Global options may appear in any order. Legacy single-dash forms remain accepted.\n");
 #ifdef ICCDEV_TELEMETRY
+  fprintf(stream, "  Global options may appear in any order. Legacy single-dash forms remain accepted.\n");
   fprintf(stream, "  Optional telemetry: --telemetry=off|human|jsonl --telemetry-file FILE --evidence-file FILE\n");
   fprintf(stream, "  --telemetry=jsonl requires --telemetry-file. --telemetry=human writes to stderr.\n\n");
 #endif
@@ -797,10 +792,10 @@ void Usage(FILE* stream)
   fprintf(stream, "  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
   
   fprintf(stream, "  For option when link_type is 0:\n");
-  fprintf(stream, "    0 - version 4 profile with 16-bit table\n");
+  fprintf(stream, "    0 - version 4.3 profile with a 2-byte mAB CLUT\n");
   fprintf(stream, "    1 - version 5 profile\n\n");
   fprintf(stream, "  For option when link_type is 1:\n");
-  fprintf(stream, "    option represents the digits of precision for lut for .cube files\n\n");
+  fprintf(stream, "    0 through 20 - digits after the decimal point for .cube LUT samples\n\n");
 
   fprintf(stream, "  title is the title/description for the dest_link_file\n\n");
 
@@ -815,8 +810,8 @@ void Usage(FILE* stream)
   fprintf(stream, "    1 - use source transform from first profile\n\n");
 
   fprintf(stream, "  For interp:\n");
-  fprintf(stream, "    0 - linear interpolation\n");
-  fprintf(stream, "    1 - tetrahedral interpolation\n\n");
+  fprintf(stream, "    0 - linear interpolation while sampling the input transforms\n");
+  fprintf(stream, "    1 - tetrahedral interpolation while sampling the input transforms\n\n");
 
   fprintf(stream, "  For rendering_intent:\n");
   fprintf(stream, "    0 - Perceptual\n");
@@ -863,8 +858,10 @@ void Usage(FILE* stream)
   fprintf(stream, "    60 + Intent - BRDF Direct\n");
   fprintf(stream, "    70 + Intent - BRDF MCS Parameters\n");
   fprintf(stream, "    80 + Intent - MCS connection (Intent applies to MToS/MToB only)\n");
+  fprintf(stream, "    90 + Intent - Colorimetric Only\n");
   fprintf(stream, "  +100 - Use Luminance based PCS adjustment\n");
   fprintf(stream, " +1000 - Use V5 sub-profile if present\n");
+  fprintf(stream, "  These are canonical flag values; legacy non-zero flag magnitudes remain accepted.\n");
 }
 
 //===================================================
@@ -906,6 +903,84 @@ static bool ParseFloatArg(const char *arg, icFloatNumber &value)
 
   value = (icFloatNumber)parsed;
   return std::isfinite(value);
+}
+
+static bool IsEnvArg(const char *arg)
+{
+  if (!arg)
+    return false;
+#if defined(_WIN32) || defined(_WIN64)
+  return !strnicmp(arg, "-ENV:", 5);
+#else
+  return !strncasecmp(arg, "-ENV:", 5);
+#endif
+}
+
+// Validate the control-token state before opening profiles or constructing a
+// CMM. The processing loop below advances in pairs, which by itself cannot
+// distinguish a valid stage from leading/duplicate -PCC pairs or a trailing
+// -ENV pair. Accept exactly the documented repeated stage form (#3096):
+//
+//   {-ENV:cccc value} profile intent {-PCC profile}
+//
+// Environment signatures are ICC signatures and therefore exactly four
+// characters. This also keeps icGetSigVal() from reading past a short argv
+// string or silently truncating a long one.
+static bool ValidateProfileSequenceArgs(int argc, icChar *argv[], int firstArg)
+{
+  int arg = firstArg;
+  int nProfiles = 0;
+
+  while (arg < argc) {
+    while (arg < argc && IsEnvArg(argv[arg])) {
+      if (strlen(argv[arg] + 5) != 4) {
+        fprintf(stderr,
+                "Invalid environment signature '%s': expected exactly four characters after -ENV:\n",
+                icSanitizeConsoleText(argv[arg]).c_str());
+        return false;
+      }
+      if (arg + 1 >= argc) {
+        fprintf(stderr, "Missing value for environment option '%s'\n",
+                icSanitizeConsoleText(argv[arg]).c_str());
+        return false;
+      }
+      arg += 2;
+    }
+
+    if (arg >= argc) {
+      fprintf(stderr,
+              "Environment options must be followed by a profile and rendering intent\n");
+      return false;
+    }
+
+    if (!stricmp(argv[arg], "-PCC")) {
+      fprintf(stderr, "-PCC must immediately follow a profile and rendering intent\n");
+      return false;
+    }
+    if (arg + 1 >= argc) {
+      fprintf(stderr, "Profile '%s' is missing its rendering intent\n",
+              icSanitizeConsoleText(argv[arg]).c_str());
+      return false;
+    }
+
+    nProfiles++;
+    arg += 2;
+
+    if (arg < argc && !stricmp(argv[arg], "-PCC")) {
+      if (arg + 1 >= argc) {
+        fprintf(stderr, "Missing connection-conditions path after -PCC\n");
+        return false;
+      }
+      arg += 2;
+    }
+  }
+
+  if (!nProfiles) {
+    fprintf(stderr, "Missing profile sequence: expected at least one profile and rendering intent\n");
+    return false;
+  }
+
+  return true;
 }
 
 //===================================================
@@ -1037,7 +1112,7 @@ int main(int argc, icChar* argv[])
     fprintf(stderr, "Missing arguments: expected at least %d, received %d.\n",
             minargs - 1, argc > 0 ? argc - 1 : 0);
     Usage(stderr);
-    return -1;
+    return EXIT_FAILURE;
   }
 
 #ifdef ICCDEV_TELEMETRY
@@ -1050,17 +1125,21 @@ int main(int argc, icChar* argv[])
   }
 #endif
 
-  int nNumProfiles, temp;
-  temp = argc - minargs;
-
-  //remaining arguments must be in pairs
-  if(temp%2 != 0) {
-    fprintf(stderr, "\nMissing arguments!\n");
-    Usage(stderr);
-    return -1;
+  int nFirstTransform = 0;
+  if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
+    printf("Invalid first_transform '%s': expected 0 or 1\n", icSanitizeConsoleText(argv[8]).c_str());
+    return EXIT_FAILURE;
+  }
+  int nInterpVal = 0;
+  if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
+    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", icSanitizeConsoleText(argv[9]).c_str());
+    return EXIT_FAILURE;
   }
 
-  nNumProfiles = temp/2;
+  if (!ValidateProfileSequenceArgs(argc, argv, minargs))
+    return EXIT_FAILURE;
+
+  int nNumProfiles = (argc - minargs) / 2;
 
   int nLinkType = 0;
   if (!ParseIntArg(argv[2], 0, 1, nLinkType)) {
@@ -1156,7 +1235,7 @@ int main(int argc, icChar* argv[])
   // combination rather than emit a link whose declared domain is wrong; the
   // identical range on option 1 or link_type 1 is unaffected.
   if (nLinkType == 0 && nOption == 0 &&
-      (!icIsNear(loRange, 0.0f) || !icIsNear(hiRange, 1.0f))) {
+      (loRange != 0.0f || hiRange != 1.0f)) {
     printf("V4 device links cannot record a non-default input range; "
            "use option 1 (V5) or link_type 1 (.cube), or use range 0 1\n");
     return 1;
@@ -1164,18 +1243,8 @@ int main(int argc, icChar* argv[])
 
   pWriter->setInputRange(loRange, hiRange);
 
-  //Retrieve command line arguments
-  int nFirstTransform = 0;
-  if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
-    printf("Invalid first_transform '%s': expected 0 or 1\n", icSanitizeConsoleText(argv[8]).c_str());
-    return 1;
-  }
+  //Use the validated transform controls to construct the CMM.
   bool bFirstTransform = nFirstTransform != 0;
-  int nInterpVal = 0;
-  if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
-    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", icSanitizeConsoleText(argv[9]).c_str());
-    return 1;
-  }
   icXformInterp nInterp = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
 
   int nIntent, nType, nLuminance;
@@ -1198,11 +1267,7 @@ int main(int argc, icChar* argv[])
   //Remaining arguments define a sequence of profiles to be applied.  
   //Add them to theCmm one at a time providing CMM environment variables and PCC overrides as provided.
   for(i = 0, nCount=minargs; i<nNumProfiles; i++, nCount+=2) {
-#if defined(_WIN32) || defined(_WIN64)
-    if (!strnicmp(argv[nCount], "-ENV:", 5)) {  //check for -ENV: to allow for CMM Environment variables to be defined for next transform
-#else
-    if (!strncasecmp(argv[nCount], "-ENV:", 5)) {
-#endif
+    if (IsEnvArg(argv[nCount])) {  //check for -ENV: to allow for CMM Environment variables to be defined for next transform
       icSignature sig = icGetSigVal(argv[nCount]+5);
       icFloatNumber val;
       if (!ParseFloatArg(argv[nCount+1], val)) {
@@ -1446,7 +1511,7 @@ int main(int argc, icChar* argv[])
     telemetry.Emit("run_failed",
                    "\"status\":\"tool_failure\",\"reason\":\"unable_to_begin_writing_lut\"");
 #endif
-    return -1;
+    return EXIT_FAILURE;
   }
 
   // Avoid vector(size, value) here: libstdc++ 15's fill_n countdown trips

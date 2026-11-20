@@ -87,6 +87,7 @@ if [ -z "$FROMXML" ] || [ ! -x "$FROMXML" ]; then
   echo "[SKIP] iccFromXml binary not found under $TOOLS_DIR (needed to build the CMYK source)"
   exit 0
 fi
+DUMP="$(find "$TOOLS_DIR" -maxdepth 2 -name iccDumpProfile -type f 2>/dev/null | head -1)"
 
 # All four inputs are tracked in git, unlike the Testing/*.icc profiles that
 # CreateAllProfiles.sh generates -- so this test needs no profile fixture.
@@ -178,6 +179,15 @@ expect_reject() {
   fi
 }
 
+# Malformed command lines must use an ordinary failure status, not the legacy
+# `return -1`/255 status or a signal status, and identify the missing operand.
+expect_arg_reject() {
+  expect_reject "$@"
+  if [ "$RC" -lt 1 ] || [ "$RC" -gt 127 ]; then
+    fail "$NAME: invalid argument exited $RC instead of a graceful 1..127"
+  fi
+}
+
 expect_ok() {
   local name="$1"
   shift
@@ -243,10 +253,9 @@ fi
 # 4. Argument rejections -- QA cases 13-18.  These already behaved correctly;
 #    they are pinned so the new range checks above cannot disturb them.
 ###############################################################################
-# Case 13 is an argv-parity rejection, not an interpolation check: dropping
-# interp leaves an odd number of trailing arguments, so the profile shifts into
-# the interp position and the pairing check fires first.
-expect_reject "case13-missing-interp" "Missing arguments!" \
+# Dropping interp shifts a profile path into that fixed field. The fixed-field
+# parser must name it instead of treating a later token as a malformed stage.
+expect_arg_reject "case13-missing-interp" "Invalid interp" \
   "$O" 0 5 0 "QA missing interp" 0 1 1 "$CMYK" 1 "$SRGB" 1
 expect_reject "case14-lut-below-min" "expected an integer between 2 and 255" \
   "$O" 0 1 0 "QA LUT too small" 0 1 1 0 "$CMYK" 1 "$SRGB" 1
@@ -258,6 +267,28 @@ expect_reject "case17-bad-first-transform" "expected 0 or 1" \
   "$O" 0 5 0 "QA invalid first transform" 0 1 2 0 "$CMYK" 1 "$SRGB" 1
 expect_reject "case18-bad-interp" "expected 0 (linear) or 1 (tetrahedral)" \
   "$O" 0 5 0 "QA invalid interpolation" 0 1 1 2 "$CMYK" 1 "$SRGB" 1
+
+# #3096: the old parity guard intercepted all three odd-tail cases before the
+# stage validator, leaving its missing-operand diagnostics unreachable.
+expect_arg_reject "no-profile-stage" "expected at least one profile" \
+  "$O" 0 2 1 "QA no profile" 0 1 1 0
+expect_arg_reject "missing-env-value" "Missing value for environment option" \
+  "$O" 0 2 1 "QA missing ENV" 0 1 1 0 "$SRGB" 1 -ENV:bkgX
+expect_arg_reject "missing-profile-intent" "missing its rendering intent" \
+  "$O" 0 2 1 "QA missing intent" 0 1 1 0 "$SRGB"
+expect_arg_reject "missing-pcc-path" "Missing connection-conditions path after -PCC" \
+  "$O" 0 2 1 "QA missing PCC" 0 1 1 0 "$SRGB" 1 -PCC
+expect_arg_reject "leading-pcc" "must immediately follow a profile" \
+  "$O" 0 2 1 "QA leading PCC" 0 1 1 0 -PCC "$PCC" "$SRGB" 1
+expect_arg_reject "duplicate-pcc" "must immediately follow a profile" \
+  "$O" 0 2 1 "QA duplicate PCC" 0 1 1 0 "$SRGB" 1 -PCC "$PCC" -PCC "$PCC"
+expect_arg_reject "short-env-signature" "expected exactly four characters" \
+  "$O" 0 2 1 "QA short ENV" 0 1 1 0 -ENV:abc 0.1 "$SRGB" 1
+expect_arg_reject "long-env-signature" "expected exactly four characters" \
+  "$O" 0 2 1 "QA long ENV" 0 1 1 0 -ENV:abcde 0.1 "$SRGB" 1
+expect_ok "valid-env-pcc-stage" \
+  "$O" 0 2 1 "QA ENV PCC" 0 1 1 0 -ENV:bkgX 0.0985 \
+  "$CMYK" 1 -PCC "$PCC" "$SRGB" 1
 
 ###############################################################################
 # 5. Feature cases 01-12, recalibrated to lut_size 5.
@@ -288,11 +319,90 @@ expect_ok "case12-pcc-after-first"     "$O" 0 5 1 "QA 12" 0 1 1 1 \
   "$CMYK" 1 -PCC "$PCC" "$SRGB" 1
 
 ###############################################################################
+# 6. ICC.1:2022 8.6 requires colorantTableOutTag for xCLR DeviceLink output.
+#    A V5 source may already carry this legacy tag; the V4 writer must copy it
+#    under 'clot', not 'clrt', and retain it through another V4 link generation.
+#    A fresh directory prevents outputs from a prior run masking a failed writer.
+###############################################################################
+CASE_DIR="$(mktemp -d "$OUTDIR/issue-3096-XXXXXXXX")" || {
+  fail "could not create a fresh #3096 case directory"
+  exit 1
+}
+XCLR_XML="$REPO_ROOT/Testing/CLUT/avx2-3d-8-output.xml"
+XCLR_SRC="$CASE_DIR/xclr-v5-source.icc"
+XCLR_V4="$CASE_DIR/xclr-v4-link.icc"
+XCLR_ROUNDTRIP="$CASE_DIR/xclr-v4-roundtrip.icc"
+assert_xclr_dump() {
+  local profile="$1" label="$2" dump="$3"
+  if ! "$DUMP" -v "$profile" > "$dump" 2>&1; then
+    fail "$label: unable to dump generated DeviceLink"
+  elif ! grep -qF "colorantTableOutTag" "$dump"; then
+    fail "$label: missing output colorant table"
+  elif grep -E "NonCompliant!|Critical Error" "$dump" |
+       grep -vF "profileSequenceDescTag: Contains non-aligned deviceModelDesc text tag information" >/dev/null; then
+    # The remaining pseq warning is a separate reader padding defect. It also
+    # appears for ordinary V4 RGB links, so it cannot gate this table fix.
+    fail "$label: unexpected profile validation error"
+  fi
+}
+if [ -z "$DUMP" ] || [ ! -x "$DUMP" ]; then
+  fail "iccDumpProfile binary missing (needed to verify xCLR output tags)"
+elif [ ! -f "$XCLR_XML" ]; then
+  fail "tracked xCLR profile fixture missing: $XCLR_XML"
+elif ! timeout 120s "$FROMXML" "$XCLR_XML" "$XCLR_SRC" \
+     > "$CASE_DIR/fromxml-xclr.log" 2>&1 || [ ! -f "$XCLR_SRC" ]; then
+  fail "could not build tracked xCLR source profile"
+else
+  expect_ok "xclr-v5-to-v4" "$XCLR_V4" 0 2 0 "QA xCLR" 0 1 1 0 "$XCLR_SRC" 0
+  if [ "$RC" -eq 0 ] && [ -f "$XCLR_V4" ]; then
+    assert_xclr_dump "$XCLR_V4" "xclr-v5-to-v4" "$CASE_DIR/xclr-v4.dump"
+
+    expect_ok "xclr-v4-to-v4" "$XCLR_ROUNDTRIP" 0 2 0 "QA xCLR roundtrip" 0 1 1 0 "$XCLR_V4" 0
+    if [ "$RC" -eq 0 ] && [ -f "$XCLR_ROUNDTRIP" ]; then
+      assert_xclr_dump "$XCLR_ROUNDTRIP" "xclr-v4-to-v4" "$CASE_DIR/xclr-v4-roundtrip.dump"
+    fi
+  fi
+
+  # Remove the required source tag to prove the writer refuses an output that
+  # cannot carry a compliant V4 colorantTableOutTag. iccFromXml saves the
+  # intentionally invalid input while reporting failure; file existence is the
+  # control here, not that conversion status.
+  sed '/<colorantTableOutTag>/,/<\/colorantTableOutTag>/d' "$XCLR_XML" \
+    > "$CASE_DIR/xclr-no-table.xml"
+  timeout 120s "$FROMXML" "$CASE_DIR/xclr-no-table.xml" \
+    "$CASE_DIR/xclr-no-table.icc" > "$CASE_DIR/fromxml-xclr-no-table.log" 2>&1 || true
+  if [ ! -f "$CASE_DIR/xclr-no-table.icc" ]; then
+    fail "could not build xCLR source without a colorant table"
+  else
+    expect_arg_reject "xclr-missing-table" "requires a colorant table in the last profile" \
+      "$CASE_DIR/xclr-missing-table.icc" 0 2 0 "QA xCLR missing" 0 1 1 0 \
+      "$CASE_DIR/xclr-no-table.icc" 0
+    if [ -e "$CASE_DIR/xclr-missing-table.icc" ]; then
+      fail "xclr-missing-table: invalid V4 DeviceLink was written"
+    fi
+  fi
+fi
+
+# #3096: a non-zero lower bound below icIsNear's old threshold still needs a
+# V5 curve set even though the human-readable dump rounds 5e-9 to zero.
+NEAR_V5="$CASE_DIR/near-default-v5.icc"
+if [ -n "$DUMP" ] && [ -x "$DUMP" ]; then
+  expect_ok "near-default-v5-curves" "$NEAR_V5" 0 3 1 "QA near default" 5e-9 1 1 0 "$SRGB" 0
+  if [ "$RC" -eq 0 ] && [ -f "$NEAR_V5" ]; then
+    if ! "$DUMP" -v "$NEAR_V5" ALL > "$CASE_DIR/near-default-v5.dump" 2>&1; then
+      fail "near-default-v5-curves: unable to dump generated DeviceLink"
+    elif [ "$(grep -cF 'Single Sampled Curve [0.00000000, 1.00000000]' "$CASE_DIR/near-default-v5.dump")" -ne 3 ]; then
+      fail "near-default-v5-curves: expected three input-domain curves"
+    fi
+  fi
+fi
+
+###############################################################################
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "  [FAIL] $TAG -- $FAILURES case(s) regressed"
   exit 1
 fi
 
-echo "  [PASS] $TAG -- capacity, range-ordering and v4-domain rejections hold; QA cases 01-18 behave as expected"
+echo "  [PASS] $TAG -- capacity, range, argument, and xCLR tag checks hold; QA cases 01-18 behave as expected"
 exit 0

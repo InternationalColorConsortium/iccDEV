@@ -6671,8 +6671,6 @@ function(iccdev_add_applytolink_curveset_channels_tests)
   )
   list(APPEND _applytolink_curveset_tests iccdev.applytolink-curveset-rgb-channels)
 
-
-
   # Control: the same RGB chain at the default range, which takes the branch that
   # attaches no curve set. This is the case that fixes the range condition in
   # place: REJECT_DUMP asserts the absence the other three assert the presence of,
@@ -16651,11 +16649,12 @@ endif()
 # something else (QA case 04). Argument rejections 13-18 are pinned so the new
 # range checks cannot disturb them. Builds its own CMYK source from the tracked
 # CMYK-3DLUTs.xml, so no Testing/ profile generation is required.
+# Also covers #3096 stage argument diagnostics and V4 xCLR output tables.
 # iccFromXml-gated.
 iccdev_add_script_test(
   iccdev.issue-1781-applytolink-qa-matrix
   60
-  "iccdev;tools;applytolink;security;issue-1781;regression"
+  "iccdev;tools;applytolink;security;issue-1781;issue-3096;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
 )
