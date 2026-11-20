@@ -199,10 +199,14 @@ public:
           return false;
         }
       }
-      else if (line.substr(0, 18) == "LUT_IN_VIDEO_RANGE")
-        m_bLutInVideoRange = true;
-      else if (line.substr(0, 19) == "LUT_OUT_VIDEO_RANGE")
-        m_bLutOutVideoRange = true;
+      else if (line.substr(0, 18) == "LUT_IN_VIDEO_RANGE") {
+        printf("Unsupported LUT_IN_VIDEO_RANGE: video-range scaling is not implemented\n");
+        return false;
+      }
+      else if (line.substr(0, 19) == "LUT_OUT_VIDEO_RANGE") {
+        printf("Unsupported LUT_OUT_VIDEO_RANGE: video-range scaling is not implemented\n");
+        return false;
+      }
       else {
         // A line of the .cube FILE, not an argv operand -- the stronger vector of
         // the two, because a downloaded LUT is not something the caller typed.
@@ -222,10 +226,12 @@ public:
 
   bool isCustomInputRange()
   {
-    if (!icIsNear(m_fMinInput[0], 0.0) || !icIsNear(m_fMinInput[1], 0.0) || !icIsNear(m_fMinInput[2], 0.0) ||
-        !icIsNear(m_fMaxInput[0], 1.0) || !icIsNear(m_fMaxInput[1], 1.0) || !icIsNear(m_fMaxInput[2], 1.0))
-      return true;
-    return false;
+    // DOMAIN_MIN/MAX are serialized metadata, not a fuzzy numerical result.
+    // Treat every representable non-default endpoint as custom so importing a
+    // Cube written by iccApplyToLink does not discard a small declared range.
+    return m_fMinInput[0] != 0.0f || m_fMinInput[1] != 0.0f ||
+           m_fMinInput[2] != 0.0f || m_fMaxInput[0] != 1.0f ||
+           m_fMaxInput[1] != 1.0f || m_fMaxInput[2] != 1.0f;
   }
 
   int sizeLut3D() { return m_sizeLut3D; }
@@ -544,8 +550,6 @@ protected:
   std::string m_title;
   std::string m_comments;
 
-  bool m_bLutInVideoRange = false;
-  bool m_bLutOutVideoRange = false;
 };
 
 int main(int argc, char* argv[])

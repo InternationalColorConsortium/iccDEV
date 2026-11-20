@@ -317,7 +317,7 @@ the [native tool guide](../Tools/CmdLine/IccHeifDump/Readme.md).
 | `iccdev.issue-1379-fromcube-conformance` | `.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh` |
 | `iccdev.issue-1729-spectral-data-info-sig` | `.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh` |
 | `iccdev.issue-1730-applytolink-pseq-desc` | `.github/scripts/iccdev-issue-1730-applytolink-pseq-desc.sh` |
-| `iccdev.issue-1781-applytolink-qa-matrix` | `.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh` |
+| `iccdev.issue-1781-applytolink-qa-matrix` | `.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh`; #1781 capacity/range checks plus #3096 stage-argument and V4 xCLR table checks |
 | `iccdev.ncl2-nonul-ascii-regression` | `.github/scripts/iccdev-ncl2-nonul-ascii-regression.sh` |
 | `iccdev.fromcube-cli-args` | `.github/scripts/iccdev-fromcube-cli-args-regression.sh` |
 | `iccdev.describe-sink-api` | `iccDescribeSinkTest` regression helper under the build tree `Testing/` directory; `.github/ci/regression/iccDescribeSinkTest.cpp` |
@@ -346,7 +346,10 @@ tracked by [issue #3093](https://github.com/InternationalColorConsortium/iccDEV/
 
 `iccdev.issue-1781-applytolink-qa-matrix` uses a one-channel grid-255 positive
 control. It still proves that the documented maximum was not reduced to 254,
-but creates 255 nodes instead of the former RGB control's 16,581,375 nodes.
+but creates 255 nodes instead of the former RGB control's 16,581,375 nodes. It
+also rejects malformed stage controls with ordinary failure statuses and checks
+that V4 xCLR output carries the ICC.1:2022-required endpoint colorant tables
+while xCLR input without its required table is refused.
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and

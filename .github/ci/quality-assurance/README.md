@@ -66,6 +66,17 @@ set. Every `qa_run` also writes a sibling `.cmd` file with the exact tool argc
 and shell-escaped argv. Set `QA_TIMEOUT_SECONDS` to override the 30-second
 per-command limit.
 
+The ApplyToLink check also round-trips its Cube output through `iccFromCube`.
+It verifies Adobe Cube 1.0 `DOMAIN_MIN`/`DOMAIN_MAX`, red-fastest table order,
+title delimiter handling, range precision independent of LUT sample precision,
+and preservation of non-default endpoints close to the default domain using
+the tracked `test-near-default-domain.cube` regression fixture. A separate
+fixture keeps the reader's legacy `LUT_3D_INPUT_RANGE` compatibility covered.
+Separate fixtures prove unsupported input/output video-range scaling fails
+closed instead of setting unread parser state.
+The issue matrix also derives positive and negative V4 xCLR input/output cases
+from tracked XML fixtures so both required colorant-table directions execute.
+
 The ApplyProfiles quick check also verifies the headless receipt contract. It
 requires JSONL telemetry with monotonic event sequence numbers, one terminal
 `run_completed` event, a final JSON evidence receipt with the output digest,

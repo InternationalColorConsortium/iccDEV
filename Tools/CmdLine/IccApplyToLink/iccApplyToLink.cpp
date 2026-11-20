@@ -244,6 +244,16 @@ public:
   virtual void setTitle(const char* szTitle)
   {
     m_title = icSanitizeTagText( szTitle );
+
+    // Adobe Cube 1.0 does not define an escape for the TITLE delimiter and
+    // excludes a double quote from title text. Preserve a visible, parseable
+    // representation instead of closing the title early and emitting invalid
+    // trailing text.
+    size_t pos = 0;
+    while ((pos = m_title.find('"', pos)) != std::string::npos) {
+      m_title.replace(pos, 1, "\\x22");
+      pos += 4;
+    }
   }
 
   virtual void setCmm(CIccCmm* pCmm)
@@ -303,9 +313,15 @@ public:
       // same text (for example 0.1 and 0.2 became "0 0" at precision zero).
       // max_digits10 preserves every distinct binary icFloatNumber value on a
       // text round trip, while %g retains very small values in exponent form.
+      // Adobe Cube 1.0 defines three-component DOMAIN_MIN and DOMAIN_MAX
+      // keywords; LUT_3D_INPUT_RANGE is a non-standard extension.
       constexpr int rangePrecision = std::numeric_limits<icFloatNumber>::max_digits10;
-      fprintf(m_f, "LUT_3D_INPUT_RANGE %.*g %.*g\n", rangePrecision,
-              (double)m_fMinInput, rangePrecision, (double)m_fMaxInput);
+      fprintf(m_f, "DOMAIN_MIN %.*g %.*g %.*g\n", rangePrecision,
+              (double)m_fMinInput, rangePrecision, (double)m_fMinInput,
+              rangePrecision, (double)m_fMinInput);
+      fprintf(m_f, "DOMAIN_MAX %.*g %.*g %.*g\n", rangePrecision,
+              (double)m_fMaxInput, rangePrecision, (double)m_fMaxInput,
+              rangePrecision, (double)m_fMaxInput);
     }
 
     fprintf(m_f, "\n");
@@ -1225,7 +1241,7 @@ int main(int argc, icChar* argv[])
   }
 
   // Recording the input domain in the output is something only two of the
-  // three writers can do: the .cube writer emits a LUT_3D_INPUT_RANGE line,
+  // three writers can do: the .cube writer emits DOMAIN_MIN/DOMAIN_MAX lines,
   // and the V5 device-link branch attaches a CIccSingleSampledCurve spanning
   // [range_min, range_max]. The V4 branch of CDevLinkWriter::begin() writes
   // identity A-curves and never reads m_fMinInput/m_fMaxInput at all, so a V4
@@ -1554,14 +1570,33 @@ int main(int argc, icChar* argv[])
 
     pWriter->setNextNode(&dstPixel[0]);
 
-    for (j = nSrcSamples - 1; j >= 0;) {
-      idx[j]++;
-      if (idx[j] >= nLutSize) {
-        idx[j] = 0;
-        j--;
+    if (nLinkType == 1) {
+      // Adobe Cube 1.0 orders 3D table rows with red (input channel 0)
+      // varying fastest, then green, then blue. ICC CLUT storage uses the
+      // opposite channel traversal, so the two writers cannot share the same
+      // index rollover order even though they share the sampling loop.
+      for (j = 0; j < nSrcSamples;) {
+        idx[j]++;
+        if (idx[j] >= nLutSize) {
+          idx[j] = 0;
+          j++;
+        }
+        else
+          break;
       }
-      else
-        break;
+      if (j >= nSrcSamples)
+        j = -1;
+    }
+    else {
+      for (j = nSrcSamples - 1; j >= 0;) {
+        idx[j]++;
+        if (idx[j] >= nLutSize) {
+          idx[j] = 0;
+          j--;
+        }
+        else
+          break;
+      }
     }
  
     // Display progress during long LUT generation runs.

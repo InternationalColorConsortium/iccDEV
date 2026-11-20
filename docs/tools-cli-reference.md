@@ -112,7 +112,9 @@ For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
 `.cube` text LUT and `option` is the number of digits after the decimal point
 for LUT samples (`0` through `20`). Cube range metadata uses independent,
-round-trip-safe significant digits. Other
+round-trip-safe significant digits in the standard three-component
+`DOMAIN_MIN`/`DOMAIN_MAX` keywords. Table rows use Adobe Cube 1.0 order: red
+varies fastest, then green, then blue. Other
 `link_type` values are rejected. `lut_size` must be `2` through `255`.
 `first_transform=1` uses the source transform from the first profile; `0` uses
 its destination transform. `interp` selects interpolation while sampling the
@@ -123,6 +125,12 @@ It accepts the same telemetry/evidence options in
 any order; human telemetry uses UTC timestamps and goes to stderr, while
 JSONL/evidence record the link output, grid size/node count, elapsed time, and
 node throughput.
+
+`iccFromCube` preserves exact non-default Cube domains and legacy
+`LUT_3D_INPUT_RANGE` input. It rejects `LUT_IN_VIDEO_RANGE` and
+`LUT_OUT_VIDEO_RANGE` because their required video-range scaling is not
+implemented; earlier versions accepted those directives but never read the
+state they set.
 
 ## Image and Specialty Tools
 
