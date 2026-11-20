@@ -354,10 +354,7 @@ assert_xclr_dump() {
     fail "$label: unable to dump generated DeviceLink"
   elif ! grep -qF "colorantTableOutTag" "$dump"; then
     fail "$label: missing output colorant table"
-  elif grep -E "NonCompliant!|Critical Error" "$dump" |
-       grep -vF "profileSequenceDescTag: Contains non-aligned deviceModelDesc text tag information" >/dev/null; then
-    # The remaining pseq warning is a separate reader padding defect. It also
-    # appears for ordinary V4 RGB links, so it cannot gate this table fix.
+  elif grep -E "NonCompliant!|Critical Error" "$dump" >/dev/null; then
     fail "$label: unexpected profile validation error"
   fi
 }
@@ -427,8 +424,7 @@ else
         fail "xclr-input-to-v4: unable to dump generated DeviceLink"
       elif ! grep -qF "colorantTableTag" "$CASE_DIR/xclr-input-v4.dump"; then
         fail "xclr-input-to-v4: missing input colorant table"
-      elif grep -E "NonCompliant!|Critical Error" "$CASE_DIR/xclr-input-v4.dump" |
-           grep -vF "profileSequenceDescTag: Contains non-aligned deviceModelDesc text tag information" >/dev/null; then
+      elif grep -E "NonCompliant!|Critical Error" "$CASE_DIR/xclr-input-v4.dump" >/dev/null; then
         fail "xclr-input-to-v4: unexpected profile validation error"
       fi
     fi
