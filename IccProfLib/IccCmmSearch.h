@@ -187,6 +187,18 @@ public:
 
   virtual void IterateXforms(IXformIterator* /*pIterater*/) const {}
 
+  //The search writes destination-profile device values, but its own m_Xforms
+  //stays empty, so the base version returns the header PCS signature. The
+  //first xform of m_dst_to_mid applies the destination profile in the input
+  //direction, so its source space names how those values are encoded
+  //(icSigDevXYZData/icSigDevLabData for a non-abstract XYZ/Lab profile).
+  virtual icColorSpaceSignature GetLastXformDest()
+  {
+    if (!m_dst_to_mid.empty() && m_dst_to_mid[0])
+      return m_dst_to_mid[0]->GetFirstXformSource();
+    return m_nDestSpace;
+  }
+
 
   // Compute the search cost for SrcPixel through this CMM.
   //

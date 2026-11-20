@@ -42,7 +42,6 @@
 	<!--MPE based transforms use floating point PCS so PCS encoding needs to be converted to integer device encoding!-->
     <multiProcessElementType>
       <TagSignature>B2A3</TagSignature>
-	    <MultiProcessElements InputChannels="3" OutputChannels="3"/>
 	  <MultiProcessElements InputChannels="3" OutputChannels="3">
 			<MatrixElement InputChannels="3" OutputChannels="3">
 				<MatrixData>

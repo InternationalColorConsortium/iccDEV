@@ -65,7 +65,8 @@
 // can clip because its external range genuinely is 0.0-1.0; the PCS branches
 // cannot.
 //
-// Scope note: this pins the two PCS spaces only. Source/destination acceptance
+// Scope note: this pins the two PCS spaces, plus their device counterparts
+// under icEncodeValue (testDeviceXyzLabValueRoundTrips()). Source/destination acceptance
 // is deliberately NOT asserted as a universal rule, because it is not one --
 // icSigRgbData reaches the shared default: arm, whose icEncodeValue case
 // rejects a source when the space is not CLR while the matching destination
@@ -326,6 +327,41 @@ void testDeviceValueAsymmetryIsUnchanged()
         "'RGB ' destination accepts icEncodeUnitFloat");
 }
 
+// Device XYZ and Lab under icEncodeValue: the destination side always wrote
+// them (icXyzFromPcs / icLabFromPcs in the device default: arm), but the
+// source side refused both, because neither is a CLR space, and would have
+// decoded device XYZ with icLabToPcs had it accepted it. iccApplyNamedCmm and
+// iccApplySearch remap a PCS-signature source to these spaces, so a 'value'
+// file the tools wrote for an XYZ_int or Lab_int profile could not be read
+// back ("Invalid source data encoding").
+void testDeviceXyzLabValueRoundTrips()
+{
+  const icFloatNumber lab[3] = {0.62f, 0.48f, 0.55f};
+  const icFloatNumber xyz[3] = {0.42f, 0.45f, 0.38f};
+
+  testPcsRoundTrip(icSigDevLabData, icEncodeValue, lab, "'dLab'");
+  testPcsRoundTrip(icSigDevXYZData, icEncodeValue, xyz, "'dXYZ'");
+
+  // Decoded with the conversion of the space itself, not the other one: the
+  // device result must equal the PCS arm's for the same external values.
+  const icFloatNumber externalXyz[3] = {0.9642f, 1.0f, 0.8249f};
+  const icFloatNumber externalLab[3] = {50.0f, 20.0f, -30.0f};
+  icFloatNumber dev[3] = {0.0f, 0.0f, 0.0f};
+  icFloatNumber pcs[3] = {0.0f, 0.0f, 0.0f};
+
+  CIccCmm::ToInternalEncoding(icSigDevXYZData, icEncodeValue, dev, externalXyz);
+  CIccCmm::ToInternalEncoding(icSigXYZData, icEncodeValue, pcs, externalXyz);
+  for (int i = 0; i < 3; ++i)
+    check(std::fabs(dev[i] - pcs[i]) < 1.0e-6f,
+          "'dXYZ' icEncodeValue source must decode as XYZ, not Lab");
+
+  CIccCmm::ToInternalEncoding(icSigDevLabData, icEncodeValue, dev, externalLab);
+  CIccCmm::ToInternalEncoding(icSigLabData, icEncodeValue, pcs, externalLab);
+  for (int i = 0; i < 3; ++i)
+    check(std::fabs(dev[i] - pcs[i]) < 1.0e-6f,
+          "'dLab' icEncodeValue source must decode as Lab");
+}
+
 }  // namespace
 
 int main()
@@ -336,6 +372,7 @@ int main()
   testXyzUnitFloatIsNotClipped();
   testUnitFloatAliasesFloat();
   testDeviceValueAsymmetryIsUnchanged();
+  testDeviceXyzLabValueRoundTrips();
 
   if (!g_fail)
     std::printf("[pcs-unitfloat] PASS\n");
