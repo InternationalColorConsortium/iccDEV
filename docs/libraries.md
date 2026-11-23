@@ -10,6 +10,7 @@
 - [C validation API](c-api-validation.md)
 - [CIccThreadedCmm](icc-cmm-threading.md)
 - [IccConnect library](icc-connect.md)
+- [IccXML library](iccxml.md)
 - [IccJSON guide](iccjson.md)
 - [ICC JSON tag reference](iccjson-tag-types.md)
 - [PCS adjustment placement](pcs-adjustment-placement.md)

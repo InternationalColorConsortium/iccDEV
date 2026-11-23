@@ -1,0 +1,214 @@
+{
+  "issues": [
+    {
+      "coverage_role": "exercised",
+      "defect_class": "allocation-failure heap overwrite",
+      "evidence_paths": [
+        ".github/ci/regression/sparse-row-count-xml.cpp",
+        "IccXML/IccLibXML/IccTagXml.cpp"
+      ],
+      "issue": 2990,
+      "primary_detector": "ASan regression",
+      "runtime_gate": "iccdev.sparse-row-count-xml",
+      "state": "closed",
+      "static_signal": "generic allocation queries do not model Reset()"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "sparse-row offset overread",
+      "evidence_paths": [
+        ".github/ci/regression/sparsematrix-union-validate.cpp",
+        "IccProfLib/IccSparseMatrix.cpp"
+      ],
+      "issue": 2991,
+      "primary_detector": "ASan regression",
+      "runtime_gate": "iccdev.sparsematrix-union-validate",
+      "state": "closed",
+      "static_signal": "no current high-precision query"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "non-finite float-to-index cast",
+      "evidence_paths": [
+        ".github/ci/regression/tag-interpolate-nonfinite.cpp",
+        "IccProfLib/IccTagBasic.cpp"
+      ],
+      "issue": 2992,
+      "primary_detector": "UBSan regression",
+      "runtime_gate": "iccdev.tag-interpolate-nonfinite",
+      "state": "closed",
+      "static_signal": "broad numeric queries are intentionally excluded"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "analyzer ArrayBound reports",
+      "evidence_paths": [
+        ".github/ci/lint-reviewed-findings.json",
+        ".github/workflows/ci-pr-lint.yml"
+      ],
+      "issue": 3010,
+      "primary_detector": "clang-tidy audit",
+      "runtime_gate": "reviewed fingerprint baseline",
+      "state": "closed",
+      "static_signal": "10 reviewed findings; new or changed identities fail"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "same-object LUT re-read overwrite",
+      "evidence_paths": [
+        ".github/ci/regression/lut-read-reuse.cpp",
+        "IccProfLib/IccTagLut.cpp"
+      ],
+      "issue": 3014,
+      "primary_detector": "ASan regression",
+      "runtime_gate": "iccdev.lut-read-reuse",
+      "state": "closed",
+      "static_signal": "requires object-state sequence modeling"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "signed declaration-range overflow",
+      "evidence_paths": [
+        ".github/ci/regression/calculator-position-boundary.xml",
+        ".github/scripts/iccdev-calculator-regression-tests.sh"
+      ],
+      "issue": 3019,
+      "primary_detector": "UBSan regression",
+      "runtime_gate": "iccdev.calculator-regressions",
+      "state": "closed",
+      "static_signal": "current offset query does not model this XML state"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "integer narrowing wrap",
+      "evidence_paths": [
+        ".github/scripts/iccdev-calculator-regression-tests.sh",
+        "IccXML/IccLibXML/IccMpeXml.cpp"
+      ],
+      "issue": 3020,
+      "primary_detector": "integer sanitizer regression",
+      "runtime_gate": "iccdev.calculator-regressions",
+      "state": "closed",
+      "static_signal": "generic narrowing reports are too broad"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "recursive XML imports",
+      "evidence_paths": [
+        ".github/codeql-queries/recursive-parse-no-depth-limit.ql",
+        ".github/scripts/iccdev-calculator-regression-tests.sh"
+      ],
+      "issue": 3021,
+      "primary_detector": "CodeQL plus ASan regression",
+      "runtime_gate": "iccdev.calculator-regressions",
+      "state": "closed",
+      "static_signal": "iccdev/recursive-parse-no-depth-limit"
+    },
+    {
+      "coverage_role": "exercised",
+      "defect_class": "IT8 sample-group overread",
+      "evidence_paths": [
+        ".github/ci/regression/iccconnect-config-parser.cpp",
+        "IccConnect/IccLibConnect/IccCmmConfig.cpp"
+      ],
+      "issue": 3024,
+      "primary_detector": "ASan regression",
+      "runtime_gate": "iccdev.iccconnect-config-parser",
+      "state": "closed",
+      "static_signal": "parser metadata alignment is semantic"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "uninitialized transform state",
+      "evidence_paths": [
+        "IccProfLib/IccCmm.cpp",
+        "IccConnect/IccLibConnect/IccCmmConfig.cpp"
+      ],
+      "issue": 3066,
+      "primary_detector": "MSan",
+      "runtime_gate": "gap: no dedicated master regression",
+      "state": "open",
+      "static_signal": "CodeQL and coverage do not detect initialization at runtime"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "calculator data race",
+      "evidence_paths": [
+        "IccProfLib/IccMpeCalc.cpp",
+        "Testing/hybrid/BuildAndTest.sh"
+      ],
+      "issue": 3069,
+      "primary_detector": "TSan",
+      "runtime_gate": "gap: no dedicated master regression",
+      "state": "open",
+      "static_signal": "CodeQL and line coverage do not prove synchronization"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "named-color interpolation overread",
+      "evidence_paths": [
+        "IccProfLib/IccStructBasic.cpp",
+        "IccProfLib/IccTagBasic.cpp"
+      ],
+      "issue": 3085,
+      "primary_detector": "ASan",
+      "runtime_gate": "gap: no dedicated master regression",
+      "state": "open",
+      "static_signal": "vector-count semantics are not modeled"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "recursive composite validation",
+      "evidence_paths": [
+        ".github/codeql-queries/recursive-parse-no-depth-limit.ql",
+        "IccProfLib/IccArrayBasic.cpp"
+      ],
+      "issue": 3086,
+      "primary_detector": "CodeQL plus ASan",
+      "runtime_gate": "gap: read-depth test does not cover Validate",
+      "state": "open",
+      "static_signal": "iccdev/recursive-parse-no-depth-limit"
+    },
+    {
+      "coverage_role": "semantic-gap",
+      "defect_class": "PDF UI redressing",
+      "evidence_paths": [
+        ".github/scripts/iccdev-profile-visualize-tests.sh",
+        "Tools/CmdLine/IccProfileVisualize"
+      ],
+      "issue": 3087,
+      "primary_detector": "semantic visual assertion",
+      "runtime_gate": "gap: current gate checks artifact existence only",
+      "state": "open",
+      "static_signal": "not a static-analysis property"
+    },
+    {
+      "coverage_role": "research",
+      "defect_class": "UI redressing research",
+      "evidence_paths": [
+        "Tools/CmdLine/IccProfileVisualize",
+        "docs/codeql.md"
+      ],
+      "issue": 3089,
+      "primary_detector": "maintainer research",
+      "runtime_gate": "none: research tracking issue",
+      "state": "research",
+      "static_signal": "not a defect report"
+    },
+    {
+      "coverage_role": "not-covered",
+      "defect_class": "XML fixed-number type spelling",
+      "evidence_paths": [
+        "IccXML/IccLibXML/IccTagXml.h",
+        "IccXML/IccLibXML/IccTagXml.cpp"
+      ],
+      "issue": 3092,
+      "primary_detector": "compile and round-trip contract",
+      "runtime_gate": "gap on master; issue branch carries follow-up work",
+      "state": "open",
+      "static_signal": "type aliases compile despite the wrong public spelling"
+    }
+  ],
+  "tracking_issue": 3094,
+  "version": 1
+}

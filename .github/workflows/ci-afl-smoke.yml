@@ -142,7 +142,7 @@ jobs:
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       AFLPLUSPLUS_REPO: https://github.com/AFLplusplus/AFLplusplus.git
-      AFLPLUSPLUS_REF: 2400206be6fe0d93681c8a5c1535209366602eb1
+      AFLPLUSPLUS_REF: 441e2cdbd690c00174b1fa54d0b144bbc24a736c
 
     steps:
       - name: Checkout trusted sanitizer helpers

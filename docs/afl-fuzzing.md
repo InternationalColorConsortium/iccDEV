@@ -33,7 +33,7 @@ gh workflow run ci-afl-smoke.yml \
 ```
 
 The workflow runs inside the trusted regression container, then builds AFL++
-commit `2400206be6fe0d93681c8a5c1535209366602eb1` against the container's
+commit `441e2cdbd690c00174b1fa54d0b144bbc24a736c` against the container's
 Clang/LLVM 22 toolchain. The job installs the matching LLVM
 development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
@@ -229,7 +229,7 @@ set -euo pipefail
 apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
 apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log
 afl_src=$(mktemp -d)
-afl_ref=2400206be6fe0d93681c8a5c1535209366602eb1
+afl_ref=441e2cdbd690c00174b1fa54d0b144bbc24a736c
 git clone --filter=blob:none --no-checkout https://github.com/AFLplusplus/AFLplusplus.git "$afl_src"
 git -C "$afl_src" fetch --depth=1 origin "$afl_ref"
 git -C "$afl_src" checkout --detach FETCH_HEAD

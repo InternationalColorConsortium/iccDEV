@@ -45,12 +45,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Checkout trusted sanitizer helpers"
+      - name: "Checkout trusted coverage helpers"
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
           path: trusted
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/ci/qa-detection-matrix.json
           fetch-depth: 1
           persist-credentials: false
 
@@ -186,6 +188,19 @@ jobs:
             printf 'code_stats_languages=%s\n' "$code_stats_languages"
             printf 'code_stats_total=%s\n' "$code_stats_total"
           } >> "$GITHUB_ENV"
+
+      - name: "Generate QA detector ownership report"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          python3 "${TRUSTED_SCRIPTS}/qa-detection-matrix.py" \
+            --input trusted/.github/ci/qa-detection-matrix.json \
+            --repo-root "$WORKSPACE_DIR" \
+            --markdown coverage-report/qa-detection-matrix.md \
+            --json coverage-report/qa-detection-matrix.json
 
       - name: "Build with coverage instrumentation"
         env:
@@ -770,6 +785,9 @@ jobs:
           while IFS='=' read -r key value; do
             case "$key" in
               mismatch_count|html_mismatch_count|matched_object_count|\
+              probe_candidate_count|probe_mismatch_count|\
+              probe_mismatched_function_count|probe_command_failure_count|\
+              probe_zero_coverage_count|probe_compatible_count|\
               profile_signature_count|html_count|lcov_records|profdata_kb|\
               region_pct|func_pct|line_pct|branch_pct)
                 printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
@@ -786,6 +804,9 @@ jobs:
 
           matched_notice="${matched_object_count} objects, ${mismatch_count} mismatches"
           echo "::notice title=Matched coverage::${matched_notice}, ${profdata_kb}KB profdata"
+          probe_notice="${probe_mismatch_count} rejected mismatch probes"
+          probe_notice+=", ${probe_mismatched_function_count} mismatched function records"
+          echo "::notice title=Candidate probe review::${probe_notice}"
           printf 'Coverage: regions=%s functions=%s lines=%s branches=%s\n' \
             "$region_pct" "$func_pct" "$line_pct" "$branch_pct"
 
@@ -948,6 +969,9 @@ jobs:
           while IFS='=' read -r key value; do
             case "$key" in
               mismatch_count|html_mismatch_count|matched_object_count|\
+              probe_candidate_count|probe_mismatch_count|\
+              probe_mismatched_function_count|probe_command_failure_count|\
+              probe_zero_coverage_count|probe_compatible_count|\
               profile_signature_count|html_count|lcov_records|profdata_kb|\
               region_pct|func_pct|line_pct|branch_pct)
                 printf 'full_ctest_core_%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
@@ -981,6 +1005,7 @@ jobs:
           full_core_notice="${full_ctest_test_count} tests"
           full_core_notice+=", ${full_ctest_core_profile_count} core profiles"
           full_core_notice+=", ${full_core_line_pct} lines"
+          full_core_notice+=", ${full_ctest_core_probe_mismatch_count} rejected mismatch probes"
           echo "::notice title=Full CTest core coverage::${full_core_notice}"
 
       - name: "Write workflow summary"
@@ -1012,7 +1037,12 @@ jobs:
           summary_line "| Branches | ${branch_pct:-n/a} |"
           summary_line ""
           summary_line "Module-matched aggregate from the focused hybrid CTest and broad tool/profile exercises."
-          summary_line "Mismatched function records: ${mismatch_count:-n/a}"
+          summary_line "Selected-report mismatched function records: ${mismatch_count:-n/a}"
+          broad_probe_line="Rejected cross-object probes with mismatch diagnostics:"
+          broad_probe_line+=" ${probe_mismatch_count:-n/a}"
+          broad_probe_line+=", ${probe_mismatched_function_count:-n/a} function records"
+          summary_line "$broad_probe_line"
+          summary_line "Candidate-probe command failures: ${probe_command_failure_count:-n/a}"
           summary_line ""
           summary_line "### Full CTest core-library coverage"
           summary_line "| Metric | Coverage |"
@@ -1025,6 +1055,11 @@ jobs:
           full_core_scope="Four build-tree core libraries only; excludes tool, helper-test,"
           full_core_scope+=" rebuilt-package, and platform-only objects."
           summary_line "$full_core_scope"
+          full_probe_line="Rejected cross-object probes with mismatch diagnostics:"
+          full_probe_line+=" ${full_ctest_core_probe_mismatch_count:-n/a}"
+          full_probe_line+=", ${full_ctest_core_probe_mismatched_function_count:-n/a} function records"
+          summary_line "$full_probe_line"
+          summary_line "Candidate-probe command failures: ${full_ctest_core_probe_command_failure_count:-n/a}"
           summary_line ""
           summary_line "### Test Execution"
           summary_line "| Step | Result | Details |"
@@ -1066,6 +1101,8 @@ jobs:
           summary_line "| Profraw files | ${profraw_count:-n/a} |"
           summary_line "| Profile signatures | ${profile_signature_count:-n/a} |"
           summary_line "| Matched objects | ${matched_object_count:-n/a} |"
+          summary_line "| Candidate object probes | ${probe_candidate_count:-n/a} |"
+          summary_line "| Compatible candidate probes | ${probe_compatible_count:-n/a} |"
           summary_line "| HTML pages | ${html_count:-n/a} |"
           summary_line "| LCOV source records | ${lcov_records:-n/a} |"
           summary_line ""
@@ -1089,6 +1126,12 @@ jobs:
           summary_line "Coverage HTML, lcov, CTest data, code stats, review data, and failure logs"
           summary_line "are packaged in the sanitized developer report artifact, including partial failure evidence."
           summary_line ""
+          if [ -f coverage-report/qa-detection-matrix.md ]; then
+            while IFS= read -r line; do
+              summary_line "$line"
+            done < coverage-report/qa-detection-matrix.md
+            summary_line ""
+          fi
           summary_line "### llvm-cov Text Report"
           printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           if [ -f coverage-report/coverage-summary.txt ]; then
@@ -1119,7 +1162,9 @@ jobs:
             printf 'Open developer-report/index.html for the presentation view.\n'
             printf 'Broad coverage HTML is under html/ and the full CTest core-library '
             printf 'report is under full-ctest-core/. Supporting data is in ctest/, '
-            printf 'ctest-full/, code-stats/, matched/, profdata/, and timing/.\n'
+            printf 'ctest-full/, code-stats/, matched/, profdata/, and timing/. '
+            printf 'Candidate matching is classified in probe-candidates.tsv; only '
+            printf 'candidate command failures are in probe-command-failures.txt.\n'
           } > "${report_dir}/README.txt"
 
           html="${report_dir}/index.html"
@@ -1143,8 +1188,14 @@ jobs:
             printf '<tr><td>Lines</td><td>%s</td></tr>\n' "$(escape_html "${line_pct:-n/a}")"
             printf '<tr><td>Branches</td><td>%s</td></tr>\n' "$(escape_html "${branch_pct:-n/a}")"
             mismatch_html="$(escape_html "${mismatch_count:-n/a}")"
-            printf '<tr><td>Mismatched function records</td><td>%s</td></tr>\n' \
+            printf '<tr><td>Selected-report mismatched function records</td><td>%s</td></tr>\n' \
               "$mismatch_html"
+            printf '<tr><td>Rejected mismatch probes</td><td>%s</td></tr>\n' \
+              "$(escape_html "${probe_mismatch_count:-n/a}")"
+            printf '<tr><td>Rejected-probe mismatched function records</td><td>%s</td></tr>\n' \
+              "$(escape_html "${probe_mismatched_function_count:-n/a}")"
+            printf '<tr><td>Candidate-probe command failures</td><td>%s</td></tr>\n' \
+              "$(escape_html "${probe_command_failure_count:-n/a}")"
             printf '</table>\n'
 
             printf '<h2>Full CTest core-library coverage</h2>\n'
@@ -1157,6 +1208,12 @@ jobs:
               "$(escape_html "${full_ctest_core_line_pct:-n/a}")"
             printf '<tr><td>Branches</td><td>%s</td></tr>\n' \
               "$(escape_html "${full_ctest_core_branch_pct:-n/a}")"
+            printf '<tr><td>Selected-report mismatched function records</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_mismatch_count:-n/a}")"
+            printf '<tr><td>Rejected mismatch probes</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_probe_mismatch_count:-n/a}")"
+            printf '<tr><td>Rejected-probe mismatched function records</td><td>%s</td></tr>\n' \
+              "$(escape_html "${full_ctest_core_probe_mismatched_function_count:-n/a}")"
             printf '</table>\n'
 
             if [ -f coverage-report/coverage-summary.txt ]; then

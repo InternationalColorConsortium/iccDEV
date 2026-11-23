@@ -99,7 +99,8 @@ for component in IccProfLib IccXML IccJSON IccConnect Tools; do
     --enable=warning,performance,portability,style \
     --suppress=missingIncludeSystem --suppress=unusedStructMember \
     --suppress=unknownMacro:Tools/wxWidget/wxProfileDump/wxProfileDump.cpp \
-    -DICCPROFLIBVER='"cppcheck"' -DICFLOATSFX='"f"' -j "$(nproc)" \
+    -DICCPROFLIBVER='"cppcheck"' -DICFLOATSFX='"f"' \
+    -DPNG_LIBPNG_VER_STRING='"cppcheck"' -j "$(nproc)" \
     --project="$LINT_BUILD/compile_commands.json" \
     --file-filter="*/${component}/*" \
     2> "$LINT_REPORTS/cppcheck_${component}.txt" || true
@@ -108,10 +109,28 @@ cat "$LINT_REPORTS"/clang_tidy_*.txt > "$LINT_REPORTS/clang_tidy.txt"
 cat "$LINT_REPORTS"/cppcheck_*.txt > "$LINT_REPORTS/cppcheck.txt"
 ```
 
-Each command emits reports rather than acting as a pass/fail quality gate.
-Review structured `file:line:column` diagnostics, prioritize memory safety,
-input handling, and type-punning defects, and do not treat source excerpts
-that merely contain the word `error:` as compiler errors.
+The full reports remain review artifacts. The workflow additionally fails on
+cppcheck `error` diagnostics and high-signal clang analyzer families unless an
+exact source-line fingerprint is documented in
+`.github/ci/lint-reviewed-findings.json`. Every reviewed entry must retain a
+rationale; a stale fingerprint also fails so the baseline cannot silently
+outlive its source. Render the recent-issue detector matrix and apply the audit
+locally with:
+
+```bash
+python3 .github/scripts/qa-detection-matrix.py \
+  --input .github/ci/qa-detection-matrix.json --repo-root . \
+  --markdown "$LINT_REPORTS/qa-detection-matrix.md"
+python3 .github/scripts/audit-lint-findings.py \
+  --cppcheck "$LINT_REPORTS/cppcheck.txt" \
+  --clang-tidy "$LINT_REPORTS/clang_tidy.txt" --repo-root . \
+  --baseline .github/ci/lint-reviewed-findings.json \
+  --output-dir "$LINT_REPORTS/high-signal"
+```
+
+Review all remaining structured `file:line:column` diagnostics, prioritize
+memory safety, input handling, and type-punning defects, and do not treat source
+excerpts that merely contain the word `error:` as compiler errors.
 
 ## macOS
 

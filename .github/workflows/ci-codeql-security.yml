@@ -40,7 +40,9 @@ permissions:
       - 'examples/**'
       - '.github/codeql-queries/**'
       - '.github/codeql-config.yml'
+      - '.github/ci/qa-detection-matrix.json'
       - '.github/scripts/codeql-report.sh'
+      - '.github/scripts/qa-detection-matrix.py'
       - '.github/scripts/run-codeql-local.sh'
       - '.github/workflows/ci-codeql-security.yml'
   schedule:
@@ -111,6 +113,7 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .github/codeql-queries
+            .github/ci/qa-detection-matrix.json
           fetch-depth: 1
           persist-credentials: false
 
@@ -135,7 +138,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
+          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
 
       - name: Install CodeQL CLI
         shell: bash --noprofile --norc {0}
@@ -151,9 +154,9 @@ jobs:
           # this pin synchronized with the other workflow pins and Dockerfile:
           #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
           #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-          CODEQL_VER="2.27.4"
+          CODEQL_VER="2.27.5"
           CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-          CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
+          CODEQL_SHA256="a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5"
           CODEQL_URL="https://github.com/github/codeql-action/releases/download"
           if [[ ! -f "${CODEQL_ARCHIVE}" ]]; then
             curl -fsSL --retry 3 \
@@ -173,7 +176,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
+          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
 
       - name: Install CodeQL pack dependencies
         shell: bash --noprofile --norc {0}
@@ -276,11 +279,76 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [ -f "$TRUSTED_SCRIPTS/qa-detection-matrix.py" ] &&
+             [ -f trusted/.github/ci/qa-detection-matrix.json ]; then
+            python3 "$TRUSTED_SCRIPTS/qa-detection-matrix.py" \
+              --input trusted/.github/ci/qa-detection-matrix.json \
+              --repo-root "$GITHUB_WORKSPACE" \
+              --markdown codeql-results/qa-detection-matrix.md \
+              --json codeql-results/qa-detection-matrix.json
+          else
+            echo "[SKIP] Trusted base does not yet provide the QA detection matrix."
+          fi
           "$TRUSTED_SCRIPTS/codeql-report.sh" \
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \
             codeql-results/iccdev-jsonlib-security.sarif \
             | tee codeql-results/report.txt
+
+      - name: Write CodeQL review summary
+        if: always()
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          mkdir -p codeql-results
+          if [ ! -f codeql-results/report.txt ]; then
+            printf 'CodeQL analysis did not reach report generation.\n' \
+              > codeql-results/analysis-incomplete.txt
+          fi
+
+          {
+            echo "## CodeQL review report"
+            echo ""
+            echo '```text'
+            if [ -f codeql-results/report.txt ]; then
+              shown=0
+              while IFS= read -r line; do
+                if [ "$shown" -ge 400 ]; then
+                  echo "... remaining details are in the CodeQL report artifact"
+                  break
+                fi
+                sanitize_code_line "$line"
+                echo ""
+                shown=$((shown + 1))
+              done < codeql-results/report.txt
+            else
+              echo "CodeQL report was not generated."
+            fi
+            echo '```'
+            echo ""
+            if [ -f codeql-results/qa-detection-matrix.md ]; then
+              while IFS= read -r line; do
+                sanitize_print "$line"
+                echo ""
+              done < codeql-results/qa-detection-matrix.md
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
+      - name: Upload CodeQL review artifact
+        if: always() && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: iccdev-codeql-review-report
+          path: codeql-results/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload standard CodeQL SARIF
         if: always()
