@@ -2430,6 +2430,60 @@ function(iccdev_add_calc_output_init_test)
   endif()
 endfunction()
 
+# #3069: CIccOpDefData::Exec() cached the length of a run of data operations in
+# the shared op array the first time it ran, so threads applying the same
+# calculator raced on the write (ThreadSanitizer).  Four threads apply programs
+# whose data runs sit at if/else block boundaries and check every result.
+function(iccdev_add_calc_data_op_threads_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCalcDataOpThreadsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/calc-data-op-threads.cpp"
+  )
+  target_compile_features(iccCalcDataOpThreadsTest PRIVATE cxx_std_17)
+  target_include_directories(iccCalcDataOpThreadsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  find_package(Threads REQUIRED)
+  target_link_libraries(iccCalcDataOpThreadsTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} Threads::Threads)
+  add_dependencies(check iccCalcDataOpThreadsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.calc-data-op-threads
+      COMMAND "$<TARGET_FILE:iccCalcDataOpThreadsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.calc-data-op-threads
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCalcDataOpThreadsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.calc-data-op-threads PROPERTIES
+    TIMEOUT 60
+    LABELS "iccdev;calculator;mpe;threads;tsan;issue-3069;regression"
+  )
+  if(WIN32)
+    set(_calc_data_op_threads_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCalcDataOpThreadsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _calc_data_op_threads_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.calc-data-op-threads PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_calc_data_op_threads_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2751: CIccMpeCalculator's copy constructor and operator= left the copied
 # function pointing at the SOURCE calculator, so its calc()/curv()/mtx()
 # operations read the source's sub-elements, freed once the source was deleted
@@ -13860,6 +13914,7 @@ if(WIN32)
   iccdev_add_valid_overlap_test()
   iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_calc_output_init_test()
+  iccdev_add_calc_data_op_threads_test()
   iccdev_add_calc_copy_owner_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
@@ -14567,6 +14622,7 @@ iccdev_add_named_device_coords_xml_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_calc_temp_reset_if_no_else_test()
 iccdev_add_calc_output_init_test()
+iccdev_add_calc_data_op_threads_test()
 iccdev_add_calc_copy_owner_test()
 iccdev_add_formula_segment_nonfinite_parameter_test()
 iccdev_add_getvalues_nstart_test()
