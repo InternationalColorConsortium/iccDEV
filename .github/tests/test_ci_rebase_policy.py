@@ -1290,7 +1290,7 @@ codeql() {
                 "import os, pathlib, sys\n"
                 "args = sys.argv[1:]\n"
                 "if args == ['version']:\n"
-                "    print('CodeQL 2.27.4')\n"
+                "    print('CodeQL 2.27.5')\n"
                 "elif args[:2] == ['pack', 'install']:\n"
                 "    pass\n"
                 "elif args[:2] == ['database', 'analyze']:\n"

@@ -135,7 +135,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
+          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
 
       - name: Install CodeQL CLI
         shell: bash --noprofile --norc {0}
@@ -151,9 +151,9 @@ jobs:
           # this pin synchronized with the other workflow pins and Dockerfile:
           #   gh api repos/github/codeql-action/releases/tags/codeql-bundle-v"$CODEQL_VER" \
           #     --jq '.assets[]|select(.name=="codeql-bundle-linux64.tar.gz").digest'
-          CODEQL_VER="2.27.4"
+          CODEQL_VER="2.27.5"
           CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
-          CODEQL_SHA256="89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4"
+          CODEQL_SHA256="a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5"
           CODEQL_URL="https://github.com/github/codeql-action/releases/download"
           if [[ ! -f "${CODEQL_ARCHIVE}" ]]; then
             curl -fsSL --retry 3 \
@@ -173,7 +173,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: /tmp/codeql-bundle-linux64.tar.gz
-          key: iccdev-codeql-linux64-89ed56c8ec6bfccef6a0d2e7fe86da0469ca24b4db08b88016ec134b942c17a4
+          key: iccdev-codeql-linux64-a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
 
       - name: Install CodeQL pack dependencies
         shell: bash --noprofile --norc {0}
