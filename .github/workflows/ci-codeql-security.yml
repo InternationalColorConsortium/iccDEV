@@ -279,11 +279,16 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
-          python3 "$TRUSTED_SCRIPTS/qa-detection-matrix.py" \
-            --input trusted/.github/ci/qa-detection-matrix.json \
-            --repo-root "$GITHUB_WORKSPACE" \
-            --markdown codeql-results/qa-detection-matrix.md \
-            --json codeql-results/qa-detection-matrix.json
+          if [ -f "$TRUSTED_SCRIPTS/qa-detection-matrix.py" ] &&
+             [ -f trusted/.github/ci/qa-detection-matrix.json ]; then
+            python3 "$TRUSTED_SCRIPTS/qa-detection-matrix.py" \
+              --input trusted/.github/ci/qa-detection-matrix.json \
+              --repo-root "$GITHUB_WORKSPACE" \
+              --markdown codeql-results/qa-detection-matrix.md \
+              --json codeql-results/qa-detection-matrix.json
+          else
+            echo "[SKIP] Trusted base does not yet provide the QA detection matrix."
+          fi
           "$TRUSTED_SCRIPTS/codeql-report.sh" \
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \

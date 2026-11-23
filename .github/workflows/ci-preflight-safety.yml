@@ -194,10 +194,14 @@ jobs:
             --rootdir . \
             --import-mode=importlib \
             .github/tests/test_apple_mobile_release_artifact.py \
+            .github/tests/test_audit_lint_findings.py \
+            .github/tests/test_codeql_report.py \
             .github/tests/test_downstream_oidc_gate.py \
             .github/tests/test_downstream_oidc_workflow.py \
+            .github/tests/test_matched_coverage_report.py \
             .github/tests/test_mcp_release_package.py \
             .github/tests/test_python_release_wheels.py \
+            .github/tests/test_qa_detection_matrix.py \
             .github/tests/test_ci_rebase_policy.py \
             .github/tests/test_tool_ctest_workflow.py \
             .github/tests/test_wasm_workflow.py \
@@ -434,7 +438,7 @@ jobs:
             exit 1
           fi
           if [ "$doxygen_status" -eq 0 ]; then
-            python3 .github/scripts/check-doxygen-html.py "$output_dir/html"
+            python3 ../trusted/.github/scripts/check-doxygen-html.py "$output_dir/html"
           fi
           exit "$doxygen_status"
 

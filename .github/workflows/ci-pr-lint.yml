@@ -370,8 +370,8 @@ jobs:
         if: >-
           always() &&
           steps.files.outputs.file_count != '0' &&
-          env.RUN_CPPCHECK_INPUT == 'true' &&
-          env.RUN_CLANG_TIDY_INPUT == 'true'
+          (env.RUN_CPPCHECK_INPUT == 'true' ||
+          env.RUN_CLANG_TIDY_INPUT == 'true')
         run: |
           set -euo pipefail
           git config --global credential.helper ""
