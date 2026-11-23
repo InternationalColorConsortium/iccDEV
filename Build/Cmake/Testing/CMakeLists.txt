@@ -11025,12 +11025,16 @@ function(iccdev_add_mcs_colorspace_name_test)
   endif()
 endfunction()
 
-# #2693: CIccTagEmbeddedProfile::Validate() checked the embedded ICC.2 profile's
-# channel count and device class against the host and nothing about its header
-# flags.  ICC Technical Note 04-2018 says bit 0 should mark it as embedded in
-# another file and only profiles with bit 1 clear should be embedded; both are
-# "should", so each now draws a warning.  Pins the four flag combinations on a
-# v4 display host holding a v5 display child.  IccProfLib only.
+# #2693: CIccTagEmbeddedProfile::Validate() checks an embedded ICC.2 profile
+# against its ICC.1 host as the proposed ICC.2 annex on embedding says: bit 0
+# shall mark it as embedded (non-compliance if clear), bit 1 should be clear
+# (a warning), its device space shall be the host's or a superset of it (with
+# its own colorant tags, starting with the host's colorants in order), and a
+# required tag the host holds need not be repeated in it unless the embedded
+# profile's own tags depend on it.  Pins the flag combinations, the
+# device-space, colorant and colorant-order cases, a spectral Output child
+# with only a DToB3Tag under a v4 CMYK Output host with and without BToAx
+# tags, and the white point a colorimetric transform needs.  IccProfLib only.
 function(iccdev_add_embedded_profile_flags_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()

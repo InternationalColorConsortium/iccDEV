@@ -3118,16 +3118,18 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  *
  * Purpose: Report whether the profile carries one or more of the device-to-PCS
  *  transform tags ICC.2-2023 8.3, 8.4, 8.5 and 8.8 offer: AToB0-3 and DToB0-3.
+ *  pParentProfile, if not NULL, is the encapsulating profile of an embedded
+ *  profile, whose tags also count.
  *
  * Return: true if at least one is present.
  *****************************************************************************
  */
-bool CIccProfile::HasDeviceToPcsTransform() const
+bool CIccProfile::HasDeviceToPcsTransform(const CIccProfile *pParentProfile) const
 {
-  return GetTag(icSigAToB0Tag) || GetTag(icSigAToB1Tag) ||
-         GetTag(icSigAToB2Tag) || GetTag(icSigAToB3Tag) ||
-         GetTag(icSigDToB0Tag) || GetTag(icSigDToB1Tag) ||
-         GetTag(icSigDToB2Tag) || GetTag(icSigDToB3Tag);
+  return GetTag(icSigAToB0Tag, pParentProfile) || GetTag(icSigAToB1Tag, pParentProfile) ||
+         GetTag(icSigAToB2Tag, pParentProfile) || GetTag(icSigAToB3Tag, pParentProfile) ||
+         GetTag(icSigDToB0Tag, pParentProfile) || GetTag(icSigDToB1Tag, pParentProfile) ||
+         GetTag(icSigDToB2Tag, pParentProfile) || GetTag(icSigDToB3Tag, pParentProfile);
 }
 
 
@@ -3137,16 +3139,18 @@ bool CIccProfile::HasDeviceToPcsTransform() const
  *
  * Purpose: Report whether the profile carries one or more of the PCS-to-device
  *  transform tags ICC.2-2023 8.4, 8.5 and 8.8 require: BToA0-3 and BToD0-3.
+ *  pParentProfile, if not NULL, is the encapsulating profile of an embedded
+ *  profile, whose tags also count.
  *
  * Return: true if at least one is present.
  *****************************************************************************
  */
-bool CIccProfile::HasPcsToDeviceTransform() const
+bool CIccProfile::HasPcsToDeviceTransform(const CIccProfile *pParentProfile) const
 {
-  return GetTag(icSigBToA0Tag) || GetTag(icSigBToA1Tag) ||
-         GetTag(icSigBToA2Tag) || GetTag(icSigBToA3Tag) ||
-         GetTag(icSigBToD0Tag) || GetTag(icSigBToD1Tag) ||
-         GetTag(icSigBToD2Tag) || GetTag(icSigBToD3Tag);
+  return GetTag(icSigBToA0Tag, pParentProfile) || GetTag(icSigBToA1Tag, pParentProfile) ||
+         GetTag(icSigBToA2Tag, pParentProfile) || GetTag(icSigBToA3Tag, pParentProfile) ||
+         GetTag(icSigBToD0Tag, pParentProfile) || GetTag(icSigBToD1Tag, pParentProfile) ||
+         GetTag(icSigBToD2Tag, pParentProfile) || GetTag(icSigBToD3Tag, pParentProfile);
 }
 
 
@@ -3156,6 +3160,22 @@ bool CIccProfile::HasPcsToDeviceTransform() const
  * 
  * Purpose: Check if the Profile has the required tags 
  *  for the specified Profile/Device class.
+ * 
+ *  pParentProfile is the encapsulating ICC.1 profile when this profile is
+ *  embedded in its embeddedV5ProfileTag, otherwise NULL.  The proposed ICC.2
+ *  annex on embedding says "Redundant tags are not required in the embedded
+ *  iccMAX profile as long as the redundant tags are not required for the
+ *  correct processing of other tags in the embedded iccMAX profile", so a
+ *  required tag the parent holds satisfies the requirement here; the
+ *  parent's own validation checks the tags it is required to have.  A tag
+ *  the embedded profile's own tags depend on must still be in it: the
+ *  mediaWhitePointTag when it has relative or absolute colorimetric
+ *  transforms that use a colorimetric PCS (the annex's example), and a
+ *  colorant tag for a device space that is a named color superset of the
+ *  parent's, which the parent's colorant tags do not fully define.  So must
+ *  a tag the parent cannot carry, such as a DToBx tag.  The
+ *  ColorEncodingSpace class has no ICC.1 counterpart to embed under, so its
+ *  checks look only at this profile.
  * 
  * Return: 
  *  icValidateOK if valid, or other error status.
@@ -3170,6 +3190,27 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
   }
 
   icValidateStatus rv = icValidateOK;
+
+  // Channel-definition tags describe the channels of one colour space.  An
+  // embedded profile whose device space is a superset of its parent's has
+  // channels the parent's tags do not define, so the parent's colorant tags
+  // stand in only for a space that is the same as the parent's.
+  const CIccProfile *pDeviceChannelParent =
+    (pParentProfile && pParentProfile->m_Header.colorSpace == m_Header.colorSpace) ? pParentProfile : NULL;
+  const CIccProfile *pPcsChannelParent =
+    (pParentProfile && pParentProfile->m_Header.pcs == m_Header.pcs) ? pParentProfile : NULL;
+
+  // Relative and absolute colorimetric transforms that use a colorimetric PCS
+  // are processed with the profile's own media white point, so an embedded
+  // profile that has one needs its own mediaWhitePointTag; the parent's
+  // stands in otherwise.  AToBx and BToAx tags always use the PCS field;
+  // DToBx and BToDx tags use the spectral PCS when there is one, and need no
+  // mediaWhitePointTag then.
+  bool bOwnColorimetricXform =
+    GetTag(icSigAToB1Tag) || GetTag(icSigBToA1Tag) || GetTag(icSigAToB3Tag) || GetTag(icSigBToA3Tag) ||
+    (!m_Header.spectralPCS &&
+     (GetTag(icSigDToB1Tag) || GetTag(icSigBToD1Tag) || GetTag(icSigDToB3Tag) || GetTag(icSigBToD3Tag)));
+  const CIccProfile *pWhitePointParent = bOwnColorimetricXform ? NULL : pParentProfile;
 
   icProfileClassSignature sig = m_Header.deviceClass;
 
@@ -3215,15 +3256,15 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
     return rv;
   }
   else {
-    if (!pParentProfile && (!GetTag(icSigProfileDescriptionTag, pParentProfile) ||
-        !GetTag(icSigCopyrightTag, pParentProfile))) {
+    if (!GetTag(icSigProfileDescriptionTag, pParentProfile) ||
+        !GetTag(icSigCopyrightTag, pParentProfile)) {
          sReport += icMsgValidateNonCompliant;
          sReport += "Required tags missing.\n";
          rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
     if (sig != icSigLinkClass && sig != icSigMultiplexIdentificationClass && sig != icSigMultiplexLinkClass) {
-      if ((m_Header.version<icVersionNumberV5 || m_Header.pcs != 0) && !GetTag(icSigMediaWhitePointTag, pParentProfile)) {
+      if ((m_Header.version<icVersionNumberV5 || m_Header.pcs != 0) && !GetTag(icSigMediaWhitePointTag, pWhitePointParent)) {
         sReport += icMsgValidateCriticalError;
         sReport += "Media white point tag missing.\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3235,17 +3276,17 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
     switch(sig) {
       case icSigInputClass:
         if (m_Header.colorSpace == icSigGrayData) {
-          if (!GetTag(icSigGrayTRCTag)) {
+          if (!GetTag(icSigGrayTRCTag, pParentProfile)) {
             sReport += icMsgValidateCriticalError;
             sReport += "Gray TRC tag missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
           }
         }
         else {
-          if (!GetTag(icSigAToB0Tag)) {
-            if (!GetTag(icSigRedMatrixColumnTag) || !GetTag(icSigGreenMatrixColumnTag) ||
-               !GetTag(icSigBlueMatrixColumnTag) || !GetTag(icSigRedTRCTag) ||
-               !GetTag(icSigGreenTRCTag) || !GetTag(icSigBlueTRCTag)) {
+          if (!GetTag(icSigAToB0Tag, pParentProfile)) {
+            if (!GetTag(icSigRedMatrixColumnTag, pParentProfile) || !GetTag(icSigGreenMatrixColumnTag, pParentProfile) ||
+               !GetTag(icSigBlueMatrixColumnTag, pParentProfile) || !GetTag(icSigRedTRCTag, pParentProfile) ||
+               !GetTag(icSigGreenTRCTag, pParentProfile) || !GetTag(icSigBlueTRCTag, pParentProfile)) {
                  sReport += icMsgValidateCriticalError;
                  sReport += "Critical tag(s) missing.\n";
                  rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3256,17 +3297,17 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
 
       case icSigDisplayClass:
         if (m_Header.colorSpace == icSigGrayData) {
-          if (!GetTag(icSigGrayTRCTag)) {
+          if (!GetTag(icSigGrayTRCTag, pParentProfile)) {
             sReport += icMsgValidateCriticalError;
             sReport += "Gray TRC tag missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
           }
         }
         else {
-          if (!GetTag(icSigAToB0Tag) || !GetTag(icSigBToA0Tag)) {
-            if (!GetTag(icSigRedMatrixColumnTag) || !GetTag(icSigGreenMatrixColumnTag) ||
-               !GetTag(icSigBlueMatrixColumnTag) || !GetTag(icSigRedTRCTag) ||
-               !GetTag(icSigGreenTRCTag) || !GetTag(icSigBlueTRCTag)) {
+          if (!GetTag(icSigAToB0Tag, pParentProfile) || !GetTag(icSigBToA0Tag, pParentProfile)) {
+            if (!GetTag(icSigRedMatrixColumnTag, pParentProfile) || !GetTag(icSigGreenMatrixColumnTag, pParentProfile) ||
+               !GetTag(icSigBlueMatrixColumnTag, pParentProfile) || !GetTag(icSigRedTRCTag, pParentProfile) ||
+               !GetTag(icSigGreenTRCTag, pParentProfile) || !GetTag(icSigBlueTRCTag, pParentProfile)) {
                  sReport += icMsgValidateCriticalError;
                  sReport += "Critical tag(s) missing.\n";
                  rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3277,22 +3318,22 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
 
       case icSigOutputClass:
         if (m_Header.colorSpace == icSigGrayData) {
-          if (!GetTag(icSigGrayTRCTag)) {
+          if (!GetTag(icSigGrayTRCTag, pParentProfile)) {
             sReport += icMsgValidateCriticalError;
             sReport += "Gray TRC tag missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
           }
         }
         else {
-          if (!GetTag(icSigAToB0Tag) || !GetTag(icSigBToA0Tag) ||
-             !GetTag(icSigAToB1Tag) || !GetTag(icSigBToA1Tag) ||
-             !GetTag(icSigAToB2Tag) || !GetTag(icSigBToA2Tag)) {
+          if (!GetTag(icSigAToB0Tag, pParentProfile) || !GetTag(icSigBToA0Tag, pParentProfile) ||
+             !GetTag(icSigAToB1Tag, pParentProfile) || !GetTag(icSigBToA1Tag, pParentProfile) ||
+             !GetTag(icSigAToB2Tag, pParentProfile) || !GetTag(icSigBToA2Tag, pParentProfile)) {
                sReport += icMsgValidateCriticalError;
                sReport += "Critical tag(s) missing.\n";
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
 
-          if (!GetTag(icSigGamutTag) && m_Header.version < icVersionNumberV5) {
+          if (!GetTag(icSigGamutTag, pParentProfile) && m_Header.version < icVersionNumberV5) {
             sReport += icMsgValidateNonCompliant;
             sReport += "Gamut tag missing.\n";
             rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3314,7 +3355,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
               case icSig13colorData:
               case icSig14colorData:
               case icSig15colorData:
-                if (!GetTag(icSigColorantTableTag)) {
+                if (!GetTag(icSigColorantTableTag, pDeviceChannelParent)) {
                   sReport += icMsgValidateNonCompliant;
                   sReport += "xCLR output profile is missing colorantTableTag\n";
                   rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3329,14 +3370,14 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigLinkClass:
-        if (!GetTag(icSigAToB0Tag) || !GetTag(icSigProfileSequenceDescTag)) {
+        if (!GetTag(icSigAToB0Tag, pParentProfile) || !GetTag(icSigProfileSequenceDescTag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
         }
 
         if (icIsSpaceCLR(m_Header.colorSpace)) {
-          if (!GetTag(icSigColorantTableTag)) {
+          if (!GetTag(icSigColorantTableTag, pDeviceChannelParent)) {
             sReport += icMsgValidateNonCompliant;
             sReport += "Required tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3344,7 +3385,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         }
 
         if (icIsSpaceCLR(m_Header.pcs)) {
-          if (!GetTag(icSigColorantTableOutTag)) {
+          if (!GetTag(icSigColorantTableOutTag, pPcsChannelParent)) {
             sReport += icMsgValidateNonCompliant;
             sReport += "Required tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3353,7 +3394,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigColorSpaceClass:
-        if (!GetTag(icSigAToB0Tag) || !GetTag(icSigBToA0Tag)) {
+        if (!GetTag(icSigAToB0Tag, pParentProfile) || !GetTag(icSigBToA0Tag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3361,7 +3402,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigAbstractClass:
-        if (!GetTag(icSigAToB0Tag)) {
+        if (!GetTag(icSigAToB0Tag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3369,7 +3410,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigNamedColorClass:
-        if (!GetTag(icSigNamedColor2Tag)) {
+        if (!GetTag(icSigNamedColor2Tag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3390,7 +3431,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // A profile whose only PCS is spectral has the same required tags.
         if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
-            if (!HasDeviceToPcsTransform() && !GetTag(icSigGrayTRCTag)) {
+            if (!HasDeviceToPcsTransform(pParentProfile) && !GetTag(icSigGrayTRCTag, pParentProfile)) {
               sReport += icMsgValidateCriticalError;
               sReport += "Critical tag(s) missing.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3399,10 +3440,10 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
           else {
             // ICC.2-2023 8.3: one or more of AToB0-3 or DToB0-3.  AToB2 and the
             // four DToB tags were absent from this test.
-            if (!HasDeviceToPcsTransform()) {
-              if (!GetTag(icSigRedMatrixColumnTag) || !GetTag(icSigGreenMatrixColumnTag) ||
-                !GetTag(icSigBlueMatrixColumnTag) || !GetTag(icSigRedTRCTag) ||
-                !GetTag(icSigGreenTRCTag) || !GetTag(icSigBlueTRCTag)) {
+            if (!HasDeviceToPcsTransform(pParentProfile)) {
+              if (!GetTag(icSigRedMatrixColumnTag, pParentProfile) || !GetTag(icSigGreenMatrixColumnTag, pParentProfile) ||
+                !GetTag(icSigBlueMatrixColumnTag, pParentProfile) || !GetTag(icSigRedTRCTag, pParentProfile) ||
+                !GetTag(icSigGreenTRCTag, pParentProfile) || !GetTag(icSigBlueTRCTag, pParentProfile)) {
                   sReport += icMsgValidateCriticalError;
                   sReport += "Critical tag(s) missing.\n";
                   rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3417,8 +3458,8 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
             // ICC.2-2023 8.4: one or more A-side tags and one or more B-side tags.
-            if ((!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) &&
-                !GetTag(icSigGrayTRCTag)) {
+            if ((!HasDeviceToPcsTransform(pParentProfile) || !HasPcsToDeviceTransform(pParentProfile)) &&
+                !GetTag(icSigGrayTRCTag, pParentProfile)) {
               sReport += icMsgValidateCriticalError;
               sReport += "Critical tag(s) missing.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3426,10 +3467,10 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
           }
           else {
             // ICC.2-2023 8.4: one or more A-side tags and one or more B-side tags.
-            if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
-              if (!GetTag(icSigRedMatrixColumnTag) || !GetTag(icSigGreenMatrixColumnTag) ||
-                !GetTag(icSigBlueMatrixColumnTag) || !GetTag(icSigRedTRCTag) ||
-                !GetTag(icSigGreenTRCTag) || !GetTag(icSigBlueTRCTag)) {
+            if (!HasDeviceToPcsTransform(pParentProfile) || !HasPcsToDeviceTransform(pParentProfile)) {
+              if (!GetTag(icSigRedMatrixColumnTag, pParentProfile) || !GetTag(icSigGreenMatrixColumnTag, pParentProfile) ||
+                !GetTag(icSigBlueMatrixColumnTag, pParentProfile) || !GetTag(icSigRedTRCTag, pParentProfile) ||
+                !GetTag(icSigGreenTRCTag, pParentProfile) || !GetTag(icSigBlueTRCTag, pParentProfile)) {
                   sReport += icMsgValidateCriticalError;
                   sReport += "Critical tag(s) missing.\n";
                   rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3444,8 +3485,8 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         if (m_Header.pcs || m_Header.spectralPCS) {
           if (m_Header.colorSpace == icSigGrayData) {
             // ICC.2-2023 8.5: one or more A-side tags and one or more B-side tags.
-            if ((!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) &&
-                !GetTag(icSigGrayTRCTag)) {
+            if ((!HasDeviceToPcsTransform(pParentProfile) || !HasPcsToDeviceTransform(pParentProfile)) &&
+                !GetTag(icSigGrayTRCTag, pParentProfile)) {
               sReport += icMsgValidateCriticalError;
               sReport += "Critical tag(s) missing.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3453,13 +3494,13 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
           }
           else {
             // ICC.2-2023 8.5: one or more A-side tags and one or more B-side tags.
-            if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
+            if (!HasDeviceToPcsTransform(pParentProfile) || !HasPcsToDeviceTransform(pParentProfile)) {
                 sReport += icMsgValidateCriticalError;
                 sReport += "Critical tag(s) missing.\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
             }
 
-            if (!GetTag(icSigGamutTag) && m_Header.version < icVersionNumberV5) {
+            if (!GetTag(icSigGamutTag, pParentProfile) && m_Header.version < icVersionNumberV5) {
               sReport += icMsgValidateNonCompliant;
               sReport += "Gamut tag missing.\n";
               rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3487,7 +3528,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
                 // recommendation is not a conformance requirement, so this warns
                 // rather than reporting non-compliance, and either tag satisfies
                 // it.
-                if (!GetTag(icSigColorantInfoTag) && !GetTag(icSigColorantTableTag)) {
+                if (!GetTag(icSigColorantInfoTag, pDeviceChannelParent) && !GetTag(icSigColorantTableTag, pDeviceChannelParent)) {
                   sReport += icMsgValidateWarning;
                   sReport += "xCLR output profile has neither the recommended colorantInfoTag nor a colorantTableTag\n";
                   rv = icMaxStatus(rv, icValidateWarning);
@@ -3504,14 +3545,14 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
 
       case icSigLinkClass:
         // ICC.2-2023 8.6: one or more of AToB0Tag, DToB0Tag.
-        if (!GetTag(icSigAToB0Tag) && !GetTag(icSigDToB0Tag)){
+        if (!GetTag(icSigAToB0Tag, pParentProfile) && !GetTag(icSigDToB0Tag, pParentProfile)){
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
         }
 
         if (icIsSpaceCLR(m_Header.colorSpace)) {
-          if (!GetTag(icSigColorantTableTag)) {
+          if (!GetTag(icSigColorantTableTag, pDeviceChannelParent)) {
             sReport += icMsgValidateNonCompliant;
             sReport += "Required tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3519,7 +3560,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         }
 
         if (icIsSpaceCLR(m_Header.pcs)) {
-          if (!GetTag(icSigColorantTableOutTag)) {
+          if (!GetTag(icSigColorantTableOutTag, pPcsChannelParent)) {
             sReport += icMsgValidateNonCompliant;
             sReport += "Required tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -3532,7 +3573,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // BToA0-3 or BToD0-3.  Only AToB0/1/3 and BToA0/1/3 were accepted, and
         // a profile whose only PCS is spectral was not checked.
         if (m_Header.pcs || m_Header.spectralPCS) {
-          if (!HasDeviceToPcsTransform() || !HasPcsToDeviceTransform()) {
+          if (!HasDeviceToPcsTransform(pParentProfile) || !HasPcsToDeviceTransform(pParentProfile)) {
             sReport += icMsgValidateCriticalError;
             sReport += "Critical tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3557,7 +3598,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // the PCS field is zero, so the third condition needs no test of its own.
         if (m_Header.pcs || m_Header.spectralPCS) {
           bool bNeedDToB0 = !m_Header.pcs && m_Header.colorSpace;
-          if (!GetTag(icSigDToB0Tag) && (bNeedDToB0 || !GetTag(icSigAToB0Tag))) {
+          if (!GetTag(icSigDToB0Tag, pParentProfile) && (bNeedDToB0 || !GetTag(icSigAToB0Tag, pParentProfile))) {
             sReport += icMsgValidateCriticalError;
             sReport += "Critical tag(s) missing.\n";
             rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3569,7 +3610,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         // ICC.2-2023 8.10 (#2562): a v5 NamedColor profile shall contain
         // namedColorTag.  namedColor2Tag is ICC.1's spelling and at v5 is
         // an unrecognized tag, not a substitute for it.
-        if (!GetTag(icSigNamedColorTag)) {
+        if (!GetTag(icSigNamedColorTag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3579,7 +3620,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
       case icSigMultiplexIdentificationClass:
         // ICC.2-2023 8.11 lists AToM0Tag and multiplexTypeArrayTag as two
         // separate "shall" bullets, so both are required, not either.
-        if (!GetTag(icSigAToM0Tag) || !GetTag(icSigMultiplexTypeArrayTag)) {
+        if (!GetTag(icSigAToM0Tag, pParentProfile) || !GetTag(icSigMultiplexTypeArrayTag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3589,11 +3630,11 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
       case icSigMultiplexVisualizationClass:
         // ICC.2-2023 8.13: one or more of MToB0-3 or MToS0-3, AND a
         // multiplexTypeArrayTag.  Only MToB0 and MToS0 were accepted here.
-        if ((!GetTag(icSigMToB0Tag) && !GetTag(icSigMToB1Tag) &&
-             !GetTag(icSigMToB2Tag) && !GetTag(icSigMToB3Tag) &&
-             !GetTag(icSigMToS0Tag) && !GetTag(icSigMToS1Tag) &&
-             !GetTag(icSigMToS2Tag) && !GetTag(icSigMToS3Tag)) ||
-            !GetTag(icSigMultiplexTypeArrayTag)) {
+        if ((!GetTag(icSigMToB0Tag, pParentProfile) && !GetTag(icSigMToB1Tag, pParentProfile) &&
+             !GetTag(icSigMToB2Tag, pParentProfile) && !GetTag(icSigMToB3Tag, pParentProfile) &&
+             !GetTag(icSigMToS0Tag, pParentProfile) && !GetTag(icSigMToS1Tag, pParentProfile) &&
+             !GetTag(icSigMToS2Tag, pParentProfile) && !GetTag(icSigMToS3Tag, pParentProfile)) ||
+            !GetTag(icSigMultiplexTypeArrayTag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -3603,7 +3644,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
       case icSigMultiplexLinkClass:
         // ICC.2-2023 8.12 lists MToA0Tag and multiplexTypeArrayTag as two
         // separate "shall" bullets, so both are required, not either.
-        if (!GetTag(icSigMToA0Tag) || !GetTag(icSigMultiplexTypeArrayTag)) {
+        if (!GetTag(icSigMToA0Tag, pParentProfile) || !GetTag(icSigMultiplexTypeArrayTag, pParentProfile)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);

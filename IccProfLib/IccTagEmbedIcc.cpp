@@ -564,6 +564,79 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
   }
 }
 
+/* A colorant table entry's name, which need not be NUL-terminated. */
+static std::string icColorantEntryName(const icColorantTableEntry *pEntry)
+{
+  size_t n = 0;
+  while (n < sizeof(pEntry->name) && pEntry->name[n])
+    n++;
+  return std::string((const char*)pEntry->name, n);
+}
+
+/**
+******************************************************************************
+* Name: icCheckSupersetColorantOrder
+*
+* Purpose: Check that an embedded profile whose device space is a superset of
+*  its parent's begins with the parent's channels in the same order (ICC.2
+*  annex on embedding).  Only colorant names can show this, so the check is
+*  made when both profiles have a loaded colorantTableTag, and is otherwise
+*  silent.  The first channel whose name differs is reported.
+*
+* Return:
+*  icValidateOK, or icValidateNonCompliant when the order differs.
+******************************************************************************
+*/
+static icValidateStatus icCheckSupersetColorantOrder(const CIccProfile *pChild, const CIccProfile *pParent,
+                                                     const std::string &sigPath, std::string &sReport)
+{
+  const CIccTag *pChildTag = pChild->FindTagConst(icSigColorantTableTag);
+  const CIccTag *pParentTag = pParent->FindTagConst(icSigColorantTableTag);
+
+  if (!pChildTag || !pParentTag ||
+      pChildTag->GetType() != icSigColorantTableType || pParentTag->GetType() != icSigColorantTableType)
+    return icValidateOK;
+
+  // GetEntry() has no const overload; the entries are only read here.
+  CIccTagColorantTable *pChildTable = const_cast<CIccTagColorantTable*>(static_cast<const CIccTagColorantTable*>(pChildTag));
+  CIccTagColorantTable *pParentTable = const_cast<CIccTagColorantTable*>(static_cast<const CIccTagColorantTable*>(pParentTag));
+  icUInt32Number nParent = pParentTable->GetSize();
+  icUInt32Number nChild = pChildTable->GetSize();
+
+  for (icUInt32Number i = 0; i < nParent; i++) {
+    std::string sParentName = icColorantEntryName(pParentTable->GetEntry(i));
+    std::string sChildName = i < nChild ? icColorantEntryName(pChildTable->GetEntry(i)) : std::string();
+
+    if (i >= nChild || sChildName != sParentName) {
+      CIccInfo Info;
+      char szIndex[16];
+      snprintf(szIndex, sizeof(szIndex), "%u", (unsigned)(i + 1));
+
+      sReport += icMsgValidateNonCompliant;
+      sReport += Info.GetSigPathName(sigPath);
+      sReport += " - Embedded profile channel ";
+      sReport += szIndex;
+      if (i < nChild) {
+        sReport += " is colorant \"";
+        sReport += sChildName;
+        sReport += "\"";
+      }
+      else {
+        sReport += " has no colorant table entry";
+      }
+      sReport += " but the parent profile's channel ";
+      sReport += szIndex;
+      sReport += " is \"";
+      sReport += sParentName;
+      sReport += "\"; a superset device space shall begin with the parent's channels in the same order.\n";
+
+      return icValidateNonCompliant;
+    }
+  }
+
+  return icValidateOK;
+}
+
 /**
 ******************************************************************************
 * Name: CIccTagEmbedProfile::Validate
@@ -594,19 +667,29 @@ icValidateStatus CIccTagEmbeddedProfile::Validate(std::string sigPath, std::stri
     return rv;
   }
 
-  rv = icMaxStatus(rv, m_pProfile->Validate(sReport, sigPath, m_pProfile));
+  // The proposed ICC.2 annex on embedding: "Redundant tags are not required
+  // in the embedded iccMAX profile as long as the redundant tags are not
+  // required for the correct processing of other tags in the embedded iccMAX
+  // profile".  The embedded profile is validated with the encapsulating
+  // profile as its parent, so a required tag the parent holds satisfies the
+  // embedded profile's requirement unless the embedded profile's own tags
+  // depend on it.  This used to pass the embedded profile as its own parent,
+  // so the parent's tags never counted.
+  rv = icMaxStatus(rv, m_pProfile->Validate(sReport, sigPath, pProfile));
 
-  // ICC Technical Note 04-2018, "ICC.2 Profile header requirements": bit 0
-  // of the embedded profile's flags "should be set to 1 to indicate that
-  // the profile is embedded in another file", and "only ICC.2 profiles
-  // containing 0 in bit position 1 should be embedded in other profiles".
-  // Both are "should", so each draws a warning (#2693).
+  // The annex's header requirements: "Bit position 0 shall be set to 1 to
+  // indicate that the profile is embedded in another file", and "Only
+  // iccMAX profiles containing 0 in bit position 1 should be embedded in
+  // other profiles".  Technical Note 04-2018 said "should" for both (#2693);
+  // the annex makes bit 0 a requirement, so it is non-compliance, and bit 1
+  // stays a warning.  Leaving to the encapsulating profile what it fully
+  // defines does not make the embedded profile dependent on it.
   if (!(m_pProfile->m_Header.flags & icEmbeddedProfileTrue)) {
-    sReport += icMsgValidateWarning;
+    sReport += icMsgValidateNonCompliant;
     sReport += Info.GetSigPathName(sigPath);
     sReport += " - Embedded profile header flags do not mark it as embedded in another file.\n";
 
-    rv = icMaxStatus(rv, icValidateWarning);
+    rv = icMaxStatus(rv, icValidateNonCompliant);
   }
   if (m_pProfile->m_Header.flags & icUseWithEmbeddedDataOnly) {
     sReport += icMsgValidateWarning;
@@ -617,29 +700,66 @@ icValidateStatus CIccTagEmbeddedProfile::Validate(std::string sigPath, std::stri
   }
 
   if (pProfile) {
-    // Technical Note 04-2018: the embedded profile "shall be considered a
-    // logical replacement for the profile that it is embedded into.
-    // Therefore it shall be of the same profile class, and have the same
-    // device space."  This used to accept any device space with at least
-    // the host's channel count, which let an nc0005 or 8CLR child stand in
-    // for a CMYK or RGB host; the device space is now compared as the note
-    // says (#2693).  The channel comparison below is kept for the message
-    // it gives when the count is what differs.
-    if (m_pProfile->m_Header.colorSpace != pProfile->m_Header.colorSpace) {
-      sReport += icMsgValidateCriticalError;
-      sReport += Info.GetSigPathName(sigPath);
-      sReport += " - Embedded profile device space ";
-      sReport += Info.GetColorSpaceSigName(m_pProfile->m_Header.colorSpace);
-      sReport += " does not match the parent profile's ";
-      sReport += Info.GetColorSpaceSigName(pProfile->m_Header.colorSpace);
-      sReport += ".\n";
+    // The annex's header requirements: the embedded profile "is a logical
+    // extension for the profile that it is embedded into.  Therefore it shall
+    // be of the same profile class, and the device space shall be either the
+    // same as or a superset of the device space of the encapsulating ICC
+    // profile."  Technical Note 04-2018 required the same device space
+    // (#2693).
+    //
+    // A superset has more channels than the parent's space and begins with
+    // the parent's channels in the same order.  Among the standard spaces,
+    // CMYK is a superset of CMY.  A generic n-channel space (xCLR or ncXXXX)
+    // with more channels is a named color superset: its colorants are named
+    // by the profile itself, which is the only way to tell which they are.
+    // A different standard space, such as CMYK under an RGB host, is not a
+    // superset of it.
+    icColorSpaceSignature childSpace = m_pProfile->m_Header.colorSpace;
+    icColorSpaceSignature parentSpace = pProfile->m_Header.colorSpace;
+    icUInt32Number nChildSamples = icGetSpaceSamples(childSpace);
+    icUInt32Number nParentSamples = icGetSpaceSamples(parentSpace);
+    bool bNamedColorSuperset = nChildSamples > nParentSamples && icIsSpaceCLR(childSpace);
+    bool bStandardSuperset = parentSpace == icSigCmyData && childSpace == icSigCmykData;
 
-      rv = icMaxStatus(rv, icValidateCriticalError);
+    if (childSpace != parentSpace && !bStandardSuperset) {
+      if (!bNamedColorSuperset) {
+        sReport += icMsgValidateCriticalError;
+        sReport += Info.GetSigPathName(sigPath);
+        sReport += " - Embedded profile device space ";
+        sReport += Info.GetColorSpaceSigName(childSpace);
+        sReport += " is neither the same as nor a superset of the parent profile's ";
+        sReport += Info.GetColorSpaceSigName(parentSpace);
+        sReport += ".\n";
+
+        rv = icMaxStatus(rv, icValidateCriticalError);
+      }
+      // A named color superset has channels the parent's colorant tags do
+      // not define, so the embedded profile needs its own channel
+      // definition.  A standard superset's channels are defined by its space.
+      else if (!m_pProfile->GetTag(icSigColorantInfoTag) &&
+               !m_pProfile->GetTag(icSigColorantTableTag)) {
+        sReport += icMsgValidateNonCompliant;
+        sReport += Info.GetSigPathName(sigPath);
+        sReport += " - Embedded profile device space ";
+        sReport += Info.GetColorSpaceSigName(childSpace);
+        sReport += " is a named color superset of the parent profile's ";
+        sReport += Info.GetColorSpaceSigName(parentSpace);
+        sReport += " but has neither a colorantInfoTag nor a colorantTableTag to define its channels.\n";
+
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
+      // A superset's first channels shall be the parent's, in the same
+      // order, so that the additional channels follow them.  Only colorant
+      // names can show that, so it is checked when both profiles have a
+      // colorantTableTag.
+      else {
+        rv = icMaxStatus(rv, icCheckSupersetColorantOrder(m_pProfile, pProfile, sigPath, sReport));
+      }
     }
-    if (icGetSpaceSamples(m_pProfile->m_Header.colorSpace) < icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
+    if (nChildSamples < nParentSamples) {
       sReport += icMsgValidateCriticalError;
       sReport += Info.GetSigPathName(sigPath);
-      sReport += " - Embedded profile has fewer device channels that parent profile.\n";
+      sReport += " - Embedded profile has fewer device channels than parent profile.\n";
 
       rv = icMaxStatus(rv, icValidateCriticalError);
     }

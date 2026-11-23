@@ -265,9 +265,10 @@ protected:
   icValidateStatus CheckLinkPcsSpace(std::string &sReport) const;
   // "one or more of" the device-to-PCS and PCS-to-device transform sets that
   // ICC.2 8.3, 8.4 and 8.5 require.  Each is a separate "shall" bullet, so a
-  // class that lists both needs both (#2562).
-  bool HasDeviceToPcsTransform() const;
-  bool HasPcsToDeviceTransform() const;
+  // class that lists both needs both (#2562).  For an embedded profile, pass
+  // the encapsulating profile as pParentProfile: its tags count too.
+  bool HasDeviceToPcsTransform(const CIccProfile *pParentProfile = NULL) const;
+  bool HasPcsToDeviceTransform(const CIccProfile *pParentProfile = NULL) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;
