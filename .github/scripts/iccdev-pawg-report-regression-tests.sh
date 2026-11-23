@@ -772,9 +772,11 @@ run_hybrid_embedded_calculator_cost() {
     return
   fi
   # From the fixture's own directory: the document resolves relative paths.
-  # The exit status is not checked: this host embeds an nc0005 child, which
-  # the device-space check from #2693 validates invalid, and iccFromXml then
-  # exits 1 while still writing the profile.  S10 is measured on the file.
+  # This CMYK host embeds an nc0005 child.  #2693 required the same device
+  # space, so that validated invalid and iccFromXml exited 1 while still
+  # writing the profile; the proposed ICC5 embedding annex accepts it as a
+  # named color superset.  The exit status is still not checked: S10 is
+  # measured on the file.
   ( cd "$(dirname "$HYBRID_CALC_XML")" && "$FROM_XML" "$(basename "$HYBRID_CALC_XML")" "$HYBRID_CALC" >/dev/null 2>&1 ) || true
   if [ ! -s "$HYBRID_CALC" ]; then
     fail_case "$name" "iccFromXml could not build the hybrid profile"
@@ -785,19 +787,19 @@ run_hybrid_embedded_calculator_cost() {
     fail_case "$name" "sanitizer finding"
     return
   fi
-  # The generated host deliberately retains the fixture's embedded-profile
-  # device-space mismatch. PAWG must therefore fail C1 and return 1 while
-  # still assessing S10 against the loaded embedded v5 sub-profile.
-  if [ "$exit_code" -ne 1 ]; then
-    fail_case "$name" "report returned unexpected status $exit_code (expected 1 for the fixture's C1 failure)"
+  # The embedded nc0005 child is a named color superset of the CMYK host, so
+  # the hybrid profile is valid: PAWG passes C1 and returns 0 while assessing
+  # S10 against the loaded embedded v5 sub-profile.
+  if [ "$exit_code" -ne 0 ]; then
+    fail_case "$name" "report returned unexpected status $exit_code (expected 0 for a valid hybrid profile)"
     return
   fi
   if ! assert_report_truth "$name" "$logfile"; then
     fail_case "$name" "report count or section mismatch"
     return
   fi
-  if ! grep -F -q "[FAIL] C1" "$logfile"; then
-    fail_case "$name" "expected C1 failure for the deliberate embedded-profile device-space mismatch"
+  if grep -F -q "[FAIL] C1" "$logfile"; then
+    fail_case "$name" "C1 failed for a named color superset the embedding annex accepts"
     return
   fi
   if grep -F -q "[N/A ] S10" "$logfile"; then

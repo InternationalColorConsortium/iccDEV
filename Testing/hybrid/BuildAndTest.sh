@@ -19,10 +19,14 @@ CTEST_SMOKE=0
 if [ "${1:-}" = "--ctest-smoke" ]; then
   CTEST_SMOKE=1
 fi
-# Four hosts below embed an ICC.2 child of a different device space, which
-# Technical Note 04-2018 rules out, so iccFromXml validates them invalid and
-# exits 1 while still writing the profile (#2693).  They are kept until the
-# fixtures are reworked; verify that exit code and fresh output explicitly.
+# MultSpectralRGB embeds an 8-channel ICC.2 child under an RGB host.  The
+# proposed ICC5 embedding annex accepts that as a named color superset only
+# when the child defines its channels with a colorantInfoTag or
+# colorantTableTag, which this one lacks, so iccFromXml validates it invalid
+# and exits 1 while still writing the profile.  It is kept until the fixture
+# is reworked; verify that exit code and fresh output explicitly.  (The
+# Overprint hosts' nc0005 children under CMYK, which #2693 rejected as a
+# different device space, are named color supersets the annex accepts.)
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 SILENCE_FILE="$SCRIPT_DIR/../silence.txt"
@@ -47,12 +51,12 @@ create_expected_invalid_profile() {
 }
 
 echo "========== Phase 1: Build ICC profiles from XML sources =========="
-create_expected_invalid_profile MultSpectralRGB.xml ICC/MultSpectralRGB.icc "MultSpectralRGB: embedded profile device space differs from the host (#2693)"
+create_expected_invalid_profile MultSpectralRGB.xml ICC/MultSpectralRGB.icc "MultSpectralRGB: embedded 8-channel superset of the RGB host has no colorant tags of its own"
 iccFromXml  LCDDisplay.xml ICC/LCDDisplay.icc
 iccFromXml  CMYK_Hybrid_Profile.xml ICC/CMYK_Hybrid_Profile.icc
-create_expected_invalid_profile CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc "CMYK-W_Overprint_Profile: embedded profile device space differs from the host (#2693)"
-create_expected_invalid_profile CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc "CMYK-S_Overprint_Profile: embedded profile device space differs from the host (#2693)"
-create_expected_invalid_profile CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc "CMYK-STop_Overprint_Profile: embedded profile device space differs from the host (#2693)"
+iccFromXml  CMYK-W_Overprint_Profile.xml ICC/CMYK-W_Overprint_Profile.icc
+iccFromXml  CMYK-S_Overprint_Profile.xml ICC/CMYK-S_Overprint_Profile.icc
+iccFromXml  CMYK-STop_Overprint_Profile.xml ICC/CMYK-STop_Overprint_Profile.icc
 iccFromXml  MW-Mid_Overprint.xml ICC/MW-Mid_Overprint.icc
 iccFromXml  MS-Mid_Overprint.xml ICC/MS-Mid_Overprint.icc
 iccFromXml  SC-Mid_Overprint.xml ICC/SC-Mid_Overprint.icc
@@ -71,7 +75,7 @@ iccFromXml   Data/Spec380_10_730-D50_2deg.xml ICC/Spec380_10_730-D50_2deg.icc
 echo "========== Phase 2: Make multi-spectral image =========="
 iccTiffDump   Data/smCows380_5_780.tif
 iccApplyProfiles -threads 0 -exportcfg config/makeMS_smCows.json Data/smCows380_5_780.tif Results/MS_smCows.tif 2 1 0 1 1 -embedded 3 ICC/MultSpectralRGB.icc 10003
-iccTiffDump   Results/MS_smCows.tif || echo "WARN: MS_smCows.tif embeds MultSpectralRGB, which validates invalid under #2693; dump shown above"
+iccTiffDump   Results/MS_smCows.tif || echo "WARN: MS_smCows.tif embeds MultSpectralRGB, which validates invalid (its 8-channel embedded profile has no colorant tags); dump shown above"
 
 echo "========== Phase 3: Apply PCCs for colorimetric renderings =========="
 iccApplyProfiles -threads 0 -exportcfg config/makeCowsA_fromRef.json Data/smCows380_5_780.tif Results/cowsA_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC/Spec400_10_700-IllumA_2deg-Abs.icc ../sRGB_v4_ICC_preference.icc 1
@@ -97,7 +101,7 @@ iccApplySearch -threads 0 -exportcfganddata config/cmykGraysEst.json Results/cmy
 # The icon is 92x64 to keep the sanitizer legs quick; SpectralImageReproduction
 # runs the identical chain over the full 600x420 cows on demand.
 iccApplyProfiles -threads 0 -cfg config/msCowsIconToCmyk.json
-iccTiffDump   Results/MS_smCowsIconCmyk.tif || echo "WARN: MS_smCowsIconCmyk.tif embeds an Overprint host, which validates invalid under #2693; dump shown above"
+iccTiffDump   Results/MS_smCowsIconCmyk.tif || echo "WARN: iccTiffDump reported a problem with MS_smCowsIconCmyk.tif; dump shown above"
 
 echo "========== Phase 6: T-shirt overprint simulation =========="
 if [ "$CTEST_SMOKE" -eq 1 ]; then
