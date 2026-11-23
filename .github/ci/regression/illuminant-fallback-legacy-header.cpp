@@ -67,6 +67,9 @@
 //    without viewing conditions both sides report D50 through the interface.
 //    CIccXformMpe::SetAppliedCC() must also use such a PCC as it is for a
 //    late-binding reflectance tag, as it already did for an emission tag.
+// 4. (#3104) CIccXform::Begin() accepted a missing profile while initializing
+//    mediaXYZ, then dereferenced it in the remaining setup. Profile-backed
+//    transforms must reject that incomplete state before reading the profile.
 //
 // Returns 0 on success; 1 if any check failed (each printed).
 #include "IccProfile.h"
@@ -345,6 +348,13 @@ void testSetAppliedCCWithoutViewingConditions()
   }
 }
 
+void testBeginWithoutProfile()
+{
+  CIccXformNamedColor xform(NULL, icSigLabData, icSigRgbData);
+  check(xform.Begin() == icCmmStatInvalidProfile,
+        "Begin() refuses a profile-backed transform without a profile");
+}
+
 } // namespace
 
 int main()
@@ -353,6 +363,7 @@ int main()
   testLegacyHeader();
   testCombinedWithoutViewingConditions();
   testSetAppliedCCWithoutViewingConditions();
+  testBeginWithoutProfile();
 
   if (g_failures) {
     std::fprintf(stderr, "illuminant-fallback-legacy-header: %d check(s) failed\n", g_failures);
