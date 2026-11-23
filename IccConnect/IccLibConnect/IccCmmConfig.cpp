@@ -1943,7 +1943,11 @@ static bool ParseNumbers(icFloatNumber* pData, icChar* pString, icUInt32Number n
 
 static bool ParseNextNumber(icFloatNumber& num, icChar** text)
 {
-  if (!text)
+  // *text is NULL when fromLegacy()'s strstr() finds no closing quote. That
+  // cannot reach here today, because ParseName() makes the same search first
+  // and refuses the line. The helper checks anyway rather than rely on that,
+  // and GCC 15's -Wnull-dereference flags the inlined copy without it (#3066).
+  if (!text || !*text)
     return false;
 
   icChar* ptr = *text;
@@ -2135,17 +2139,37 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   }
 
   int tempBufSize = 20000;
-  icChar ColorSig[7], *tempBuf = new (std::nothrow) icChar[tempBufSize];
+  icChar ColorSig[7] = { 0 };
+  icChar *tempBuf = new (std::nothrow) icChar[tempBufSize]();
   if (!tempBuf)
     return false;
-  InputData.getline(tempBuf, tempBufSize);
 
+  // The first line opens with the colour signature in single or double quotes
+  // ('RGB ', "nc001F"): read the characters up to the matching quote, and
+  // refuse a line without one. This used to copy fixed offsets 1-6, past the
+  // terminator of a short first line (#3066).
+  //
+  // The signature must be four characters (a space signature) or six (the
+  // channel form icGetSigVal() parses: two letters and a hex channel count).
+  // icGetSigVal() reads five characters as their first four, so a mistyped
+  // 'nc01F' would load as the unrelated signature 'nc01' instead of failing.
+  if (!InputData.getline(tempBuf, tempBufSize)) {
+    delete[] tempBuf;
+    return false;
+  }
+  const icChar quote = tempBuf[0];
+  if (quote != '\'' && quote != '"') {
+    delete[] tempBuf;
+    return false;
+  }
   int i;
-  for (i = 0; (i < 4 || tempBuf[i + 1] != '\'') && i < 6; i++) {
+  for (i = 0; i < 6 && tempBuf[i + 1] && tempBuf[i + 1] != quote; i++) {
     ColorSig[i] = tempBuf[i + 1];
   }
-  for (; i < 7; i++)
-    ColorSig[i] = '\0';
+  if ((i != 4 && i != 6) || tempBuf[i + 1] != quote) {
+    delete[] tempBuf;
+    return false;
+  }
 
   //Init source number of samples from color signature is source data file
   m_srcSpace = (icColorSpaceSignature)icGetSigVal(ColorSig);
@@ -2157,10 +2181,18 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
     }
   }
 
-  InputData.getline(tempBuf, tempBufSize);
+  // A missing or blank encoding line is refused here: sscanf() matches nothing
+  // in it and used to leave encodeBuf unwritten before strnlen() (#3066).
+  if (!InputData.getline(tempBuf, tempBufSize)) {
+    delete[] tempBuf;
+    return false;
+  }
   {
     char encodeBuf[20000];
-    sscanf(tempBuf, "%19999s", encodeBuf);
+    if (sscanf(tempBuf, "%19999s", encodeBuf) != 1) {
+      delete[] tempBuf;
+      return false;
+    }
     size_t encodeLen = strnlen(encodeBuf, tempBufSize - 1);
     memcpy(tempBuf, encodeBuf, encodeLen);
     tempBuf[encodeLen] = '\0';
