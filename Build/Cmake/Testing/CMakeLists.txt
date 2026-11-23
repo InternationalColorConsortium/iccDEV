@@ -575,6 +575,8 @@ endfunction()
 # #3066: CIccProfile::calc{Norm,Lum}IlluminantXYZ() left their output unwritten when
 # the viewing conditions had no illuminant data, and CIccCfgColorData::fromLegacy()
 # read past a short first line and an unwritten sscanf() buffer (MemorySanitizer).
+# #3099/#3104: combined conditions left fallback values unwritten, and
+# CIccXform::Begin() did not reject a missing profile before dereferencing it.
 function(iccdev_add_illuminant_fallback_legacy_header_test)
   if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()
@@ -605,7 +607,7 @@ function(iccdev_add_illuminant_fallback_legacy_header_test)
   set_tests_properties(iccdev.illuminant-fallback-legacy-header PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
     TIMEOUT 60
-    LABELS "iccdev;iccconnect;pcc;msan;issue-3066;issue-3099;regression"
+    LABELS "iccdev;iccconnect;pcc;msan;issue-3066;issue-3099;issue-3104;regression"
   )
   if(WIN32)
     set(_illum_legacy_windows_env_mods

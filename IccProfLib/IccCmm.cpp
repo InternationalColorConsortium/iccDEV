@@ -1586,6 +1586,13 @@ void CIccXform::refreshPcsPortCache()
  */
 icStatusCMM CIccXform::Begin()
 {
+  // Every transform that reaches this base implementation is profile-backed;
+  // CIccPcsXform is the profile-free transform and overrides Begin(). Reject
+  // an incomplete transform before the port cache or intent setup reads it
+  // (#3104).
+  if (!m_pProfile)
+    return icCmmStatInvalidProfile;
+
   // Refresh the port-spectral-ness cache unconditionally: whatever moved a
   // port's space since the last refresh (SetParams(), SetGamutXform(),
   // SetPcsAdjustXform(), or a CIccXformNamedColor SetSrcSpace()/
@@ -1617,14 +1624,9 @@ icStatusCMM CIccXform::Begin()
       // The interface is exported, so mediaXYZ starts as the header
       // illuminant, CIccProfile's own fallback, in case another implementation
       // writes nothing.
-      if (m_pProfile) {
-        mediaXYZ[0] = icFtoD(m_pProfile->m_Header.illuminant.X);
-        mediaXYZ[1] = icFtoD(m_pProfile->m_Header.illuminant.Y);
-        mediaXYZ[2] = icFtoD(m_pProfile->m_Header.illuminant.Z);
-      }
-      else {
-        memcpy(mediaXYZ, icD50XYZ, sizeof(mediaXYZ));
-      }
+      mediaXYZ[0] = icFtoD(m_pProfile->m_Header.illuminant.X);
+      mediaXYZ[1] = icFtoD(m_pProfile->m_Header.illuminant.Y);
+      mediaXYZ[2] = icFtoD(m_pProfile->m_Header.illuminant.Z);
       pCond->getMediaWhiteXYZ(mediaXYZ);
 
       m_MediaXYZ.X = icDtoF(mediaXYZ[0]);
