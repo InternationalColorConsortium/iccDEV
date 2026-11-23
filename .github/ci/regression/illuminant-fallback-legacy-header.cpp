@@ -51,8 +51,22 @@
 //    passed an unwritten sscanf() buffer to strnlen() when the encoding line
 //    was blank. Both inputs must be refused cleanly, as must a signature that
 //    is not enclosed in matching single or double quotes, or is not four or
-//    six characters long, which the fixed offsets used to load regardless. The uninitialised reads themselves only
-//    show under MemorySanitizer or valgrind; this checks the verdicts.
+//    six characters long, which the fixed offsets used to load regardless.
+//    The uninitialised reads themselves only show under MemorySanitizer or
+//    valgrind; this checks the verdicts.
+// 3. (#3099) CIccCombinedConnectionConditions returned early, without writing
+//    its cached illuminant, luminance and media white, when the applied
+//    conditions had no viewing conditions or none were applied, and
+//    getMediaWhiteXYZ() then wrote nothing. CIccXform::Begin() reads all
+//    three. The object now forwards the applied conditions unchanged (the
+//    profile itself when none are applied), so its identity and its values
+//    have one source. Checked the same way as item 1, against conditions
+//    whose illuminant is not D50, so a hard-coded D50 fallback fails. The
+//    identity check only discriminates for the no-applied-PCC case:
+//    getPccIlluminant() and isStandardPcc() are not virtual, so for a profile
+//    without viewing conditions both sides report D50 through the interface.
+//    CIccXformMpe::SetAppliedCC() must also use such a PCC as it is for a
+//    late-binding reflectance tag, as it already did for an emission tag.
 //
 // Returns 0 on success; 1 if any check failed (each printed).
 #include "IccProfile.h"
@@ -60,6 +74,8 @@
 #include "IccPcc.h"
 #include "IccUtil.h"
 #include "IccCmmConfig.h"
+#include "IccCmm.h"
+#include "IccTagMPE.h"
 
 #include <cmath>
 #include <cstdio>
@@ -191,12 +207,152 @@ void testLegacyHeader()
   check(legacy("'RGB ' ; Data Format\n") == kRefused, "a missing encoding line is refused");
 }
 
+// Builds combined conditions in NaN-filled storage and checks that every getter
+// matches the conditions they forward (pSrc), values and identity alike.
+void expectForwarded(CIccProfile *pProfile, IIccProfileConnectionConditions *pApplied,
+                     bool bReflectance, IIccProfileConnectionConditions *pSrc,
+                     const char *label)
+{
+  alignas(CIccCombinedConnectionConditions) unsigned char storage[sizeof(CIccCombinedConnectionConditions)];
+  std::memset(storage, 0xFF, sizeof(storage));
+  CIccCombinedConnectionConditions *pPcc =
+    new (storage) CIccCombinedConnectionConditions(pProfile, pApplied, bReflectance);
+
+  icFloatNumber want[3], got[3];
+  std::string what;
+
+  pSrc->getNormIlluminantXYZ(want);
+  got[0] = got[1] = got[2] = -7;
+  pPcc->getNormIlluminantXYZ(got);
+  what = std::string(label) + ": normalised illuminant matches the forwarded conditions";
+  check(same(got, want), what.c_str());
+
+  pSrc->getLumIlluminantXYZ(want);
+  got[0] = got[1] = got[2] = -7;
+  pPcc->getLumIlluminantXYZ(got);
+  what = std::string(label) + ": illuminant luminance matches the forwarded conditions";
+  check(same(got, want), what.c_str());
+
+  bool wantValid = pSrc->getMediaWhiteXYZ(want);
+  got[0] = got[1] = got[2] = -7;
+  bool gotValid = pPcc->getMediaWhiteXYZ(got);
+  what = std::string(label) + ": media white matches the forwarded conditions";
+  check(same(got, want) && gotValid == wantValid, what.c_str());
+
+  what = std::string(label) + ": identity matches the forwarded conditions";
+  check(pPcc->getPccViewingConditions() == pSrc->getPccViewingConditions() &&
+        pPcc->getPccIlluminant() == pSrc->getPccIlluminant() &&
+        pPcc->isStandardPcc() == pSrc->isStandardPcc(), what.c_str());
+
+  pPcc->~CIccCombinedConnectionConditions();
+}
+
+void testCombinedWithoutViewingConditions()
+{
+  // The transformed profile: v4, D50.
+  CIccProfile prof;
+  prof.InitHeader();
+
+  // Applied conditions without viewing conditions: a v5 profile whose header
+  // illuminant is D65 and which has a media white point tag. Without viewing
+  // conditions a v5 profile reports its header illuminant.
+  CIccProfile applied;
+  applied.InitHeader();
+  applied.m_Header.version = icVersionNumberV5;
+  applied.m_Header.illuminant.X = icDtoF(0.9505);
+  applied.m_Header.illuminant.Y = icDtoF(1.0);
+  applied.m_Header.illuminant.Z = icDtoF(1.089);
+  CIccTagXYZ *pWtpt = new CIccTagXYZ;
+  (*pWtpt)[0].X = icDtoF(0.9);
+  (*pWtpt)[0].Y = icDtoF(0.95);
+  (*pWtpt)[0].Z = icDtoF(0.8);
+  applied.AttachTag(icSigMediaWhitePointTag, pWtpt);
+  icFloatNumber xyz[3];
+  applied.getNormIlluminantXYZ(xyz);
+  check(applied.getPccViewingConditions() == NULL && !same(xyz, icD50XYZ),
+        "fixture: the applied conditions have no viewing conditions and a non-D50 illuminant");
+
+  expectForwarded(&prof, &applied, true, &applied, "reflectance, applied PCC without viewing conditions");
+  expectForwarded(&prof, &applied, false, &applied, "non-reflectance, applied PCC without viewing conditions");
+
+  // No applied conditions: the profile is forwarded. A v5 profile whose own
+  // viewing conditions name D65, so its identity is not the standard PCC.
+  CIccProfile own;
+  own.InitHeader();
+  own.m_Header.version = icVersionNumberV5;
+  CIccTagSpectralViewingConditions *pView = new CIccTagSpectralViewingConditions;
+  icSpectralRange none;
+  std::memset(&none, 0, sizeof(none));
+  pView->setIlluminant(icIlluminantD65, none, NULL);
+  pView->m_illuminantXYZ.X = 950.47f;
+  pView->m_illuminantXYZ.Y = 1000.0f;
+  pView->m_illuminantXYZ.Z = 1088.83f;
+  own.AttachTag(icSigSpectralViewingConditionsTag, pView);
+  own.getNormIlluminantXYZ(xyz);
+  check(!own.isStandardPcc() && !same(xyz, icD50XYZ),
+        "fixture: the profile's own conditions are D65");
+
+  expectForwarded(&own, NULL, false, &own, "no applied PCC");
+
+  // Neither: nothing is forwarded, and the D50 defaults match the D50 identity.
+  alignas(CIccCombinedConnectionConditions) unsigned char storage[sizeof(CIccCombinedConnectionConditions)];
+  std::memset(storage, 0xFF, sizeof(storage));
+  CIccCombinedConnectionConditions *pPcc =
+    new (storage) CIccCombinedConnectionConditions(NULL, NULL, false);
+  const icFloatNumber lum[3] = {
+    icD50XYZ[0] * icDefaultLuminance, icD50XYZ[1] * icDefaultLuminance, icD50XYZ[2] * icDefaultLuminance
+  };
+  icFloatNumber got[3] = { -7, -7, -7 };
+  pPcc->getNormIlluminantXYZ(got);
+  check(same(got, icD50XYZ), "no profile, no applied PCC: D50 illuminant");
+  got[0] = got[1] = got[2] = -7;
+  pPcc->getLumIlluminantXYZ(got);
+  check(same(got, lum), "no profile, no applied PCC: D50 luminance");
+  got[0] = got[1] = got[2] = -7;
+  bool valid = pPcc->getMediaWhiteXYZ(got);
+  check(same(got, icD50XYZ) && !valid, "no profile, no applied PCC: D50 media white, reported as a fallback");
+  check(pPcc->getPccViewingConditions() == NULL && pPcc->isStandardPcc(),
+        "no profile, no applied PCC: standard D50 identity");
+  pPcc->~CIccCombinedConnectionConditions();
+}
+
+// CIccXformMpe::SetAppliedCC() with a PCC that has no viewing conditions: both
+// a reflectance and an emission late-binding tag must use the PCC as it is.
+// The reflectance branch used to wrap it in combined conditions that forwarded
+// nothing and cached unwritten values (#3099).
+void testSetAppliedCCWithoutViewingConditions()
+{
+  CIccProfile applied;
+  applied.InitHeader();
+
+  for (int reflectance = 0; reflectance < 2; reflectance++) {
+    CIccTagMultiProcessElement tag(3, 3);
+    // Made through the element factory, so only IccTagMPE.h is needed.
+    CIccMultiProcessElement *pElem = CIccMultiProcessElement::Create(
+      reflectance ? icSigReflectanceObserverElemType : icSigEmissionObserverElemType);
+    check(pElem != NULL, "fixture: the factory makes the observer element");
+    if (!pElem)
+      continue;
+    tag.Attach(pElem);
+    const char *kind = reflectance ? "reflectance" : "emission";
+    std::string what = std::string("fixture: the ") + kind + " tag is late-binding";
+    check(tag.IsLateBinding() && tag.IsLateBindingReflectance() == (reflectance != 0), what.c_str());
+
+    CIccXformMpe xform(&tag);
+    xform.SetAppliedCC(&applied);
+    what = std::string("SetAppliedCC() uses a PCC without viewing conditions as it is for a ") + kind + " tag";
+    check(xform.GetConnectionConditions() == &applied, what.c_str());
+  }
+}
+
 } // namespace
 
 int main()
 {
   testIlluminantFallback();
   testLegacyHeader();
+  testCombinedWithoutViewingConditions();
+  testSetAppliedCCWithoutViewingConditions();
 
   if (g_failures) {
     std::fprintf(stderr, "illuminant-fallback-legacy-header: %d check(s) failed\n", g_failures);

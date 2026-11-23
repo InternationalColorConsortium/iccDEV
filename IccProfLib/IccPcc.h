@@ -90,6 +90,10 @@ public:
   icFloatNumber getPccCCT();
   icStandardObserver getPccObserver();
 
+  // Each of these always writes all three entries of pXYZ. getMediaWhiteXYZ()
+  // returns false when what it wrote is a fallback (for example the header
+  // illuminant when there is no media white point tag), not when it wrote
+  // nothing; callers such as CIccXform::Begin() rely on that (#3099).
   virtual void getNormIlluminantXYZ(icFloatNumber *pXYZ)=0;
   virtual void getLumIlluminantXYZ(icFloatNumber *pXYZ)=0;
   virtual bool getMediaWhiteXYZ(icFloatNumber *pXYZ)=0;
