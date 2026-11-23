@@ -383,6 +383,13 @@ jobs:
           mkdir -p lint_reports
           [ -f lint_reports/cppcheck.txt ] || : > lint_reports/cppcheck.txt
           [ -f lint_reports/clang_tidy.txt ] || : > lint_reports/clang_tidy.txt
+          audit_tool_args=()
+          if [ "$RUN_CPPCHECK_INPUT" = 'true' ]; then
+            audit_tool_args+=(--enabled-tool cppcheck)
+          fi
+          if [ "$RUN_CLANG_TIDY_INPUT" = 'true' ]; then
+            audit_tool_args+=(--enabled-tool clang-tidy)
+          fi
           python3 trusted/.github/scripts/qa-detection-matrix.py \
             --input trusted/.github/ci/qa-detection-matrix.json \
             --repo-root "$PWD" \
@@ -394,7 +401,8 @@ jobs:
             --baseline trusted/.github/ci/lint-reviewed-findings.json \
             --repo-root "$PWD" \
             --scope-files changed_files.txt \
-            --output-dir lint_reports
+            --output-dir lint_reports \
+            "${audit_tool_args[@]}"
 
       - name: Generate lint summary
         if: always()

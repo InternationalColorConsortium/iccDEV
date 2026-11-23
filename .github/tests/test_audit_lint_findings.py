@@ -30,6 +30,8 @@ class AuditLintFindingsTests(unittest.TestCase):
         change_source: bool = False,
         emit_finding: bool = True,
         scope_entries: list[str] | None = None,
+        finding_tool: str = "clang-tidy",
+        enabled_tools: list[str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -39,23 +41,38 @@ class AuditLintFindingsTests(unittest.TestCase):
             source.write_text(source_line + "\n", encoding="ascii")
             digest = hashlib.sha256(source_line.encode("ascii")).hexdigest()
 
+            if finding_tool == "cppcheck":
+                finding = (
+                    f"{source}:1:1: error: out of bounds "
+                    "[arrayIndexOutOfBounds]\n"
+                )
+                checker = "arrayIndexOutOfBounds"
+            else:
+                finding = (
+                    f"{source}:1:1: warning: out of bounds "
+                    "[clang-analyzer-security.ArrayBound]\n"
+                )
+                checker = "clang-analyzer-security.ArrayBound"
+
             cppcheck = root / "cppcheck.txt"
-            cppcheck.write_text("", encoding="ascii")
-            clang_tidy = root / "clang-tidy.txt"
-            finding = (
-                f"{source}:1:1: warning: out of bounds "
-                "[clang-analyzer-security.ArrayBound]\n"
+            cppcheck.write_text(
+                finding if emit_finding and finding_tool == "cppcheck" else "",
+                encoding="ascii",
             )
-            clang_tidy.write_text(finding if emit_finding else "", encoding="ascii")
+            clang_tidy = root / "clang-tidy.txt"
+            clang_tidy.write_text(
+                finding if emit_finding and finding_tool == "clang-tidy" else "",
+                encoding="ascii",
+            )
             baseline = root / "baseline.json"
             reviewed = []
             if add_baseline:
                 reviewed.append(
                     {
-                        "tool": "clang-tidy",
+                        "tool": finding_tool,
                         "path": "IccProfLib/case.cpp",
                         "line": 1,
-                        "checker": "clang-analyzer-security.ArrayBound",
+                        "checker": checker,
                         "source_sha256": digest,
                         "issue": "#test",
                         "rationale": "test baseline",
@@ -83,6 +100,8 @@ class AuditLintFindingsTests(unittest.TestCase):
                 scope = root / "scope.txt"
                 scope.write_bytes(b"\0".join(item.encode("ascii") for item in scope_entries))
                 command.extend(["--scope-files", str(scope)])
+            for tool in enabled_tools or []:
+                command.extend(["--enabled-tool", tool])
 
             return subprocess.run(
                 command,
@@ -114,6 +133,25 @@ class AuditLintFindingsTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("0 reviewed, 0 unreviewed, 0 stale", result.stdout)
+
+    def test_disabled_clang_tidy_baseline_is_not_stale(self) -> None:
+        result = self.run_audit(
+            add_baseline=True,
+            emit_finding=False,
+            scope_entries=["IccProfLib/case.cpp"],
+            enabled_tools=["cppcheck"],
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("0 reviewed, 0 unreviewed, 0 stale", result.stdout)
+
+    def test_enabled_cppcheck_finding_is_audited(self) -> None:
+        result = self.run_audit(
+            add_baseline=False,
+            finding_tool="cppcheck",
+            enabled_tools=["cppcheck"],
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("1 unreviewed", result.stdout)
 
 
 if __name__ == "__main__":

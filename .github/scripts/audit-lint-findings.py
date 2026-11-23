@@ -43,6 +43,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--enabled-tool",
+        action="append",
+        choices=("cppcheck", "clang-tidy"),
+        dest="enabled_tools",
+        help="tool whose report was generated; repeat for multiple tools",
+    )
+    parser.add_argument(
         "--scope-files",
         type=Path,
         help="optional NUL- or newline-delimited source list for stale checks",
@@ -237,9 +244,15 @@ def write_outputs(
 def main() -> int:
     args = parse_args()
     repo_root = args.repo_root.resolve()
+    enabled_tools = set(args.enabled_tools or ("cppcheck", "clang-tidy"))
     try:
-        findings = parse_report(args.cppcheck, "cppcheck", CPPCHECK_RE, repo_root)
-        findings.extend(parse_report(args.clang_tidy, "clang-tidy", CLANG_TIDY_RE, repo_root))
+        findings: list[dict[str, object]] = []
+        if "cppcheck" in enabled_tools:
+            findings.extend(parse_report(args.cppcheck, "cppcheck", CPPCHECK_RE, repo_root))
+        if "clang-tidy" in enabled_tools:
+            findings.extend(
+                parse_report(args.clang_tidy, "clang-tidy", CLANG_TIDY_RE, repo_root)
+            )
         baseline = load_baseline(args.baseline)
         scope = load_scope(args.scope_files)
     except ValueError as error:
@@ -254,6 +267,7 @@ def main() -> int:
         record
         for key, record in baseline_by_key.items()
         if key not in finding_by_key
+        and record["tool"] in enabled_tools
         and (scope is None or str(record["path"]) in scope)
     ]
 
