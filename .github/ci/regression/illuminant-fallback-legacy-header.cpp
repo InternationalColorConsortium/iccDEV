@@ -69,7 +69,10 @@
 //    late-binding reflectance tag, as it already did for an emission tag.
 // 4. (#3104) CIccXform::Begin() accepted a missing profile while initializing
 //    mediaXYZ, then dereferenced it in the remaining setup. Profile-backed
-//    transforms must reject that incomplete state before reading the profile.
+//    transforms consume the profile-header PCS and PCS illuminant defined by
+//    ICC.1:2022 7.2.7/7.2.16 and ICC.2:2023 7.2.9/7.2.18. The specifications
+//    define valid profile data, not C++ null-object behavior, so this check
+//    pins the library's API-state precondition before any profile read.
 //
 // Returns 0 on success; 1 if any check failed (each printed).
 #include "IccProfile.h"

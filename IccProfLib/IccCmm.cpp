@@ -1586,10 +1586,12 @@ void CIccXform::refreshPcsPortCache()
  */
 icStatusCMM CIccXform::Begin()
 {
-  // Every transform that reaches this base implementation is profile-backed;
-  // CIccPcsXform is the profile-free transform and overrides Begin(). Reject
-  // an incomplete transform before the port cache or intent setup reads it
-  // (#3104).
+  // ICC.1:2022 7.2.7/7.2.16 and ICC.2:2023 7.2.9/7.2.18 define
+  // the PCS and PCS illuminant as profile-header state. Absolute/PCC setup
+  // also consumes profile context (ICC.1:2022 6.3.2.2; ICC.2:2023 6.3.2).
+  // Every transform reaching this base implementation is therefore
+  // profile-backed; CIccPcsXform is profile-free and overrides Begin(). This
+  // is an API-state precondition, not an added profile-conformance rule.
   if (!m_pProfile)
     return icCmmStatInvalidProfile;
 

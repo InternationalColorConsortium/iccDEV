@@ -31,6 +31,26 @@ interior loop and both chain-edge blocks all test that same predicate.
 inverses and adjacent in the PCS fold to `icCmmStatIdentityXform` and the whole
 `CIccPcsXform` is dropped.
 
+## Specification boundary
+
+The normative basis is [ICC.1:2022](https://www.color.org/specification/ICC.1-2022-05.pdf)
+and [ICC.2:2023](https://www.color.org/specification/ICC.2-2023.pdf). A supporting
+archive of those specifications and related ICC technical material is
+[cross-referenced here](https://github.com/xsscx/research/tree/main/docs/iccDEV/specifications).
+
+For ICC.1 transforms, clauses 6.2.3 and 6.3.2.2 define the relationship between
+media-relative and ICC-absolute colorimetry using the media white and PCS white.
+Clauses 7.2.7 and 7.2.16 define the header PCS and D50 PCS illuminant. For ICC.2,
+clauses 6.3.1 and 6.3.2 define standard/non-standard PCS and profile connection
+conditions (PCC), while clauses 7.2.9 and 7.2.18 define the corresponding header
+fields. These requirements are what the profile-backed adjustment setup reads.
+
+The `CIccXform::Begin()` rejection of a missing `m_pProfile` is a library API
+state invariant, not a new ICC profile-conformance rule. A profile-free
+`CIccPcsXform` has its own `Begin()` implementation. Keeping that distinction
+prevents an implementation safety check from being misreported as a normative
+profile requirement.
+
 ### Which white points count as one
 
 Every `Lab<->XYZ` fold in `CIccPcsStepXYZToLab::concat()` and its three
