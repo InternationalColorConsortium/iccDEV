@@ -4,6 +4,23 @@ IccXML converts ICC profiles and their tags between the binary profile format
 and XML. It supports ICC.1 and ICC.2/iccMAX profiles through the `IccXML2`
 library target and the `iccToXml` and `iccFromXml` command-line tools.
 
+## Specification Scope
+
+The normative profile requirements come from
+[ICC.1:2022](https://www.color.org/specification/ICC.1-2022-05.pdf) and
+[ICC.2:2023](https://www.color.org/specification/ICC.2-2023.pdf). A supporting
+archive of these specifications, errata, and related ICC technical material is
+[cross-referenced here](https://github.com/xsscx/research/tree/main/docs/iccDEV/specifications).
+
+IccXML represents profile headers, tag tables, tags, and multi-process elements;
+it does not replace the binary profile conformance rules in those specifications.
+Schema validation and an XML/binary round trip establish serialization evidence,
+not complete ICC conformance by themselves. In particular, ICC.2 spectral PCS,
+bi-spectral PCS, and MCS profiles must preserve the header relationships and
+required payloads described in ICC.2 clauses 6.3, 6.4, 7.2, and the applicable
+class and tag clauses. Use the specification QA workflow linked below for those
+profiles.
+
 ## Build and Link
 
 IccXML is enabled by default and requires LibXml2. Build it with the main

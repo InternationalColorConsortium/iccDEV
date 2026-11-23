@@ -4,43 +4,62 @@ applyTo: "IccProfLib/icProfileHeader.h"
 
 # ICC Profile Specification Quick Reference
 
-## Header Structure (128 bytes)
+## ICC.1 Header Structure (128 bytes)
 
 | Offset | Size | Field | Reference |
 |--------|------|-------|-----------|
-| 0-3 | 4 | Profile size (bytes, big-endian) | ICC.1 §7.2.2 |
-| 4-7 | 4 | Preferred CMM Type | ICC.1 §7.2.3 |
-| 8-11 | 4 | Version (BCD: major.minor.bugfix.0) | ICC.1 §7.2.4 |
-| 12-15 | 4 | Profile/Device class | ICC.1 §7.2.5 |
-| 16-19 | 4 | Color space of data | ICC.1 §7.2.6 |
-| 20-23 | 4 | PCS (Profile Connection Space) | ICC.1 §7.2.7 |
-| 24-35 | 12 | Date/time created | ICC.1 §7.2.8 |
-| 36-39 | 4 | Magic: `'acsp'` (0x61637370) | ICC.1 §7.2.9 |
-| 40-43 | 4 | Primary platform | ICC.1 §7.2.10 |
-| 44-47 | 4 | Profile flags | ICC.1 §7.2.11 |
-| 48-51 | 4 | Device manufacturer | ICC.1 §7.2.12 |
-| 52-55 | 4 | Device model | ICC.1 §7.2.13 |
-| 56-63 | 8 | Device attributes | ICC.1 §7.2.14 |
-| 64-67 | 4 | Rendering intent | ICC.1 §7.2.15 |
-| 68-79 | 12 | PCS illuminant (D50: X=0.9642 Y=1.0 Z=0.8249) | ICC.1 §7.2.16 |
-| 80-83 | 4 | Profile creator | ICC.1 §7.2.17 |
-| 84-99 | 16 | Profile ID (MD5) | ICC.1 §7.2.18 |
-| 100-127 | 28 | Reserved (must be zero) | ICC.1 §7.2.19 |
+| 0-3 | 4 | Profile size (bytes, big-endian) | ICC.1 clause 7.2.2 |
+| 4-7 | 4 | Preferred CMM Type | ICC.1 clause 7.2.3 |
+| 8-11 | 4 | Version (BCD: major.minor.bugfix.0) | ICC.1 clause 7.2.4 |
+| 12-15 | 4 | Profile/Device class | ICC.1 clause 7.2.5 |
+| 16-19 | 4 | Color space of data | ICC.1 clause 7.2.6 |
+| 20-23 | 4 | PCS (Profile Connection Space) | ICC.1 clause 7.2.7 |
+| 24-35 | 12 | Date/time created | ICC.1 clause 7.2.8 |
+| 36-39 | 4 | Magic: `'acsp'` (0x61637370) | ICC.1 clause 7.2.9 |
+| 40-43 | 4 | Primary platform | ICC.1 clause 7.2.10 |
+| 44-47 | 4 | Profile flags | ICC.1 clause 7.2.11 |
+| 48-51 | 4 | Device manufacturer | ICC.1 clause 7.2.12 |
+| 52-55 | 4 | Device model | ICC.1 clause 7.2.13 |
+| 56-63 | 8 | Device attributes | ICC.1 clause 7.2.14 |
+| 64-67 | 4 | Rendering intent | ICC.1 clause 7.2.15 |
+| 68-79 | 12 | PCS illuminant (D50: X=0.9642 Y=1.0 Z=0.8249) | ICC.1 clause 7.2.16 |
+| 80-83 | 4 | Profile creator | ICC.1 clause 7.2.17 |
+| 84-99 | 16 | Profile ID (MD5) | ICC.1 clause 7.2.18 |
+| 100-127 | 28 | Reserved (must be zero) | ICC.1 clause 7.2.19 |
 
-## Profile Classes
+## ICC.2 Extended Header Fields (bytes 100-127)
 
-| Signature | Name | Required Tags (beyond common) |
-|-----------|------|-------------------------------|
-| `scnr` | Input (Scanner) | AToB0, mediaWhitePoint |
-| `mntr` | Display (Monitor) | AToB0 or TRC+matrix, mediaWhitePoint |
-| `prtr` | Output (Printer) | AToB0, BToA0, gamutTag, mediaWhitePoint |
-| `link` | DeviceLink | AToB0, profileSequenceDesc |
-| `spac` | ColorSpace | AToB0, BToA0, mediaWhitePoint |
-| `abst` | Abstract | AToB0, mediaWhitePoint |
-| `nmcl` | NamedColor | ncl2 tag, mediaWhitePoint |
+ICC.2:2023 Table 12 extends the same 128-byte header. Do not apply the ICC.1
+reserved-byte rule to an ICC.2 profile.
 
-All classes require: `profileDescriptionTag`, `copyrightTag`
-+ `chromaticAdaptationTag` if adopted white ≠ D50.
+| Offset | Size | Field | Reference |
+|--------|------|-------|-----------|
+| 100-103 | 4 | Spectral PCS signature | ICC.2 clause 7.2.21 |
+| 104-109 | 6 | Spectral PCS wavelength range | ICC.2 clause 7.2.22 |
+| 110-115 | 6 | Bi-spectral PCS wavelength range | ICC.2 clause 7.2.23 |
+| 116-119 | 4 | MCS signature | ICC.2 clause 7.2.24 |
+| 120-123 | 4 | Profile/device subclass | ICC.2 clause 7.2.25 |
+| 124-127 | 4 | Reserved (must be zero) | ICC.2 clause 7.2.26 |
+
+ICC.2 clause 7.2.3 defines a separate restricted header layout for
+ColorEncodingSpace (`cenc`) profiles; consult that table rather than inferring
+requirements from either summary above.
+
+## ICC.1 Profile Classes
+
+| Signature | Name | Normative class requirements |
+|-----------|------|------------------------------|
+| `scnr` | Input (Scanner) | ICC.1 clause 8.3 |
+| `mntr` | Display (Monitor) | ICC.1 clause 8.4 |
+| `prtr` | Output (Printer) | ICC.1 clause 8.5 |
+| `link` | DeviceLink | ICC.1 clause 8.6 |
+| `spac` | ColorSpace | ICC.1 clause 8.7 |
+| `abst` | Abstract | ICC.1 clause 8.8 |
+| `nmcl` | NamedColor | ICC.1 clause 8.9 |
+
+ICC.1 clause 8.2 defines common requirements and exceptions. The allowed and
+required transform tags depend on the class, color spaces, and processing
+model, so use the applicable class table rather than a one-tag shorthand.
 
 ## Version Encoding (BCD at bytes 8-11)
 
@@ -50,7 +69,16 @@ All classes require: `profileDescriptionTag`, `copyrightTag`
 | v2.4.0.0 | `02400000` | Common v2 profiles |
 | v4.3.0.0 | `04300000` | ICC.1-2010 |
 | v4.4.0.0 | `04400000` | ICC.1-2022-05 (current) |
-| v5.0.0.0 | `05000000` | iccMAX / ICC.2-2023 |
+| v5.0.0.0 | `05000000` | iccMAX profile version required by ICC.2:2023 clause 7.2.6 |
+
+ICC.2:2023 is a revised specification publication, but clause 7.2.6 continues
+to encode conforming profile headers as version 5.0.0.0. Do not substitute a
+document-edition label into the four profile-version bytes.
+
+For ICC.1, bytes 10-11 are reserved and zero. For ICC.2, clause 7.2.6 uses
+bytes 10 and 11 for the profile-subclass major and minor versions when the
+profile/device subclass field is nonzero; they remain zero when there is no
+subclass.
 
 ## Rendering Intents (bytes 64-67, upper 16 bits = 0)
 
@@ -89,7 +117,7 @@ Byte 132+:    Tag entries, each 12 bytes:
 Constraints:
 - No duplicate tag signatures
 - All offsets must be 4-byte aligned
-- offset + size ≤ profile size
+- offset + size <= profile size
 - Tags MAY share offsets (same data), but then sizes MUST match
 - No partial overlaps between tag data regions
 
@@ -119,9 +147,9 @@ Signed 15.16 fixed-point: `value = raw_int32 / 65536.0`
 Range: -32768.0 to +32767.99998 (approximately)
 
 PCS D50 illuminant (canonical values):
-- X = 0.9642 → `0x0000F6D6`
-- Y = 1.0000 → `0x00010000`
-- Z = 0.8249 → `0x0000D32D`
+- X = 0.9642 -> `0x0000F6D6`
+- Y = 1.0000 -> `0x00010000`
+- Z = 0.8249 -> `0x0000D32D`
 
 ## Profile ID Calculation (MD5)
 
@@ -134,8 +162,9 @@ MD5 hash of the entire profile with these fields zeroed before hashing:
 
 | Document | Scope |
 |----------|-------|
-| ICC.1-2022-05 (v4.4) | v2/v4 profile structure — primary reference |
-| ICC.2-2023 | iccMAX (v5) profiles, spectral PCS, calculator elements |
-| TIFF 6.0 §8 | TIFFTAG_ICCPROFILE (tag 34675) for embedded ICC |
-| PNG 1.2 §4.2.2.3 | iCCP chunk for embedded ICC |
+| [ICC.1:2022](https://www.color.org/specification/ICC.1-2022-05.pdf) | v2/v4 profile structure - primary reference |
+| [ICC.2:2023](https://www.color.org/specification/ICC.2-2023.pdf) | iccMAX profiles, spectral PCS, calculator elements - primary reference |
+| [Research specification archive](https://github.com/xsscx/research/tree/main/docs/iccDEV/specifications) | Supporting cross-reference for ICC specifications, errata, and technical notes; not a substitute for the normative documents |
+| TIFF 6.0 clause 8 | TIFFTAG_ICCPROFILE (tag 34675) for embedded ICC |
+| PNG 1.2 clause 4.2.2.3 | iCCP chunk for embedded ICC |
 | JPEG JFIF | APP2 ICC_PROFILE marker (multi-segment reassembly) |
