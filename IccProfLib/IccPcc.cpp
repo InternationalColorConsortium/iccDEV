@@ -408,16 +408,75 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
   return pAdjust;
 }
 
-CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *pProfile, 
-                                                                   IIccProfileConnectionConditions *pAppliedPCC, 
+/**
+ ****************************************************************************
+ * Name: icPccValuesFrom
+ *
+ * Purpose: Fill the three cached values of a CIccCombinedConnectionConditions
+ *  that has no viewing conditions to combine (#3099), from the conditions it
+ *  forwards instead.
+ *
+ *  The constructor used to return early on those paths without writing
+ *  m_illuminantXYZ, m_illuminantXYZLum or m_mediaXYZ, so getNormIlluminantXYZ()
+ *  and getLumIlluminantXYZ() copied out uninitialised values. CIccXform::Begin()
+ *  reads both. It also reads getMediaWhiteXYZ()'s output without checking the
+ *  result, and that getter wrote nothing on these paths.
+ *
+ *  The values come from the same conditions the object forwards (m_pPCC), so
+ *  its identity (getPccViewingConditions(), getPccIlluminant(),
+ *  isStandardPcc()) and its values have one source. Without any conditions it
+ *  reports the D50 PCS defaults, which is also what its identity then says.
+ *
+ * Args:
+ *  pSrc = the forwarded conditions (may be NULL)
+ *  pNorm, pLum, pMedia = the three cached arrays to fill
+ *
+ * Return:
+ *  pSrc's getMediaWhiteXYZ() result: false when the media white written is a
+ *  fallback (always false for the D50 defaults)
+ *****************************************************************************
+ */
+static bool icPccValuesFrom(IIccProfileConnectionConditions *pSrc, icFloatNumber *pNorm,
+                            icFloatNumber *pLum, icFloatNumber *pMedia)
+{
+  if (pSrc) {
+    pSrc->getNormIlluminantXYZ(pNorm);
+    pSrc->getLumIlluminantXYZ(pLum);
+    return pSrc->getMediaWhiteXYZ(pMedia);
+  }
+
+  memcpy(pNorm, icD50XYZ, 3 * sizeof(icFloatNumber));
+  memcpy(pMedia, icD50XYZ, 3 * sizeof(icFloatNumber));
+  pLum[0] = icD50XYZ[0] * icDefaultLuminance;
+  pLum[1] = icD50XYZ[1] * icDefaultLuminance;
+  pLum[2] = icD50XYZ[2] * icDefaultLuminance;
+  return false;
+}
+
+CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *pProfile,
+                                                                   IIccProfileConnectionConditions *pAppliedPCC,
                                                                    bool bReflectance/*=false*/)
 {
+  // Never read. Initialised so that every member is defined (#3099).
+  m_bValidIllumXYZ = false;
+
+  // pProfile must be non-NULL whenever pAppliedPCC has viewing conditions: both
+  // branches below compute from it. The two paths without viewing conditions
+  // accept a NULL profile.
   if (pAppliedPCC) {
       const CIccTagSpectralViewingConditions *pView = pAppliedPCC->getPccViewingConditions();
       if (!pView) {
-        m_pPCC = NULL;
+        // The applied conditions have no viewing conditions to combine, so
+        // this object forwards them unchanged. Its identity and its values
+        // then come from pAppliedPCC, matching what CIccXformMpe::SetAppliedCC()
+        // does: it uses such a PCC as it is, for reflectance and emission tags
+        // alike, and never builds this object for it. So only direct callers
+        // reach this path. It used to forward nothing (D50 identity) and leave
+        // the three values below unwritten (#3099). As on the non-reflectance
+        // path, the media white is then the forwarded conditions' own.
+        m_pPCC = pAppliedPCC;
         m_pViewingConditions = NULL;
-        m_bValidMediaXYZ = false;
+        m_bValidMediaXYZ = icPccValuesFrom(pAppliedPCC, m_illuminantXYZ, m_illuminantXYZLum, m_mediaXYZ);
         return;
       }
       if (bReflectance) {
@@ -455,9 +514,14 @@ CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *
       }
   }
   else {
-    m_pPCC = NULL;
+    // No applied conditions: the profile is its own connection conditions,
+    // so forward it, with identity and values both from it. Without a profile,
+    // nothing is forwarded and the D50 defaults are reported, which is what
+    // the identity then says (#3099). CIccXformMpe::SetAppliedCC() never gets
+    // here; it returns before building this object when it has no PCC.
+    m_pPCC = pProfile;
     m_pViewingConditions = NULL;
-    m_bValidMediaXYZ = false;
+    m_bValidMediaXYZ = icPccValuesFrom(pProfile, m_illuminantXYZ, m_illuminantXYZLum, m_mediaXYZ);
   }
 }
 
@@ -501,9 +565,14 @@ void CIccCombinedConnectionConditions::getLumIlluminantXYZ(icFloatNumber *pXYZLu
 
 bool CIccCombinedConnectionConditions::getMediaWhiteXYZ(icFloatNumber *pXYZ)
 {
-  if (m_pPCC || m_pViewingConditions) {
-    memcpy(pXYZ, m_mediaXYZ, 3*sizeof(icFloatNumber));
+  // Always write the cached value, which the constructor now sets on every
+  // path. This follows CIccProfile::getMediaWhiteXYZ(), which writes its
+  // header-illuminant fallback and returns false. This used to return false
+  // having written nothing when nothing was forwarded, and CIccXform::Begin(),
+  // which does not check the result, then used its uninitialised local
+  // (#3099). With nothing forwarded the value is the D50 default, a fallback.
+  memcpy(pXYZ, m_mediaXYZ, 3*sizeof(icFloatNumber));
+  if (m_pPCC || m_pViewingConditions)
     return m_bValidMediaXYZ;
-  }
   return false;
 }

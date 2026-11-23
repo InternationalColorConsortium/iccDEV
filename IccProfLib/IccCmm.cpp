@@ -1606,6 +1606,25 @@ icStatusCMM CIccXform::Begin()
 
   if (bNeedAbsAdjust) {
     if (pCond) {
+      // The result is not checked on purpose. Every in-tree getMediaWhiteXYZ()
+      // writes mediaXYZ, and returns false only when what it wrote is a
+      // fallback: CIccProfile uses its header illuminant when there is no
+      // media white point tag, and CIccCombinedConnectionConditions passes on
+      // the result of the conditions it forwards when it has no viewing
+      // conditions to combine. Refusing on false would refuse profiles without
+      // a media white point tag. The combined conditions used to return false
+      // having written nothing, which left mediaXYZ uninitialised here (#3099).
+      // The interface is exported, so mediaXYZ starts as the header
+      // illuminant, CIccProfile's own fallback, in case another implementation
+      // writes nothing.
+      if (m_pProfile) {
+        mediaXYZ[0] = icFtoD(m_pProfile->m_Header.illuminant.X);
+        mediaXYZ[1] = icFtoD(m_pProfile->m_Header.illuminant.Y);
+        mediaXYZ[2] = icFtoD(m_pProfile->m_Header.illuminant.Z);
+      }
+      else {
+        memcpy(mediaXYZ, icD50XYZ, sizeof(mediaXYZ));
+      }
       pCond->getMediaWhiteXYZ(mediaXYZ);
 
       m_MediaXYZ.X = icDtoF(mediaXYZ[0]);
@@ -8842,8 +8861,21 @@ void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
         }
       }
       else {
-        m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
-        m_bDeleteAppliedPCC = true;
+        // Reflectance: combine with the PCC's viewing conditions. Without any,
+        // use the PCC as it is, as the non-reflectance branch above does, so
+        // the two branches report the same connection conditions for the same
+        // PCC (#3099). This used to build combined conditions that forwarded
+        // nothing and cached unwritten illuminant and media white values. A
+        // late-binding reflectance element still refuses a PCC without
+        // viewing conditions in its own Begin().
+        if (pPCC->getPccViewingConditions()) {
+          m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
+          m_bDeleteAppliedPCC = true;
+        }
+        else {
+          m_pAppliedPCC = pPCC;
+          m_bDeleteAppliedPCC = false;
+        }
       }
     }
     else {
